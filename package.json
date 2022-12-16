@@ -1,0 +1,23 @@
+{
+  "name": "studio",
+  "version": "1.0.0",
+  "description": "Experimental Virtual Application Studio",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ted-ross/studio.git"
+  },
+  "author": "Ted Ross",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/ted-ross/studio/issues"
+  },
+  "homepage": "https://github.com/ted-ross/studio#readme",
+  "dependencies": {
+    "http-server": "^14.1.1",
+    "mxgraph": "^4.2.2"
+  }
+}
