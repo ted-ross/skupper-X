@@ -1,11 +1,22 @@
+import React from 'react';
 import './Panel.css'
 
-function PanelMode(props) {
-  return (
-    <div className="Panel">
-      Mode: {props.mode}
-    </div>
-  );
+class PanelMode extends React.Component {
+  constructor(props) {
+    super(props);
+
+    this.state = {
+      mode: props.mode,
+    };
+  }
+
+  render() {
+    return(
+      <div className="Panel">
+        Mode: {this.state.mode}
+      </div>
+    );
+  }
 }
 
 export default PanelMode;
