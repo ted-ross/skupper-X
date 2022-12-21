@@ -1,6 +1,7 @@
 import logo from './logo.svg';
 import './App.css';
-import PanelMode from './PanelMode';
+import TopBar from './TopBar';
+import MenuBar from './MenuBar'
 import React from 'react';
 
 function App() {
@@ -8,8 +9,8 @@ function App() {
 
   return (
     <div className="App">
-      <h3 align="left">vStudio</h3>
-      <PanelMode mode={mode} />
+      <TopBar />
+      <MenuBar />
     </div>
   );
 }

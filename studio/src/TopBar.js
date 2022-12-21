@@ -1,7 +1,7 @@
 import React from 'react';
-import './Panel.css'
+import './TopBar.css'
 
-class PanelMode extends React.Component {
+class TopBar extends React.Component {
   constructor(props) {
     super(props);
 
@@ -12,11 +12,10 @@ class PanelMode extends React.Component {
 
   render() {
     return(
-      <div className="Panel">
-        Mode: {this.state.mode}
+      <div className="TopBar">
       </div>
     );
   }
 }
 
-export default PanelMode;
+export default TopBar;
