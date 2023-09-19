@@ -198,16 +198,16 @@ CREATE TABLE ServiceLinks (
 --
 CREATE TABLE Endpoints (
     Id UUID PRIMARY KEY,
-    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE
+    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
+    SiteClass UUID REFERENCES SiteClasses,
+    Site UUID REFERENCES MemberSites
 );
 
 --
 -- VAN-specific allocation of processes to participant sites or site classes
 --
-CREATE TABLE ImageAllocations (
+CREATE TABLE Processes (
     Process UUID REFERENCES Images,
-    SiteClass UUID REFERENCES SiteClasses,
-    Site UUID REFERENCES MemberSites,
     ImageTag text DEFAULT 'latest'
 ) INHERITS (Endpoints);
 
@@ -215,18 +215,14 @@ CREATE TABLE ImageAllocations (
 -- Stand-alone ingresses and their mapping to sites/site-classes
 --
 CREATE TABLE Ingresses (
-    Name text,
-    SiteClass UUID REFERENCES SiteClasses,
-    Site UUID REFERENCES MemberSites
+    Name text
 ) INHERITS (Endpoints);
 
 --
 -- Stand-alone egresses and their mapping to sites/site-classes
 --
 CREATE TABLE Egresses (
-    Name text,
-    SiteClass UUID REFERENCES SiteClasses,
-    Site UUID REFERENCES MemberSites
+    Name text
 ) INHERITS (Endpoints);
 
 
@@ -238,12 +234,14 @@ INSERT INTO WebSessions (id, userid) values (gen_random_uuid(), 1);
 /*
 Notes:
 
-  - Consider a "service-link" type that represents a service-specific relationship between a specified set of processes or [in,e]gresses.
+  - (DONE) Consider a "service-link" type that represents a service-specific relationship between a specified set of processes or [in,e]gresses.
       o Ties "required" services to "provided" services
       o Owns the VAN address for the service-link, including scope-specific sub-addresses
       o Specifies the distribution of payload: anycast, multicast
 
   - (DONE) Consider using inheritance to group processes and [in,e]gresses.
+
+  - Use ServiceLink to manage advanced routing (A/B, Blue/Green, incremental image upgrade, tee/tap, etc.)
 
 */
 

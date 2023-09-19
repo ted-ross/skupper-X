@@ -14,7 +14,7 @@
 
 DROP TABLE Egresses;
 DROP TABLE Ingresses;
-DROP TABLE ImageAllocations;
+DROP TABLE Processess;
 DROP TABLE Endpoints;
 DROP TABLE ServiceLinks;
 DROP TABLE MemberSites;
