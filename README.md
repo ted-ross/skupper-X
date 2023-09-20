@@ -1,4 +1,4 @@
-﻿# Studio
+# Studio
 
 ## Database Tables
 
@@ -11,7 +11,7 @@
 
 ### Interior Transit Backbone Network
 * InteriorSites
-* InterRouterLinks\
+* InterRouterLinks
 
 ### Image Library
 * Images
