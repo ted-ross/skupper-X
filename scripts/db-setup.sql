@@ -37,6 +37,15 @@ CREATE TYPE StickyMechanismType AS ENUM ('none', 'sourceAddress', 'cookie');
 CREATE TYPE DistributionType AS ENUM ('anycast', 'multicast', 'forbidden');
 
 --
+-- CertificateRequestType
+--   interiorRouter  Generate a certificate for an interior router, signed by the interiorCA
+--   vanCA           Generate a CA for an application network, signed by the rootCA
+--   memberClaim     Generate a claim certificate for invitees, signed by the vanCA
+--   vanSite         Generate a certificate for a joining member site, signed by the vanCA
+--
+CREATE TYPE CertificateRequestType AS ENUM ('interiorRouter', 'vanCA', 'memberClaim', 'vanSite');
+
+--
 -- Users who have access to the service application
 --
 CREATE TABLE Users (
@@ -61,9 +70,10 @@ CREATE TABLE WebSessions (
 --
 CREATE TABLE TlsCertificates (
     Id UUID PRIMARY KEY,
-    IsCertificateAuthority boolean,
+    IsServiceRoot boolean,
+    IsCA boolean,
     SecretName text,
-    SignedBy UUID REFERENCES TlsCertificates,
+    SignedBy UUID REFERENCES TlsCertificates,  -- NULL => self-signed
     Expiration timestamp (0) with time zone
 );
 
@@ -72,8 +82,7 @@ CREATE TABLE TlsCertificates (
 --
 CREATE TABLE InteriorSites (
     Id text PRIMARY KEY,
-    InterRouterTlsCertificate UUID REFERENCES TlsCertificates,
-    EdgeTlsCertificate UUID REFERENCES TlsCertificates
+    InterRouterCertificate UUID REFERENCES TlsCertificates
 );
 
 --
@@ -225,10 +234,42 @@ CREATE TABLE Egresses (
     Name text
 ) INHERITS (Endpoints);
 
+--
+-- Pending requests for certificate generation
+--
+CREATE TABLE CertificateRequests (
+    Id UUID PRIMARY KEY,
+    RequestType CertificateRequestType,
 
+    --
+    -- The time when this request row was created.  This should be used to determine the order of processing
+    -- when there are multiple actionable requests in the table.  First-created, first-processed.
+    --
+    CreatedTime timestamp (0) with time zone,
+
+    --
+    -- If present, this is the time after which the request should be processed.  If the request time is in
+    -- the future, this request is not at present eligible to be processed.
+    --
+    RequestTime timestamp (0) with time zone,
+
+    --
+    -- If present, this is the time that the generated certificate should expire.  If not present, a default
+    -- (relatively long) expiration interval will be used.
+    --
+    ExpireTime timestamp (0) with time zone,
+    InteriorRouter text REFERENCES InteriorSites (Id),
+    ApplicationNetwork UUID REFERENCES ApplicationNetworks (Id),
+    Invitation UUID REFERENCES MemberInvitations (Id),
+    Site UUID REFERENCES MemberSites (Id)
+);
+
+
+--
+-- Pre-populate the database with some test data.
+--
 INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 'tross@redhat.com', '18f4e1168a37a7a2d5ac2bff043c12c862d515a2cbb9ab5fe207ab4ef235e129c1a475ffca25c4cb3831886158c3836664d489c98f68c0ac7af5a8f6d35e04fa');
-
-INSERT INTO WebSessions (id, userid) values (gen_random_uuid(), 1);
+INSERT INTO WebSessions (Id, UserId) values (gen_random_uuid(), 1);
 
 
 /*
@@ -242,6 +283,13 @@ Notes:
   - (DONE) Consider using inheritance to group processes and [in,e]gresses.
 
   - Use ServiceLink to manage advanced routing (A/B, Blue/Green, incremental image upgrade, tee/tap, etc.)
+
+  - Associate API-Management to ingresses and egresses (auth, accounting, etc.).
+
+  - Consider generalizing "offers" and "requires" as roles on a ServiceLink.  This allows the addition of more roles.
+    Such roles should probably be renamed "connects" and "accepts".
+
+  - Take into account the fact that there may be multiple routers in an interior site.
 
 */
 

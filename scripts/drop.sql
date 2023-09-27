@@ -12,9 +12,10 @@
  * limitations under the License.
  */
 
+DROP TABLE CertificateRequests;
 DROP TABLE Egresses;
 DROP TABLE Ingresses;
-DROP TABLE Processess;
+DROP TABLE Processes;
 DROP TABLE Endpoints;
 DROP TABLE ServiceLinks;
 DROP TABLE MemberSites;
@@ -35,3 +36,4 @@ DROP TABLE Users;
 DROP TYPE AddressScopeType;
 DROP TYPE StickyMechanismType;
 DROP TYPE DistributionType;
+DROP TYPE CertificateRequestType;
