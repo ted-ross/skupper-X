@@ -198,6 +198,7 @@ CREATE TABLE CertificateRequests (
 --
 CREATE TABLE ImageTemplates (
     Id UUID PRIMARY KEY,
+    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE, -- optional
     Name text,
     Description text,
     KubernetesConfig text
@@ -208,6 +209,7 @@ CREATE TABLE ImageTemplates (
 --
 CREATE TABLE Services (
     Id UUID PRIMARY KEY,
+    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE, -- optional
     Name text,
     Description text,
     Protocol text,
@@ -221,6 +223,7 @@ CREATE TABLE Services (
 -- Mapping of services to the processes/ingresses that offer that service
 --
 CREATE TABLE ServiceAttaches (
+    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE, -- optional
     ImageTemplate UUID REFERENCES ImageTemplates,
     Service UUID REFERENCES Services,
     Role RoleType,
@@ -279,16 +282,19 @@ Notes:
       o Owns the VAN address for the service-link, including scope-specific sub-addresses
       o Specifies the distribution of payload: anycast, multicast
 
-  - (DONE) Consider using inheritance to group processes and [in,e]gresses.
-
   - Use ServiceLink to manage advanced routing (A/B, Blue/Green, incremental image upgrade, tee/tap, etc.)
 
   - Associate API-Management to ingresses and egresses (auth, accounting, etc.).
 
-  - Consider generalizing "offers" and "requires" as roles on a ServiceLink.  This allows the addition of more roles.
+  - (DONE) Consider generalizing "offers" and "requires" as roles on a ServiceLink.  This allows the addition of more roles.
     Such roles should probably be renamed "connects" and "accepts".
 
   - Take into account the fact that there may be multiple routers in an interior site.
+
+  - Keep in mind that an entire application network should be deployable via gitops.  This means that an already-created
+    application network should be able to be poplated with components and service-links via gitops.
+
+  - Components should be allocatable to multiple classes/sites.
 
 */
 

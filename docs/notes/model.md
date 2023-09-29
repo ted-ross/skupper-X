@@ -22,6 +22,8 @@ This part of the model describes the building blocks of distributed software sys
 
 The structure of this model is that there are Image Templates that describe processes or pods (sets of tightly coupled processes).  Components defined by Images participate in Service Interaction with other Images.  A Service describes the interaction between Components, with each participating Component having a Role in that interaction.
 
+Note that the unallocated application definition can be globally scoped or scoped to an application network.  Network scoping is useful for when an application network's application topology is managed via git-ops.
+
 #### Role Type
 The Role type designates the role of a particular Component with respect to a particular Service in which it participates.  It is expected that the set of possible Roles will evolve over time.
 
