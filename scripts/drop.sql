@@ -12,22 +12,18 @@
  * limitations under the License.
  */
 
-DROP TABLE CertificateRequests;
 DROP TABLE ServiceLinkAttaches;
-DROP TABLE Egresses;
-DROP TABLE Ingresses;
-DROP TABLE Processes;
-DROP TABLE Components;
 DROP TABLE ServiceLinks;
+DROP TABLE Components;
+DROP TABLE ServiceAttaches;
+DROP TABLE Services;
+DROP TABLE ImageTemplates;
+DROP TABLE CertificateRequests;
 DROP TABLE MemberSites;
 DROP TABLE EdgeLinks;
 DROP TABLE MemberInvitations;
 DROP TABLE SiteClasses;
 DROP TABLE ApplicationNetworks;
-DROP TABLE RequiredServices;
-DROP TABLE OfferedServices;
-DROP TABLE Services;
-DROP TABLE Images;
 DROP TABLE InterRouterLinks;
 DROP TABLE InteriorSites;
 DROP TABLE TlsCertificates;

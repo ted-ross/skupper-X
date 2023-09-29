@@ -106,44 +106,6 @@ CREATE TABLE InterRouterLinks (
 );
 
 --
--- Available process images
---
-CREATE TABLE Images (
-    Id UUID PRIMARY KEY,
-    Name text,
-    ImageName text,
-    Description text
-);
-
---
--- Services offered and required by processes
---
-CREATE TABLE Services (
-    Id text PRIMARY KEY,
-    Protocol text,
-    DefaultPort text,
-    Description text
-);
-
---
--- Mapping of services to the processes/ingresses that offer that service
---
-CREATE TABLE OfferedServices (
-    Image UUID REFERENCES Images,
-    Service text REFERENCES Services,
-    ActualPort text,
-    stickyMechanism StickyMechanismType DEFAULT 'none'
-);
-
---
--- Mapping of services to the processes/egresses that require that service
---
-CREATE TABLE RequiredServices (
-    Image UUID REFERENCES Images,
-    Service text REFERENCES Services
-);
-
---
 -- User-owned application networks
 --
 CREATE TABLE ApplicationNetworks (
@@ -202,63 +164,6 @@ CREATE TABLE MemberSites (
 );
 
 --
--- Specific interconnect between running images and endpoints
---
-CREATE TABLE ServiceLinks (
-    Id UUID PRIMARY KEY,
-    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
-    Service text REFERENCES Services,
-    VanAddress text,
-    Distribution DistributionType DEFAULT 'anycast',
-    Scope AddressScopeType DEFAULT 'van'
-);
-
---
--- Parent entity for all component types
---
--- A Component is an instance of a participant in a ServicLink that is allocated to
--- one or more sites in an ApplicationNetwork.
---
-CREATE TABLE Components (
-    Id UUID PRIMARY KEY,
-    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
-    SiteClass UUID REFERENCES SiteClasses,
-    Site UUID REFERENCES MemberSites
-);
-
---
--- VAN-specific allocation of processes to participant sites or site classes
---
-CREATE TABLE Processes (
-    Process UUID REFERENCES Images,
-    ImageTag text DEFAULT 'latest'
-) INHERITS (Components);
-
---
--- Stand-alone ingresses and their mapping to sites/site-classes
---
-CREATE TABLE Ingresses (
-    Name text
-) INHERITS (Components);
-
---
--- Stand-alone egresses and their mapping to sites/site-classes
---
-CREATE TABLE Egresses (
-    Name text
-) INHERITS (Components);
-
---
---
---
-CREATE TABLE ServiceLinkAttaches (
-    MemberOf     UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
-    Component    UUID REFERENCES Components          ON DELETE CASCADE,
-    ServiceLink  UUID REFERENCES ServiceLinks        ON DELETE CASCADE,
-    Role RoleType
-);
-
---
 -- Pending requests for certificate generation
 --
 CREATE TABLE CertificateRequests (
@@ -286,6 +191,76 @@ CREATE TABLE CertificateRequests (
     ApplicationNetwork UUID REFERENCES ApplicationNetworks (Id),
     Invitation UUID REFERENCES MemberInvitations (Id),
     Site UUID REFERENCES MemberSites (Id)
+);
+
+--
+-- Available process images
+--
+CREATE TABLE ImageTemplates (
+    Id UUID PRIMARY KEY,
+    Name text,
+    Description text,
+    KubernetesConfig text
+);
+
+--
+--
+--
+CREATE TABLE Services (
+    Id UUID PRIMARY KEY,
+    Name text,
+    Description text,
+    Protocol text,
+    DefaultPort text,
+    StickyMechanism StickyMechanismType DEFAULT 'none',
+    Distribution DistributionType DEFAULT 'anycast',
+    AddressScope AddressScopeType DEFAULT 'van'
+);
+
+--
+-- Mapping of services to the processes/ingresses that offer that service
+--
+CREATE TABLE ServiceAttaches (
+    ImageTemplate UUID REFERENCES ImageTemplates,
+    Service UUID REFERENCES Services,
+    Role RoleType,
+    HostNameUsed text,
+    ActualPort text
+);
+
+--
+-- A Component is an instance of a participant in a ServicLink that is allocated to
+-- one or more sites in an ApplicationNetwork.
+--
+CREATE TABLE Components (
+    Id UUID PRIMARY KEY,
+    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
+    SiteClass UUID REFERENCES SiteClasses,
+    Site UUID REFERENCES MemberSites,
+    ImageTemplate UUID REFERENCES ImageTemplates,
+    IngressHost text
+);
+
+--
+-- Specific interconnect between running images and endpoints
+--
+CREATE TABLE ServiceLinks (
+    Id UUID PRIMARY KEY,
+    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
+    Service UUID REFERENCES Services,
+    VanAddress text,
+    Distribution DistributionType DEFAULT 'anycast',
+    Scope AddressScopeType DEFAULT 'van'
+);
+
+--
+--
+--
+CREATE TABLE ServiceLinkAttaches (
+    MemberOf     UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
+    Component    UUID REFERENCES Components          ON DELETE CASCADE,
+    ServiceLink  UUID REFERENCES ServiceLinks        ON DELETE CASCADE,
+    Role RoleType
 );
 
 

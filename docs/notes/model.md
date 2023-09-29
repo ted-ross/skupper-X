@@ -10,6 +10,7 @@ There is one small section of the model that connects the Network Topology to th
 ## Network Topology
 
 ## Application Topology
+Application Topology is divided into two parts:  Unallocated Application Definition and Allocated Application Definition.  The unallocated part represents software components and how they want to interact with each other.  The allocated definition represents those components as they are allocated to sites in a running application network and how they are interconnected.
 
 ### Unallocated Application Definition
 This part of the model describes the building blocks of distributed software systems.  This definition is in the form of a library of potential components as they are not allocated to any specific application network or application network site.
