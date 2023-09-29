@@ -46,6 +46,17 @@ CREATE TYPE DistributionType AS ENUM ('anycast', 'multicast', 'forbidden');
 CREATE TYPE CertificateRequestType AS ENUM ('interiorRouter', 'vanCA', 'memberClaim', 'vanSite');
 
 --
+-- RoleType
+--   accept        Accepts incoming connections
+--   connect       Initiates outgoing connections
+--   send          Sends datagrams or messages
+--   receive       Receives datagrams or messages
+--   asyncRequest  Sends asynchronous requests
+--   asyncReply    Replies asynchronously to requests
+--
+CREATE TYPE RoleType AS ENUM ('accept', 'connect', 'send', 'receive', 'asyncRequest', 'asyncReply');
+
+--
 -- Users who have access to the service application
 --
 CREATE TABLE Users (
@@ -203,9 +214,12 @@ CREATE TABLE ServiceLinks (
 );
 
 --
--- Parent entity for all endpoint types
+-- Parent entity for all component types
 --
-CREATE TABLE Endpoints (
+-- A Component is an instance of a participant in a ServicLink that is allocated to
+-- one or more sites in an ApplicationNetwork.
+--
+CREATE TABLE Components (
     Id UUID PRIMARY KEY,
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
     SiteClass UUID REFERENCES SiteClasses,
@@ -218,21 +232,31 @@ CREATE TABLE Endpoints (
 CREATE TABLE Processes (
     Process UUID REFERENCES Images,
     ImageTag text DEFAULT 'latest'
-) INHERITS (Endpoints);
+) INHERITS (Components);
 
 --
 -- Stand-alone ingresses and their mapping to sites/site-classes
 --
 CREATE TABLE Ingresses (
     Name text
-) INHERITS (Endpoints);
+) INHERITS (Components);
 
 --
 -- Stand-alone egresses and their mapping to sites/site-classes
 --
 CREATE TABLE Egresses (
     Name text
-) INHERITS (Endpoints);
+) INHERITS (Components);
+
+--
+--
+--
+CREATE TABLE ServiceLinkAttaches (
+    MemberOf     UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
+    Component    UUID REFERENCES Components          ON DELETE CASCADE,
+    ServiceLink  UUID REFERENCES ServiceLinks        ON DELETE CASCADE,
+    Role RoleType
+);
 
 --
 -- Pending requests for certificate generation

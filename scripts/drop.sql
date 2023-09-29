@@ -13,10 +13,11 @@
  */
 
 DROP TABLE CertificateRequests;
+DROP TABLE ServiceLinkAttaches;
 DROP TABLE Egresses;
 DROP TABLE Ingresses;
 DROP TABLE Processes;
-DROP TABLE Endpoints;
+DROP TABLE Components;
 DROP TABLE ServiceLinks;
 DROP TABLE MemberSites;
 DROP TABLE EdgeLinks;
@@ -37,3 +38,4 @@ DROP TYPE AddressScopeType;
 DROP TYPE StickyMechanismType;
 DROP TYPE DistributionType;
 DROP TYPE CertificateRequestType;
+DROP TYPE RoleType;
