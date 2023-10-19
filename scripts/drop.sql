@@ -29,9 +29,11 @@ DROP TABLE InteriorSites;
 DROP TABLE TlsCertificates;
 DROP TABLE WebSessions;
 DROP TABLE Users;
+DROP TABLE Configuration;
 
 DROP TYPE AddressScopeType;
 DROP TYPE StickyMechanismType;
 DROP TYPE DistributionType;
 DROP TYPE CertificateRequestType;
 DROP TYPE RoleType;
+DROP TYPE OperStatusType;

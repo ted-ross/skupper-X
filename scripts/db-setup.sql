@@ -53,8 +53,30 @@ CREATE TYPE CertificateRequestType AS ENUM ('interiorRouter', 'vanCA', 'memberCl
 --   receive       Receives datagrams or messages
 --   asyncRequest  Sends asynchronous requests
 --   asyncReply    Replies asynchronously to requests
+--   peer          Represents a host or subnet attached via a raw-IP encapsulation
 --
-CREATE TYPE RoleType AS ENUM ('accept', 'connect', 'send', 'receive', 'asyncRequest', 'asyncReply');
+CREATE TYPE RoleType AS ENUM ('accept', 'connect', 'send', 'receive', 'asyncRequest', 'asyncReply', 'peer');
+
+--
+-- OperStatusType
+--
+-- Used to trace the lifecycle of ApplicationNetwork, MemberInvitation, InteriorSite
+--
+--   new                   A new object has been created
+--   cert_request_created  A CertificateRequest has been created for the object
+--   ready                 The TlsCertificate is generated and linked to the object
+--
+CREATE TYPE OperStatusType AS ENUM ('new', 'cert_request_created', 'ready');
+
+--
+-- Global configuration for Skupper-X
+--
+CREATE TABLE Configuration (
+    Id integer PRIMARY KEY CHECK (Id = 0),  -- Ensure that there's only one row in this table
+    RootIssuer text,                        -- The name of the root-issuer for cert-manager 
+    VaultURL text,
+    VaultToken text
+);
 
 --
 -- Users who have access to the service application
@@ -93,6 +115,7 @@ CREATE TABLE TlsCertificates (
 --
 CREATE TABLE InteriorSites (
     Id text PRIMARY KEY,
+    OperStatus OperStatusType DEFAULT 'new',
     InterRouterCertificate UUID REFERENCES TlsCertificates
 );
 
@@ -110,10 +133,11 @@ CREATE TABLE InterRouterLinks (
 --
 CREATE TABLE ApplicationNetworks (
     Id UUID PRIMARY KEY,
+    OperStatus OperStatusType DEFAULT 'new',
     Name text,
     Owner integer REFERENCES Users,
     CertificateAuthority UUID REFERENCES TlsCertificates,
-    StartTime timestamp (0) with time zone,
+    StartTime timestamp (0) with time zone DEFAULT now(),
     EndTime timestamp (0) with time zone,
     DeleteDelay interval second (0)
 );
@@ -133,6 +157,7 @@ CREATE TABLE SiteClasses (
 --
 CREATE TABLE MemberInvitations (
     Id UUID PRIMARY KEY,
+    OperStatus OperStatusType DEFAULT 'new',
     label text,
     JoinDeadline timestamp (0) with time zone,
     MemberClass UUID REFERENCES SiteClasses,
@@ -187,10 +212,10 @@ CREATE TABLE CertificateRequests (
     -- (relatively long) expiration interval will be used.
     --
     ExpireTime timestamp (0) with time zone,
-    InteriorRouter text REFERENCES InteriorSites (Id),
-    ApplicationNetwork UUID REFERENCES ApplicationNetworks (Id),
-    Invitation UUID REFERENCES MemberInvitations (Id),
-    Site UUID REFERENCES MemberSites (Id)
+    InteriorRouter text REFERENCES InteriorSites (Id) ON DELETE CASCADE,
+    ApplicationNetwork UUID REFERENCES ApplicationNetworks (Id) ON DELETE CASCADE,
+    Invitation UUID REFERENCES MemberInvitations (Id) ON DELETE CASCADE,
+    Site UUID REFERENCES MemberSites (Id) ON DELETE CASCADE
 );
 
 --
@@ -270,6 +295,7 @@ CREATE TABLE ServiceLinkAttaches (
 --
 -- Pre-populate the database with some test data.
 --
+INSERT INTO Configuration (Id, RootIssuer) VALUES (0, 'skupperx-root');
 INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 'tross@redhat.com', '18f4e1168a37a7a2d5ac2bff043c12c862d515a2cbb9ab5fe207ab4ef235e129c1a475ffca25c4cb3831886158c3836664d489c98f68c0ac7af5a8f6d35e04fa');
 INSERT INTO WebSessions (Id, UserId) values (gen_random_uuid(), 1);
 
@@ -295,6 +321,9 @@ Notes:
     application network should be able to be poplated with components and service-links via gitops.
 
   - Components should be allocatable to multiple classes/sites.
+
+  - Allow for partially configured ingress/egress components, where the participant can supply the
+    missing data locally.
 
 */
 
