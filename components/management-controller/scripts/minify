@@ -1,0 +1,13 @@
+#!/bin/bash
+set +x
+rm -rf app
+mkdir app
+mkdir app/src
+uglifyjs index.js -c -m -o app/index.js
+uglifyjs src/config.js --toplevel -c -m -o app/src/config.js
+uglifyjs src/db.js --toplevel -c -m -o app/src/db.js
+uglifyjs src/kube.js --toplevel -c -m -o app/src/kube.js
+uglifyjs src/log.js --toplevel -c -m -o app/src/log.js
+uglifyjs src/main.js --toplevel -c -m -o app/src/main.js
+uglifyjs src/router.js --toplevel -c -m -o app/src/router.js
+uglifyjs src/util.js --toplevel -c -m -o app/src/util.js
