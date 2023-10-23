@@ -20,6 +20,7 @@
 "use strict";
 
 const router      = require('./router.js');
+const certs       = require('./certs.js');
 const db          = require('./db.js');
 const kube        = require('./kube.js');
 const config      = require('./config.js');
@@ -41,6 +42,7 @@ exports.Main = function() {
     kube.Start(!STANDALONE)
     .then(() => db.Start())
     .then(() => config.Start())
+    .then(() => certs.Start())
     .then(() => Log("[Management controller initialization completed successfully]"))
     .catch(reason => {
         Log(`Management controller initialization failed: ${reason.stack}`)

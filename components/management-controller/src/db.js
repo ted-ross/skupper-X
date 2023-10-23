@@ -45,6 +45,10 @@ exports.Start = function() {
     connectionPool = new Pool();
 }
 
+exports.ClientFromPool = function() {
+    return connectionPool.connect();
+}
+
 exports.QueryConfig = function () {
     return connectionPool.query('SELECT * FROM configuration WHERE id = 0')
     .then(result => result.rows[0]);

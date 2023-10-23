@@ -218,23 +218,28 @@ CREATE TABLE CertificateRequests (
     Site UUID REFERENCES MemberSites (Id) ON DELETE CASCADE
 );
 
+
+-- ===================================================================================
+-- Everything from this point down is in a more preliminary state than the stuff above.
+-- ===================================================================================
+
 --
 -- Available process images
 --
 CREATE TABLE ImageTemplates (
     Id UUID PRIMARY KEY,
-    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE, -- optional
+    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE, -- optional in case of image-library
     Name text,
     Description text,
     KubernetesConfig text
 );
 
 --
---
+-- Services offered by processes
 --
 CREATE TABLE Services (
     Id UUID PRIMARY KEY,
-    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE, -- optional
+    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE, -- optional in case of service-library
     Name text,
     Description text,
     Protocol text,
@@ -245,7 +250,7 @@ CREATE TABLE Services (
 );
 
 --
--- Mapping of services to the processes/ingresses that offer that service
+-- Mapping of services to the components that participate in that service
 --
 CREATE TABLE ServiceAttaches (
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE, -- optional
@@ -286,8 +291,8 @@ CREATE TABLE ServiceLinks (
 --
 CREATE TABLE ServiceLinkAttaches (
     MemberOf     UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
-    Component    UUID REFERENCES Components          ON DELETE CASCADE,
-    ServiceLink  UUID REFERENCES ServiceLinks        ON DELETE CASCADE,
+    Component    UUID REFERENCES Components          ON DELETE CASCADE, -- Should this be a ServiceAttach?
+    ServiceLink  UUID REFERENCES ServiceLinks        ON DELETE CASCADE, -- Is this needed?
     Role RoleType
 );
 
