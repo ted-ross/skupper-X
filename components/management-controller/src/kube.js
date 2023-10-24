@@ -31,9 +31,12 @@ var kc;
 var client;
 var v1Api;
 var v1AppApi;
+var customApi;
 var serviceWatch;
 var depWatch;
 var namespace = 'default';
+
+const KUBECONFIG = process.env.KUBECONFIG || '~/.kube/config';
 
 exports.Namespace = function() {
     return namespace;
@@ -50,17 +53,99 @@ exports.Start = function (in_cluster) {
         client       = k8s.KubernetesObjectApi.makeApiClient(kc);
         v1Api        = kc.makeApiClient(k8s.CoreV1Api);
         v1AppApi     = kc.makeApiClient(k8s.AppsV1Api);
+        customApi    = kc.makeApiClient(k8s.CustomObjectsApi);
         serviceWatch = new k8s.Watch(kc);
         depWatch     = new k8s.Watch(kc);
 
         try {
-            namespace = fs.readFileSync('/var/run/secrets/kubernetes.io/serviceaccount/namespace', 'utf8')
+            if (in_cluster) {
+                namespace = fs.readFileSync('/var/run/secrets/kubernetes.io/serviceaccount/namespace', 'utf8');
+            } else {
+                kc.contexts.forEach(context => {
+                    if (context.name == kc.currentContext) {
+                        namespace = context.namespace;
+                    }
+                });
+            }
             Log(`Running in namespace: ${namespace}`);
+
         } catch (err) {
             Log(`Unable to determine namespace, using ${namespace}`);
         }
         resolve();
     });
+}
+
+exports.GetIssuers = function() {
+    return customApi.listNamespacedCustomObject(
+        'cert-manager.io',
+        'v1',
+        namespace,
+        'issuers'
+    )
+    .then(list => list.body.items);
+}
+
+exports.LoadIssuer = function(name) {
+    return customApi.getNamespacedCustomObject(
+        'cert-manager.io',
+        'v1',
+        namespace,
+        'issuers',
+        name
+    )
+    .then(issuer => issuer.body);
+}
+
+exports.CreateIssuer = function() {
+    // TODO
+}
+
+exports.DeleteIssuer = function(name) {
+    return customApi.deleteNamespacedCustomObject(
+        'cert-manager.io',
+        'v1',
+        namespace,
+        'issuers',
+        name
+    )
+    .catch(err => `Error deleting issuer ${err.stack}`);
+}
+
+exports.GetCertificates = function() {
+    return customApi.listNamespacedCustomObject(
+        'cert-manager.io',
+        'v1',
+        namespace,
+        'certificates'
+    )
+    .then(list => list.body.items);
+}
+
+exports.LoadCertificate = function(name) {
+    return customApi.getNamespacedCustomObject(
+        'cert-manager.io',
+        'v1',
+        namespace,
+        'certificates',
+        name
+    )
+    .then(issuer => issuer.body);
+}
+
+exports.CreateCertificate = function() {
+    // TODO
+}
+
+exports.DeleteCertificate = function(name) {
+    return customApi.deleteNamespacedCustomObject(
+        'cert-manager.io',
+        'v1',
+        namespace,
+        'certificates',
+        name
+    )
+    .catch(err => `Error deleting issuer ${err.stack}`);
 }
 
 exports.LoadSecret = function(name) {

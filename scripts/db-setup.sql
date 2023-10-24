@@ -73,7 +73,9 @@ CREATE TYPE OperStatusType AS ENUM ('new', 'cert_request_created', 'ready');
 --
 CREATE TABLE Configuration (
     Id integer PRIMARY KEY CHECK (Id = 0),  -- Ensure that there's only one row in this table
-    RootIssuer text,                        -- The name of the root-issuer for cert-manager 
+    RootIssuer text,                        -- The name of the root-issuer for cert-manager
+    DefaultCaExpiration interval,
+    DefaultCertExpiration interval,
     VaultURL text,
     VaultToken text
 );
@@ -132,7 +134,7 @@ CREATE TABLE InterRouterLinks (
 -- User-owned application networks
 --
 CREATE TABLE ApplicationNetworks (
-    Id UUID PRIMARY KEY,
+    Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     OperStatus OperStatusType DEFAULT 'new',
     Name text,
     Owner integer REFERENCES Users,
@@ -192,8 +194,9 @@ CREATE TABLE MemberSites (
 -- Pending requests for certificate generation
 --
 CREATE TABLE CertificateRequests (
-    Id UUID PRIMARY KEY,
+    Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     RequestType CertificateRequestType,
+    Processing boolean DEFAULT 'false',
 
     --
     -- The time when this request row was created.  This should be used to determine the order of processing
@@ -300,7 +303,7 @@ CREATE TABLE ServiceLinkAttaches (
 --
 -- Pre-populate the database with some test data.
 --
-INSERT INTO Configuration (Id, RootIssuer) VALUES (0, 'skupperx-root');
+INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpiration) VALUES (0, 'skupperx-root', '1 month', '1 week');
 INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 'tross@redhat.com', '18f4e1168a37a7a2d5ac2bff043c12c862d515a2cbb9ab5fe207ab4ef235e129c1a475ffca25c4cb3831886158c3836664d489c98f68c0ac7af5a8f6d35e04fa');
 INSERT INTO WebSessions (Id, UserId) values (gen_random_uuid(), 1);
 
@@ -329,6 +332,8 @@ Notes:
 
   - Allow for partially configured ingress/egress components, where the participant can supply the
     missing data locally.
+
+  - Consider allowing for multiple, disjoint backbone networks.
 
 */
 

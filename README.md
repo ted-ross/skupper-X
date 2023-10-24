@@ -1,5 +1,8 @@
 # Skupper-X
+
 A multi-tenant Virtual Application Network solution that controls both the *network topology* and the *application topology* of distributed software systems.
+
+_This is a research platform.  It is being used to do rapid-prototyping of some new ideas around distributed application definition, deployment, and lifecycle._
 
 Features:
 

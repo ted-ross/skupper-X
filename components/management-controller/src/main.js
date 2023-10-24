@@ -33,7 +33,7 @@ const VERSION     = '0.1.1';
 const STANDALONE  = (process.env.SKX_STANDALONE || 'NO') == 'YES';
 
 Log(`Skupper-X Management controller version ${VERSION}`);
-Log(` Standalone : ${STANDALONE}`);
+Log(`Standalone : ${STANDALONE}`);
 
 //
 // This is the main program startup sequence.
@@ -46,8 +46,8 @@ exports.Main = function() {
     .then(() => Log("[Management controller initialization completed successfully]"))
     .catch(reason => {
         Log(`Management controller initialization failed: ${reason.stack}`)
-        .then(() => Flush())
-        .then(() => process.exit(1));
+        Flush();
+        process.exit(1);
     });
 };
 

@@ -22,6 +22,34 @@ This part of the model describes the building blocks of distributed software sys
 
 The structure of this model is that there are Image Templates that describe processes or pods (sets of tightly coupled processes).  Components defined by Images participate in Service Interaction with other Images.  A Service describes the interaction between Components, with each participating Component having a Role in that interaction.
 
+```mermaid
+---
+title: Example
+---
+classDiagram
+    Animal <|-- Duck
+    note for Duck "can fly\ncan swim\ncan dive\ncan help in debugging"
+    Animal <|-- Fish
+    Animal <|-- Zebra
+    Animal: +int age
+    Animal: +String gender
+    Animal: +isMammal()
+    Animal: +mate()
+    class Duck{
+        String beakColor
+        swim()
+        quack()
+    }
+    class Fish{
+        -int sizeInFeet
+        -canEat()
+    }
+    class Zebra{
+        +bool is_wild
+        +run()
+    }
+```
+
 Note that the unallocated application definition can be globally scoped or scoped to an application network.  Network scoping is useful for when an application network's application topology is managed via git-ops.
 
 #### Role Type

@@ -25,7 +25,9 @@ const Log  = require('./log.js').Log
 var config;
 var changeListeners = [];
 
-exports.RootIssuer  = () => config.rootissuer;
+exports.RootIssuer            = () => config.rootissuer;
+exports.DefaultCaExpiration   = () => config.defaultcaexpiration;
+exports.DefaultCertExpiration = () => config.defaultcertexpiration;
 
 const updateConfiguration = function() {
     return db.QueryConfig()
