@@ -96,8 +96,8 @@ CREATE TABLE Users (
 CREATE TABLE WebSessions (
     Id UUID PRIMARY KEY,
     UserId integer REFERENCES Users ON DELETE CASCADE,
-    StartTime timestamp (0) with time zone DEFAULT CURRENT_TIMESTAMP,
-    EndTime timestamp (0) with time zone
+    StartTime timestamptz DEFAULT CURRENT_TIMESTAMP,
+    EndTime timestamptz
 );
 
 --
@@ -107,9 +107,10 @@ CREATE TABLE TlsCertificates (
     Id UUID PRIMARY KEY,
     IsServiceRoot boolean,
     IsCA boolean,
-    SecretName text,
+    CertificateName text,  -- The name ofthe certificate object in k8s
+    SecretName text,       -- The name of the secret object in k8s
     SignedBy UUID REFERENCES TlsCertificates,  -- NULL => self-signed
-    Expiration timestamp (0) with time zone
+    Expiration timestamptz
 );
 
 --
@@ -139,9 +140,9 @@ CREATE TABLE ApplicationNetworks (
     Name text,
     Owner integer REFERENCES Users,
     CertificateAuthority UUID REFERENCES TlsCertificates,
-    StartTime timestamp (0) with time zone DEFAULT now(),
-    EndTime timestamp (0) with time zone,
-    DeleteDelay interval second (0)
+    StartTime timestamptz DEFAULT now(),
+    EndTime timestamptz,
+    DeleteDelay interval second (0) DEFAULT '0 minutes'
 );
 
 --
@@ -161,7 +162,7 @@ CREATE TABLE MemberInvitations (
     Id UUID PRIMARY KEY,
     OperStatus OperStatusType DEFAULT 'new',
     label text,
-    JoinDeadline timestamp (0) with time zone,
+    JoinDeadline timestamptz,
     MemberClass UUID REFERENCES SiteClasses,
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
     ClaimCertificate UUID REFERENCES TlsCertificates,
@@ -202,19 +203,19 @@ CREATE TABLE CertificateRequests (
     -- The time when this request row was created.  This should be used to determine the order of processing
     -- when there are multiple actionable requests in the table.  First-created, first-processed.
     --
-    CreatedTime timestamp (0) with time zone,
+    CreatedTime timestamptz,
 
     --
     -- If present, this is the time after which the request should be processed.  If the request time is in
     -- the future, this request is not at present eligible to be processed.
     --
-    RequestTime timestamp (0) with time zone,
+    RequestTime timestamptz,
 
     --
     -- If present, this is the time that the generated certificate should expire.  If not present, a default
     -- (relatively long) expiration interval will be used.
     --
-    ExpireTime timestamp (0) with time zone,
+    ExpireTime timestamptz,
     InteriorRouter text REFERENCES InteriorSites (Id) ON DELETE CASCADE,
     ApplicationNetwork UUID REFERENCES ApplicationNetworks (Id) ON DELETE CASCADE,
     Invitation UUID REFERENCES MemberInvitations (Id) ON DELETE CASCADE,
@@ -303,7 +304,7 @@ CREATE TABLE ServiceLinkAttaches (
 --
 -- Pre-populate the database with some test data.
 --
-INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpiration) VALUES (0, 'skupperx-root', '1 month', '1 week');
+INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpiration) VALUES (0, 'skupperx-root', '30 days', '1 week');
 INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 'tross@redhat.com', '18f4e1168a37a7a2d5ac2bff043c12c862d515a2cbb9ab5fe207ab4ef235e129c1a475ffca25c4cb3831886158c3836664d489c98f68c0ac7af5a8f6d35e04fa');
 INSERT INTO WebSessions (Id, UserId) values (gen_random_uuid(), 1);
 

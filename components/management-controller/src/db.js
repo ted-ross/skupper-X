@@ -53,3 +53,26 @@ exports.QueryConfig = function () {
     return connectionPool.query('SELECT * FROM configuration WHERE id = 0')
     .then(result => result.rows[0]);
 }
+
+exports.IntervalMilliseconds = function (value) {
+    try {
+        var result = 0;
+        for (const [unit, quantity] of Object.entries(value)) {
+            if (unit == 'days' || unit == 'day') {
+                result += quantity * (3600 * 24 * 1000);
+            } else if (unit == 'weeks' || unit == 'week') {
+                result += quantity * (3600 * 24 * 7 * 1000);
+            } else if (unit == 'hours' || unit == 'hour') {
+                result += quantity * (3600 * 1000);
+            } else if (unit == 'minutes' || unit == 'minute') {
+                result += quantity * (60 * 1000);
+            } else if (unit == 'seconds' || unit == 'second') {
+                result += quantity * (1000);
+            }
+        }
+        return result;
+    } catch (err) {
+        Log(`IntervalMilliseconds error: ${err.stack}`);
+        return 0;
+    }
+}

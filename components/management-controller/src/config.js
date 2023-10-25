@@ -42,7 +42,8 @@ const updateConfiguration = function() {
 exports.Start = function() {
     Log('[Config module starting]');
     return db.QueryConfig()
-    .then(result => config = result);
+    .then(result => config = result)
+    .then(() => Log(config));
 }
 
 exports.Register = function(onConfigChange) {
