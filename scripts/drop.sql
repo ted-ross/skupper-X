@@ -26,6 +26,7 @@ DROP TABLE SiteClasses;
 DROP TABLE ApplicationNetworks;
 DROP TABLE InterRouterLinks;
 DROP TABLE InteriorSites;
+DROP TABLE Backbones;
 DROP TABLE TlsCertificates;
 DROP TABLE WebSessions;
 DROP TABLE Users;

@@ -28,6 +28,7 @@ var changeListeners = [];
 exports.RootIssuer            = () => config.rootissuer;
 exports.DefaultCaExpiration   = () => config.defaultcaexpiration;
 exports.DefaultCertExpiration = () => config.defaultcertexpiration;
+exports.BackboneExpiration    = () => config.backbonecaexpiration;
 
 const updateConfiguration = function() {
     return db.QueryConfig()

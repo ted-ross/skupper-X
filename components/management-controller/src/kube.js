@@ -299,8 +299,7 @@ exports.GetObjects = function(kind) {
     return new Promise((resolve, reject) => resolve([]));
 }
 
-exports.ApplyYaml = function(yaml, parentId) {
-    let obj = YAML.parse(yaml);
+exports.ApplyObject = function(obj) {
     if (obj.metadata.annotations == undefined) {
         obj.metadata.annotations = {};
     }
@@ -310,6 +309,11 @@ exports.ApplyYaml = function(yaml, parentId) {
     Log(`Creating resource: ${obj.kind} ${obj.metadata.name}`);
     Log(obj);
     return client.create(obj);
+}
+
+exports.ApplyYaml = function(yaml, parentId) {
+    let obj = YAML.parse(yaml);
+    return ApplyObject(obj);
 }
 
 exports.DeleteObject = function(kind, name) {

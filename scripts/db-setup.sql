@@ -38,12 +38,13 @@ CREATE TYPE DistributionType AS ENUM ('anycast', 'multicast', 'forbidden');
 
 --
 -- CertificateRequestType
+--   backboneCA      Generate a CA for an interior backbone, signed by the rootCA
 --   interiorRouter  Generate a certificate for an interior router, signed by the interiorCA
 --   vanCA           Generate a CA for an application network, signed by the rootCA
 --   memberClaim     Generate a claim certificate for invitees, signed by the vanCA
 --   vanSite         Generate a certificate for a joining member site, signed by the vanCA
 --
-CREATE TYPE CertificateRequestType AS ENUM ('interiorRouter', 'vanCA', 'memberClaim', 'vanSite');
+CREATE TYPE CertificateRequestType AS ENUM ('backboneCA', 'interiorRouter', 'vanCA', 'memberClaim', 'vanSite');
 
 --
 -- RoleType
@@ -76,6 +77,7 @@ CREATE TABLE Configuration (
     RootIssuer text,                        -- The name of the root-issuer for cert-manager
     DefaultCaExpiration interval,
     DefaultCertExpiration interval,
+    BackboneCaExpiration interval,
     VaultURL text,
     VaultToken text
 );
@@ -114,10 +116,21 @@ CREATE TABLE TlsCertificates (
 );
 
 --
+-- Interior backbone networks
+--
+CREATE TABLE Backbones (
+    Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    OperStatus OperStatusType DEFAULT 'new',
+    Name text,
+    CertificateAuthority UUID REFERENCES TlsCertificates
+);
+
+--
 -- Sites that form the interior transit backbone
 --
 CREATE TABLE InteriorSites (
     Id text PRIMARY KEY,
+    Backbone UUID REFERENCES Backbones,
     OperStatus OperStatusType DEFAULT 'new',
     InterRouterCertificate UUID REFERENCES TlsCertificates
 );
@@ -136,8 +149,9 @@ CREATE TABLE InterRouterLinks (
 --
 CREATE TABLE ApplicationNetworks (
     Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    Backbone UUID REFERENCES Backbones ON DELETE CASCADE,
     OperStatus OperStatusType DEFAULT 'new',
-    Name text,
+    Name text UNIQUE,
     Owner integer REFERENCES Users,
     CertificateAuthority UUID REFERENCES TlsCertificates,
     StartTime timestamptz DEFAULT now(),
@@ -216,6 +230,7 @@ CREATE TABLE CertificateRequests (
     -- (relatively long) expiration interval will be used.
     --
     ExpireTime timestamptz,
+    Backbone UUID REFERENCES Backbones (Id) ON DELETE CASCADE,
     InteriorRouter text REFERENCES InteriorSites (Id) ON DELETE CASCADE,
     ApplicationNetwork UUID REFERENCES ApplicationNetworks (Id) ON DELETE CASCADE,
     Invitation UUID REFERENCES MemberInvitations (Id) ON DELETE CASCADE,
@@ -304,7 +319,7 @@ CREATE TABLE ServiceLinkAttaches (
 --
 -- Pre-populate the database with some test data.
 --
-INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpiration) VALUES (0, 'skupperx-root', '30 days', '1 week');
+INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpiration, BackboneCaExpiration) VALUES (0, 'skupperx-root', '30 days', '1 week', '1 year');
 INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 'tross@redhat.com', '18f4e1168a37a7a2d5ac2bff043c12c862d515a2cbb9ab5fe207ab4ef235e129c1a475ffca25c4cb3831886158c3836664d489c98f68c0ac7af5a8f6d35e04fa');
 INSERT INTO WebSessions (Id, UserId) values (gen_random_uuid(), 1);
 
@@ -334,7 +349,7 @@ Notes:
   - Allow for partially configured ingress/egress components, where the participant can supply the
     missing data locally.
 
-  - Consider allowing for multiple, disjoint backbone networks.
+  - (DONE) Consider allowing for multiple, disjoint backbone networks.
 
 */
 
