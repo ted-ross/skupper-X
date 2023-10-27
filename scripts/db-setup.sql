@@ -59,15 +59,17 @@ CREATE TYPE CertificateRequestType AS ENUM ('backboneCA', 'interiorRouter', 'van
 CREATE TYPE RoleType AS ENUM ('accept', 'connect', 'send', 'receive', 'asyncRequest', 'asyncReply', 'peer');
 
 --
--- OperStatusType
+-- LifecycleType
 --
--- Used to trace the lifecycle of ApplicationNetwork, MemberInvitation, InteriorSite
+-- Used to trace the lifecycle of various objects in the DB
 --
---   new                   A new object has been created
---   cert_request_created  A CertificateRequest has been created for the object
---   ready                 The TlsCertificate is generated and linked to the object
+--   new                A new object has been created
+--   skx_cr_created     A CertificateRequest has been created for the object
+--   cm_cert_created    A cert-manager Certificate object has been created
+--   cm_issuer_created  A cert-manager Issuer object has been created
+--   ready              The TlsCertificate is generated and linked to the object
 --
-CREATE TYPE OperStatusType AS ENUM ('new', 'cert_request_created', 'ready');
+CREATE TYPE LifecycleType AS ENUM ('new', 'skx_cr_created', 'cm_cert_created', 'cm_issuer_created', 'ready');
 
 --
 -- Global configuration for Skupper-X
@@ -120,7 +122,7 @@ CREATE TABLE TlsCertificates (
 --
 CREATE TABLE Backbones (
     Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    OperStatus OperStatusType DEFAULT 'new',
+    Lifecycle LifecycleType DEFAULT 'new',
     Name text,
     CertificateAuthority UUID REFERENCES TlsCertificates
 );
@@ -131,7 +133,7 @@ CREATE TABLE Backbones (
 CREATE TABLE InteriorSites (
     Id text PRIMARY KEY,
     Backbone UUID REFERENCES Backbones,
-    OperStatus OperStatusType DEFAULT 'new',
+    Lifecycle LifecycleType DEFAULT 'new',
     InterRouterCertificate UUID REFERENCES TlsCertificates
 );
 
@@ -150,7 +152,7 @@ CREATE TABLE InterRouterLinks (
 CREATE TABLE ApplicationNetworks (
     Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     Backbone UUID REFERENCES Backbones ON DELETE CASCADE,
-    OperStatus OperStatusType DEFAULT 'new',
+    Lifecycle LifecycleType DEFAULT 'new',
     Name text UNIQUE,
     Owner integer REFERENCES Users,
     CertificateAuthority UUID REFERENCES TlsCertificates,
@@ -174,7 +176,7 @@ CREATE TABLE SiteClasses (
 --
 CREATE TABLE MemberInvitations (
     Id UUID PRIMARY KEY,
-    OperStatus OperStatusType DEFAULT 'new',
+    Lifecycle LifecycleType DEFAULT 'new',
     label text,
     JoinDeadline timestamptz,
     MemberClass UUID REFERENCES SiteClasses,
@@ -211,7 +213,8 @@ CREATE TABLE MemberSites (
 CREATE TABLE CertificateRequests (
     Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     RequestType CertificateRequestType,
-    Processing boolean DEFAULT 'false',
+    Issuer UUID REFERENCES TlsCertificates (Id) ON DELETE CASCADE,  -- NULL for the root CA issuer
+    Lifecycle LifecycleType DEFAULT 'new',
 
     --
     -- The time when this request row was created.  This should be used to determine the order of processing

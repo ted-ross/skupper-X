@@ -37,4 +37,4 @@ DROP TYPE StickyMechanismType;
 DROP TYPE DistributionType;
 DROP TYPE CertificateRequestType;
 DROP TYPE RoleType;
-DROP TYPE OperStatusType;
+DROP TYPE LifecycleType;

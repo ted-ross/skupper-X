@@ -34,6 +34,7 @@ var v1AppApi;
 var customApi;
 var serviceWatch;
 var depWatch;
+var secretWatch;
 var namespace = 'default';
 
 const KUBECONFIG = process.env.KUBECONFIG || '~/.kube/config';
@@ -56,6 +57,7 @@ exports.Start = function (in_cluster) {
         customApi    = kc.makeApiClient(k8s.CustomObjectsApi);
         serviceWatch = new k8s.Watch(kc);
         depWatch     = new k8s.Watch(kc);
+        secretWatch  = new k8s.Watch(kc);
 
         try {
             if (in_cluster) {
@@ -200,6 +202,19 @@ exports.GetPods = function() {
     .then(pods => pods.body.items);
 }
 
+exports.WatchSecrets = function(callback) {
+    secretWatch.watch(
+        `/api/v1/namespaces/${namespace}/secrets`,
+        {},
+        (type, apiObj, watchObj) => {
+            callback(type, apiObj);
+        },
+        (err) => {
+            Log(`Secret Watch error: ${err.stack}`);
+        }
+    )
+}
+
 
 //==========================================================================
 // Deployment Watcher
@@ -304,7 +319,6 @@ exports.ApplyObject = function(obj) {
         obj.metadata.annotations = {};
     }
     obj.metadata.annotations["skupper.io/skx-controlled"] = "true";
-    obj.metadata.annotations["skupper.io/skx-parent"]     = parentId;
     obj.metadata.namespace = namespace;
     Log(`Creating resource: ${obj.kind} ${obj.metadata.name}`);
     Log(obj);

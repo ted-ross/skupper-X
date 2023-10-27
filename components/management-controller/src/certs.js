@@ -34,7 +34,7 @@ const processNewBackbones = async function() {
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
-        const result = await client.query("SELECT * FROM Backbones WHERE OperStatus = 'new' LIMIT 1");
+        const result = await client.query("SELECT * FROM Backbones WHERE Lifecycle = 'new' LIMIT 1");
         if (result.rowCount == 1) {
             const row = result.rows[0];
             Log(`New Backbone Network: ${row.name}`);
@@ -45,7 +45,7 @@ const processNewBackbones = async function() {
                 "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, ExpireTime, Backbone) VALUES(gen_random_uuid(), 'backboneCA', now(), now(), $1, $2)",
                 [expire_time, row.id]
                 );
-            await client.query("UPDATE Backbones SET OperStatus = 'cert_request_created' WHERE Id = $1", [row.id]);
+            await client.query("UPDATE Backbones SET Lifecycle = 'skx_cr_created' WHERE Id = $1", [row.id]);
             reschedule_delay = 0;
         }
         await client.query('COMMIT');
@@ -69,7 +69,7 @@ const processNewNetworks = async function() {
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
-        const result = await client.query("SELECT * FROM ApplicationNetworks WHERE OperStatus = 'new' LIMIT 1");
+        const result = await client.query("SELECT * FROM ApplicationNetworks WHERE Lifecycle = 'new' LIMIT 1");
         if (result.rowCount == 1) {
             const row = result.rows[0];
             Log(`New Application Network: ${row.name}`);
@@ -85,7 +85,7 @@ const processNewNetworks = async function() {
                 "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, ExpireTime, ApplicationNetwork) VALUES(gen_random_uuid(), 'vanCA', now(), $1, $2, $3)",
                 [row.starttime, expire_time, row.id]
                 );
-            await client.query("UPDATE ApplicationNetworks SET OperStatus = 'cert_request_created' WHERE Id = $1", [row.id]);
+            await client.query("UPDATE ApplicationNetworks SET Lifecycle = 'skx_cr_created' WHERE Id = $1", [row.id]);
             reschedule_delay = 0;
         }
         await client.query('COMMIT');
@@ -104,20 +104,32 @@ const processNewNetworks = async function() {
 //
 // When new networks are created, add a certificate request to begin the full setup of the network.
 //
-const processCertificateRequests = async function() {
+const processNewCertificateRequests = async function() {
     var reschedule_delay = 2000;
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
-        const result = await client.query("SELECT * FROM CertificateRequests WHERE RequestTime <= now() and not Processing ORDER BY CreatedTime LIMIT 1");
+        const result = await client.query("SELECT * FROM CertificateRequests WHERE RequestTime <= now() and Lifecycle = 'new' ORDER BY CreatedTime LIMIT 1");
         if (result.rowCount == 1) {
             const row = result.rows[0];
             Log(`Processing Certificate Request: ${row.id} (${row.requesttype})`);
-            // TODO - Create a certificate in k8s with an annotation of this record's ID
-            //        When completed, create a TlsCertificate referencing the k8s secret, add the appropriate reference to the cert, and delete the request
-            var obj = certificateRequest();
-            kube.ApplyObject(obj);
-            await client.query("UPDATE CertificateRequests SET Processing = true WHERE Id = $1", [row.id]);
+            var name;
+            var is_ca;
+            var issuer;
+            switch (row.requesttype) {
+                case 'backboneCA':
+                    name   = `skx-bb-ca-${row.id}`;
+                    is_ca  = true;
+                    issuer = config.RootIssuer();
+                    break;
+                case 'vanCA':
+                    name   = `skx-van-ca-${row.id}`;
+                    is_ca  = true;
+                    issuer = row.issuer;
+            }
+            var cert_obj = certificateObject(name, 3600, is_ca, issuer, row.id);
+            kube.ApplyObject(cert_obj);
+            await client.query("UPDATE CertificateRequests SET Lifecycle = 'cm_cert_created' WHERE Id = $1", [row.id]);
             reschedule_delay = 0;
         }
         await client.query('COMMIT');
@@ -127,51 +139,75 @@ const processCertificateRequests = async function() {
         reschedule_delay = 10000;
     } finally {
         client.release();
-        setTimeout(processCertificateRequests, reschedule_delay);
+        setTimeout(processNewCertificateRequests, reschedule_delay);
     }
 }
 
 //
+// Generate a cert-manager Certificate object from a template.
 //
-//
-const certificateRequest = function() {
+const certificateObject = function(name, duration_hours, is_ca, issuer, db_link) {
     return {
         apiVersion: 'cert-manager.io/v1',
         kind: 'Certificate',
         metadata: {
-            name: 'example-com',
-            namespace: kube.Namespace()
+            name: name,
+            annotations: {
+                'skupper.io/skx-dblink': db_link,
+            },
         },
         spec: {
-            secretName: 'example-com-tls',
+            secretName: name,
             secretTemplate: {
                 annotations: {
-                    mysecretannotation1: "foo",
-                    mysecretannotation2: "bar",
+                    'skupper.io/skx-controlled': 'true',
+                    'skupper.io/skx-dblink': db_link,
                 },
-                labels: {
-                    mysecretlabel: 'foo'
-                }
-            }
+                //labels: {
+                //    mysecretlabel: 'foo',
+                //},
+            },
+            duration: `${duration_hours}h`,
+            //renewBefore: '360h',
+            subject: {
+                organizations: ['redhat.com'],
+            },
+            isCA: is_ca,
+            privateKey: {
+                algorithm: 'RSA',
+                encoding: 'PKCS1',
+                size: 2048,
+            },
+            usages: ['server auth', 'client auth'],
+            dnsNames: ['example.com', 'www.example.com'],
+            issuerRef: {
+                name: issuer,
+                kind: 'Issuer',
+                group: 'cert-manager.io',
+            },
         },
-        duration: '2160h',
-        renewBefore: '360h',
-        subject: {
-            organizations: ['jetstack']
+    };
+}
+
+//
+// Generate a cert-manager Issuer object from a template.
+//
+const issuerObject = function(name, secret, db_link) {
+    return {
+        apiVersion: 'cert-manager.io/v1',
+        kind: 'Issuer',
+        metadata: {
+            name: name,
+            annotations: {
+                'skupper.io/skx-dblink': db_link,
+            },
         },
-        isCA: false,
-        privateKey: {
-            algorithm: 'RSA',
-            encoding: 'PKCS1',
-            size: 2048
+        spec: {
+            ca: {
+                secretName: secret,
+            },
+            secretName: name,
         },
-        usages: ['server auth', 'client auth'],
-        dnsNames: ['example.com', 'www.example.com'],
-        issuerRef: {
-            name: 'ca-issuer',
-            kind: 'Issuer',
-            group: 'cert-manager.io'
-        }
     };
 }
 
@@ -179,6 +215,11 @@ exports.Start = function() {
     Log('[Certificate module starting]');
     setTimeout(processNewBackbones, 1000);
     setTimeout(processNewNetworks, 1000);
-    setTimeout(processCertificateRequests, 1000);
+    setTimeout(processNewCertificateRequests, 1000);
+
+    kube.WatchSecrets((t, secret) => {
+        Log(`Secret watch fired: ${t}`);
+        Log(secret.metadata.annotations);
+    })
 }
 
