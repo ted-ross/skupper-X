@@ -109,7 +109,6 @@ CREATE TABLE WebSessions (
 --
 CREATE TABLE TlsCertificates (
     Id UUID PRIMARY KEY,
-    IsServiceRoot boolean,
     IsCA boolean,
     CertificateName text,  -- The name ofthe certificate object in k8s
     SecretName text,       -- The name of the secret object in k8s
@@ -204,7 +203,8 @@ CREATE TABLE MemberSites (
     Invitation UUID REFERENCES MemberInvitations ON DELETE CASCADE,
     Label text,
     SiteClass UUID REFERENCES SiteClasses,
-    ActiveAccessPoint text REFERENCES InteriorSites
+    ActiveAccessPoint text REFERENCES InteriorSites,
+    ClientCertificate UUID REFERENCES TlsCertificates
 );
 
 --
@@ -234,7 +234,7 @@ CREATE TABLE CertificateRequests (
     --
     ExpireTime timestamptz,
     Backbone UUID REFERENCES Backbones (Id) ON DELETE CASCADE,
-    InteriorRouter text REFERENCES InteriorSites (Id) ON DELETE CASCADE,
+    InteriorSite text REFERENCES InteriorSites (Id) ON DELETE CASCADE,
     ApplicationNetwork UUID REFERENCES ApplicationNetworks (Id) ON DELETE CASCADE,
     Invitation UUID REFERENCES MemberInvitations (Id) ON DELETE CASCADE,
     Site UUID REFERENCES MemberSites (Id) ON DELETE CASCADE

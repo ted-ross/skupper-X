@@ -144,6 +144,83 @@ const processNewCertificateRequests = async function() {
 }
 
 //
+// A secret that is controlled by this controller and has a database link has been added.  Update the database
+// to register the completion of the creation of a certificate or a CA.
+//
+// TODO - If this is a CA, add the creation of the Issuer in Kubernetes
+//
+const secretAdded = async function(dblink, secret) {
+    const client = await db.ClientFromPool();
+    try {
+        await client.query('BEGIN');
+        const result = await client.query("SELECT * FROM CertificateRequests WHERE Id = $1", [dblink]);
+        var ref_table;
+        var ref_id;
+        var ref_column;
+        var is_ca = false;
+
+        if (result.rowCount != 1) {
+            throw new Error('DB Row Not Found');
+        }
+
+        const cert_request = result.rows[0];
+
+        if (cert_request.backbone) {
+            ref_table  = 'Backbones';
+            ref_id     = cert_request.backbone;
+            ref_column = 'CertificateAuthority';
+            is_ca      = true;
+        } else if (cert_request.interiorsite) {
+            ref_table  = 'InteriorSites';
+            ref_id     = cert_request.interiorsite;
+            ref_column = 'InterRouterCertificate';
+        } else if (cert_request.applicationnetwork) {
+            ref_table  = 'ApplicationNetworks';
+            ref_id     = cert_request.applicationnetwork;
+            ref_column = 'CertificateAuthority';
+            is_ca      = true;
+        } else if (cert_request.invitation) {
+            ref_table  = 'MemberInvitations';
+            ref_id     = cert_request.invitation;
+            ref_column = 'ClaimCertificate';
+        } else if (cert_request.site) {
+            ref_table  = 'MemberSites';
+            ref_id     = cert_request.site;
+            ref_column = 'ClientCertificate';
+        } else {
+            throw new Error('Unknown Target');
+        }
+        const insert_result = await client.query("INSERT INTO TlsCertificates (Id, IsCA, CertificateName, SecretName) VALUES (gen_random_uuid(), $1, $2, $2) RETURNING Id", [is_ca, secret.metadata.name]);
+        const tls_id = insert_result.rows[0].id;
+        await client.query(`UPDATE ${ref_table} SET ${ref_column} = $1 WHERE Id = $2`, [tls_id, ref_id]);
+        await client.query('DELETE FROM CertificateRequests WHERE Id = $1', [dblink]);
+        Log(`Certificate${is_ca ? ' Authority' : ''} created: ${secret.metadata.name}`)
+        await client.query('COMMIT');
+    } catch (err) {
+        Log(`Rolling back secret-added transaction: ${err.stack}`);
+        await client.query('ROLLBACK');
+    } finally {
+        client.release();
+    }
+}
+
+//
+// Handle watch events on Secrets
+//
+const onSecretWatch = function(action, secret) {
+    switch (action) {
+    case 'ADDED':
+        const anno = secret.metadata.annotations;
+        if (anno && anno['skupper.io/skx-controlled'] == 'true') {
+            var dblink = anno['skupper.io/skx-dblink'];
+            if (dblink) {
+                secretAdded(dblink, secret);
+            }
+        }
+    }
+}
+
+//
 // Generate a cert-manager Certificate object from a template.
 //
 const certificateObject = function(name, duration_hours, is_ca, issuer, db_link) {
@@ -163,9 +240,6 @@ const certificateObject = function(name, duration_hours, is_ca, issuer, db_link)
                     'skupper.io/skx-controlled': 'true',
                     'skupper.io/skx-dblink': db_link,
                 },
-                //labels: {
-                //    mysecretlabel: 'foo',
-                //},
             },
             duration: `${duration_hours}h`,
             //renewBefore: '360h',
@@ -192,7 +266,7 @@ const certificateObject = function(name, duration_hours, is_ca, issuer, db_link)
 //
 // Generate a cert-manager Issuer object from a template.
 //
-const issuerObject = function(name, secret, db_link) {
+const issuerObject = function(name, secret_name, db_link) {
     return {
         apiVersion: 'cert-manager.io/v1',
         kind: 'Issuer',
@@ -204,7 +278,7 @@ const issuerObject = function(name, secret, db_link) {
         },
         spec: {
             ca: {
-                secretName: secret,
+                secretName: secret_name,
             },
             secretName: name,
         },
@@ -217,9 +291,6 @@ exports.Start = function() {
     setTimeout(processNewNetworks, 1000);
     setTimeout(processNewCertificateRequests, 1000);
 
-    kube.WatchSecrets((t, secret) => {
-        Log(`Secret watch fired: ${t}`);
-        Log(secret.metadata.annotations);
-    })
+    kube.WatchSecrets(onSecretWatch);
 }
 
