@@ -58,10 +58,12 @@ exports.IntervalMilliseconds = function (value) {
     try {
         var result = 0;
         for (const [unit, quantity] of Object.entries(value)) {
-            if (unit == 'days' || unit == 'day') {
-                result += quantity * (3600 * 24 * 1000);
+            if        (unit == 'years' || unit == 'year') {
+                result += quantity * (3600 * 24 * 365 * 1000);
             } else if (unit == 'weeks' || unit == 'week') {
                 result += quantity * (3600 * 24 * 7 * 1000);
+            } else if (unit == 'days' || unit == 'day') {
+                result += quantity * (3600 * 24 * 1000);
             } else if (unit == 'hours' || unit == 'hour') {
                 result += quantity * (3600 * 1000);
             } else if (unit == 'minutes' || unit == 'minute') {
@@ -70,6 +72,14 @@ exports.IntervalMilliseconds = function (value) {
                 result += quantity * (1000);
             }
         }
+
+        //
+        // Minimum allowed interval is one hour
+        //
+        if (result < 3600000) {
+            result = 3600000;
+        }
+
         return result;
     } catch (err) {
         Log(`IntervalMilliseconds error: ${err.stack}`);

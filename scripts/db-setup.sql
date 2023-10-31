@@ -112,7 +112,8 @@ CREATE TABLE TlsCertificates (
     IsCA boolean,
     ObjectName text,                           -- The name of the secret, certificate, and issuer objects in k8s
     SignedBy UUID REFERENCES TlsCertificates,  -- NULL => self-signed
-    Expiration timestamptz
+    Expiration timestamptz,
+    RenewalTime timestamptz
 );
 
 --
@@ -228,10 +229,10 @@ CREATE TABLE CertificateRequests (
     RequestTime timestamptz,
 
     --
-    -- If present, this is the time that the generated certificate should expire.  If not present, a default
+    -- If present, this is the duration of the generated certificate.  If not present, a default
     -- (relatively long) expiration interval will be used.
     --
-    ExpireTime timestamptz,
+    DurationHours integer,
     Backbone UUID REFERENCES Backbones (Id) ON DELETE CASCADE,
     InteriorSite text REFERENCES InteriorSites (Id) ON DELETE CASCADE,
     ApplicationNetwork UUID REFERENCES ApplicationNetworks (Id) ON DELETE CASCADE,

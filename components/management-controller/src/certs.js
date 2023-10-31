@@ -38,12 +38,11 @@ const processNewBackbones = async function() {
         if (result.rowCount == 1) {
             const row = result.rows[0];
             Log(`New Backbone Network: ${row.name}`);
-            var expire_time;
-            expire_time = new Date();
-            expire_time.setTime(Date.now() + db.IntervalMilliseconds(config.BackboneExpiration()));
+            var duration_ms;
+            duration_ms = db.IntervalMilliseconds(config.BackboneExpiration());
             await client.query(
-                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, ExpireTime, Backbone) VALUES(gen_random_uuid(), 'backboneCA', now(), now(), $1, $2)",
-                [expire_time, row.id]
+                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, Backbone) VALUES(gen_random_uuid(), 'backboneCA', now(), now(), $1, $2)",
+                [duration_ms / 3600000, row.id]
                 );
             await client.query("UPDATE Backbones SET Lifecycle = 'skx_cr_created' WHERE Id = $1", [row.id]);
             reschedule_delay = 0;
@@ -73,17 +72,15 @@ const processNewNetworks = async function() {
         if (result.rowCount == 1) {
             const row = result.rows[0];
             Log(`New Application Network: ${row.name}`);
-            var expire_time;
+            var duration_ms;
             if (row.endtime) {
-                expire_time = new Date();
-                expire_time.setTime(row.endtime.getTime() + db.IntervalMilliseconds(row.deletedelay));
+                duration_ms = row.endtime.getTime() - row.starttime.getTime() + db.IntervalMilliseconds(row.deletedelay);
             } else {
-                expire_time = new Date();
-                expire_time.setTime(row.starttime.getTime() + db.IntervalMilliseconds(config.DefaultCaExpiration()));
+                duration_ms = db.IntervalMilliseconds(config.DefaultCaExpiration());
             }
             await client.query(
-                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, ExpireTime, ApplicationNetwork) VALUES(gen_random_uuid(), 'vanCA', now(), $1, $2, $3)",
-                [row.starttime, expire_time, row.id]
+                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, ApplicationNetwork) VALUES(gen_random_uuid(), 'vanCA', now(), $1, $2, $3)",
+                [row.starttime, duration_ms / 3600000, row.id]
                 );
             await client.query("UPDATE ApplicationNetworks SET Lifecycle = 'skx_cr_created' WHERE Id = $1", [row.id]);
             reschedule_delay = 0;
@@ -127,8 +124,8 @@ const processNewCertificateRequests = async function() {
                     is_ca  = true;
                     issuer = row.issuer;
             }
-            var cert_obj = certificateObject(name, 3600, is_ca, issuer, row.id);
-            kube.ApplyObject(cert_obj);
+            var cert_obj = certificateObject(name, row.durationhours, is_ca, issuer, row.id);
+            await kube.ApplyObject(cert_obj);
             await client.query("UPDATE CertificateRequests SET Lifecycle = 'cm_cert_created' WHERE Id = $1", [row.id]);
             reschedule_delay = 0;
         }
@@ -146,8 +143,6 @@ const processNewCertificateRequests = async function() {
 //
 // A secret that is controlled by this controller and has a database link has been added.  Update the database
 // to register the completion of the creation of a certificate or a CA.
-//
-// TODO - If this is a CA, add the creation of the Issuer in Kubernetes
 //
 const secretAdded = async function(dblink, secret) {
     const client = await db.ClientFromPool();
@@ -187,10 +182,20 @@ const secretAdded = async function(dblink, secret) {
             } else {
                 throw new Error('Unknown Target');
             }
-            const insert_result = await client.query("INSERT INTO TlsCertificates (Id, IsCA, ObjectName) VALUES (gen_random_uuid(), $1, $2) RETURNING Id", [is_ca, secret.metadata.name]);
+            const cert_object = await kube.LoadCertificate(secret.metadata.name);
+            const expiration  = new Date(cert_object.status.notAfter);
+            const renewal     = new Date(cert_object.status.renewalTime);
+            const insert_result = await client.query(
+                "INSERT INTO TlsCertificates (Id, IsCA, ObjectName, Expiration, RenewalTime) VALUES ($1, $2, $3, $4, $5) RETURNING Id",
+                [dblink, is_ca, secret.metadata.name, expiration, renewal]
+            );
             const tls_id = insert_result.rows[0].id;
-            await client.query(`UPDATE ${ref_table} SET ${ref_column} = $1 WHERE Id = $2`, [tls_id, ref_id]);
+            await client.query(`UPDATE ${ref_table} SET ${ref_column} = $1, Lifecycle = 'ready' WHERE Id = $2`, [tls_id, ref_id]);
             await client.query('DELETE FROM CertificateRequests WHERE Id = $1', [dblink]);
+            if (is_ca) {
+                var issuer_obj = issuerObject(secret.metadata.name, secret.metadata.name, secret.metadata.annotations['skupper.io/skx-dblink']);
+                await kube.ApplyObject(issuer_obj);
+            }
             Log(`Certificate${is_ca ? ' Authority' : ''} created: ${secret.metadata.name}`)
             await client.query('COMMIT');
         }
