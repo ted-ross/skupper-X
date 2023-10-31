@@ -183,17 +183,16 @@ const secretAdded = async function(dblink, secret) {
                 throw new Error('Unknown Target');
             }
             const cert_object = await kube.LoadCertificate(secret.metadata.name);
-            const expiration  = new Date(cert_object.status.notAfter);
-            const renewal     = new Date(cert_object.status.renewalTime);
-            const insert_result = await client.query(
-                "INSERT INTO TlsCertificates (Id, IsCA, ObjectName, Expiration, RenewalTime) VALUES ($1, $2, $3, $4, $5) RETURNING Id",
+            const expiration  = cert_object.status.notAfter    ? new Date(cert_object.status.notAfter) : undefined;
+            const renewal     = cert_object.status.renewalTime ? new Date(cert_object.status.renewalTime) : undefined;
+            await client.query(
+                "INSERT INTO TlsCertificates (Id, IsCA, ObjectName, Expiration, RenewalTime) VALUES ($1, $2, $3, $4, $5)",
                 [dblink, is_ca, secret.metadata.name, expiration, renewal]
             );
-            const tls_id = insert_result.rows[0].id;
-            await client.query(`UPDATE ${ref_table} SET ${ref_column} = $1, Lifecycle = 'ready' WHERE Id = $2`, [tls_id, ref_id]);
+            await client.query(`UPDATE ${ref_table} SET ${ref_column} = $1, Lifecycle = 'ready' WHERE Id = $2`, [dblink, ref_id]);
             await client.query('DELETE FROM CertificateRequests WHERE Id = $1', [dblink]);
             if (is_ca) {
-                var issuer_obj = issuerObject(secret.metadata.name, secret.metadata.name, secret.metadata.annotations['skupper.io/skx-dblink']);
+                var issuer_obj = issuerObject(secret.metadata.name, secret.metadata.annotations['skupper.io/skx-dblink']);
                 await kube.ApplyObject(issuer_obj);
             }
             Log(`Certificate${is_ca ? ' Authority' : ''} created: ${secret.metadata.name}`)
@@ -221,6 +220,27 @@ const onSecretWatch = function(action, secret) {
             }
         }
     }
+}
+
+//
+// Handle watch events on Certificates
+//
+const onCertificateWatch = async function(action, cert) {
+    const client = await db.ClientFromPool();
+    if (action == 'MODIFIED'
+        && cert.metadata.annotations
+        && cert.metadata.annotations['skupper.io/skx-controlled'] == 'true'
+        && cert.status
+        && cert.status.notAfter
+        && cert.status.renewalTime) {
+        const expiration  = new Date(cert.status.notAfter);
+        const renewal     = new Date(cert.status.renewalTime);
+        await client.query(
+            "UPDATE TlsCertificates SET expiration = $1, renewalTime = $2 WHERE ObjectName = $3",
+            [expiration, renewal, cert.metadata.name]
+        );
+    }
+    client.release();
 }
 
 //
@@ -269,7 +289,7 @@ const certificateObject = function(name, duration_hours, is_ca, issuer, db_link)
 //
 // Generate a cert-manager Issuer object from a template.
 //
-const issuerObject = function(name, secret_name, db_link) {
+const issuerObject = function(name, db_link) {
     return {
         apiVersion: 'cert-manager.io/v1',
         kind: 'Issuer',
@@ -281,7 +301,7 @@ const issuerObject = function(name, secret_name, db_link) {
         },
         spec: {
             ca: {
-                secretName: secret_name,
+                secretName: name,
             },
             secretName: name,
         },
@@ -295,5 +315,6 @@ exports.Start = function() {
     setTimeout(processNewCertificateRequests, 1000);
 
     kube.WatchSecrets(onSecretWatch);
+    kube.WatchCertificates(onCertificateWatch);
 }
 

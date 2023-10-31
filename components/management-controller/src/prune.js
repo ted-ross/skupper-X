@@ -56,6 +56,8 @@ const reconcileCertificates = async function() {
             Log(`  Deleted secret: ${secret.metadata.name}`);
         }
     });
+
+    client.release();
 }
 
 exports.Start = async function() {

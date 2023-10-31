@@ -33,6 +33,7 @@ var v1Api;
 var v1AppApi;
 var customApi;
 var secretWatch;
+var certificateWatch;
 var namespace = 'default';
 
 const KUBECONFIG = process.env.KUBECONFIG || '~/.kube/config';
@@ -53,7 +54,9 @@ exports.Start = function (in_cluster) {
         v1Api        = kc.makeApiClient(k8s.CoreV1Api);
         v1AppApi     = kc.makeApiClient(k8s.AppsV1Api);
         customApi    = kc.makeApiClient(k8s.CustomObjectsApi);
-        secretWatch  = new k8s.Watch(kc);
+
+        secretWatch      = new k8s.Watch(kc);
+        certificateWatch = new k8s.Watch(kc);
 
         try {
             if (in_cluster) {
@@ -204,6 +207,19 @@ exports.WatchSecrets = function(callback) {
         },
         (err) => {
             Log(`Secret Watch error: ${err.stack}`);
+        }
+    )
+}
+
+exports.WatchCertificates = function(callback) {
+    certificateWatch.watch(
+        `/apis/cert-manager.io/v1/namespaces/${namespace}/certificates`,
+        {},
+        (type, apiObj, watchObj) => {
+            callback(type, apiObj);
+        },
+        (err) => {
+            Log(`Certificate Watch error: ${err.stack}`);
         }
     )
 }
