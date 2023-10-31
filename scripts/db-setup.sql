@@ -110,8 +110,7 @@ CREATE TABLE WebSessions (
 CREATE TABLE TlsCertificates (
     Id UUID PRIMARY KEY,
     IsCA boolean,
-    CertificateName text,  -- The name ofthe certificate object in k8s
-    SecretName text,       -- The name of the secret object in k8s
+    ObjectName text,                           -- The name of the secret, certificate, and issuer objects in k8s
     SignedBy UUID REFERENCES TlsCertificates,  -- NULL => self-signed
     Expiration timestamptz
 );

@@ -21,6 +21,7 @@
 
 const router      = require('./router.js');
 const certs       = require('./certs.js');
+const prune       = require('./prune.js');
 const db          = require('./db.js');
 const kube        = require('./kube.js');
 const config      = require('./config.js');
@@ -42,6 +43,7 @@ exports.Main = function() {
     kube.Start(!STANDALONE)
     .then(() => db.Start())
     .then(() => config.Start())
+    .then(() => prune.Start())
     .then(() => certs.Start())
     .then(() => Log("[Management controller initialization completed successfully]"))
     .catch(reason => {

@@ -159,43 +159,41 @@ const secretAdded = async function(dblink, secret) {
         var ref_column;
         var is_ca = false;
 
-        if (result.rowCount != 1) {
-            throw new Error('DB Row Not Found');
-        }
+        if (result.rowCount == 1) {
+            const cert_request = result.rows[0];
 
-        const cert_request = result.rows[0];
-
-        if (cert_request.backbone) {
-            ref_table  = 'Backbones';
-            ref_id     = cert_request.backbone;
-            ref_column = 'CertificateAuthority';
-            is_ca      = true;
-        } else if (cert_request.interiorsite) {
-            ref_table  = 'InteriorSites';
-            ref_id     = cert_request.interiorsite;
-            ref_column = 'InterRouterCertificate';
-        } else if (cert_request.applicationnetwork) {
-            ref_table  = 'ApplicationNetworks';
-            ref_id     = cert_request.applicationnetwork;
-            ref_column = 'CertificateAuthority';
-            is_ca      = true;
-        } else if (cert_request.invitation) {
-            ref_table  = 'MemberInvitations';
-            ref_id     = cert_request.invitation;
-            ref_column = 'ClaimCertificate';
-        } else if (cert_request.site) {
-            ref_table  = 'MemberSites';
-            ref_id     = cert_request.site;
-            ref_column = 'ClientCertificate';
-        } else {
-            throw new Error('Unknown Target');
+            if (cert_request.backbone) {
+                ref_table  = 'Backbones';
+                ref_id     = cert_request.backbone;
+                ref_column = 'CertificateAuthority';
+                is_ca      = true;
+            } else if (cert_request.interiorsite) {
+                ref_table  = 'InteriorSites';
+                ref_id     = cert_request.interiorsite;
+                ref_column = 'InterRouterCertificate';
+            } else if (cert_request.applicationnetwork) {
+                ref_table  = 'ApplicationNetworks';
+                ref_id     = cert_request.applicationnetwork;
+                ref_column = 'CertificateAuthority';
+                is_ca      = true;
+            } else if (cert_request.invitation) {
+                ref_table  = 'MemberInvitations';
+                ref_id     = cert_request.invitation;
+                ref_column = 'ClaimCertificate';
+            } else if (cert_request.site) {
+                ref_table  = 'MemberSites';
+                ref_id     = cert_request.site;
+                ref_column = 'ClientCertificate';
+            } else {
+                throw new Error('Unknown Target');
+            }
+            const insert_result = await client.query("INSERT INTO TlsCertificates (Id, IsCA, ObjectName) VALUES (gen_random_uuid(), $1, $2) RETURNING Id", [is_ca, secret.metadata.name]);
+            const tls_id = insert_result.rows[0].id;
+            await client.query(`UPDATE ${ref_table} SET ${ref_column} = $1 WHERE Id = $2`, [tls_id, ref_id]);
+            await client.query('DELETE FROM CertificateRequests WHERE Id = $1', [dblink]);
+            Log(`Certificate${is_ca ? ' Authority' : ''} created: ${secret.metadata.name}`)
+            await client.query('COMMIT');
         }
-        const insert_result = await client.query("INSERT INTO TlsCertificates (Id, IsCA, CertificateName, SecretName) VALUES (gen_random_uuid(), $1, $2, $2) RETURNING Id", [is_ca, secret.metadata.name]);
-        const tls_id = insert_result.rows[0].id;
-        await client.query(`UPDATE ${ref_table} SET ${ref_column} = $1 WHERE Id = $2`, [tls_id, ref_id]);
-        await client.query('DELETE FROM CertificateRequests WHERE Id = $1', [dblink]);
-        Log(`Certificate${is_ca ? ' Authority' : ''} created: ${secret.metadata.name}`)
-        await client.query('COMMIT');
     } catch (err) {
         Log(`Rolling back secret-added transaction: ${err.stack}`);
         await client.query('ROLLBACK');

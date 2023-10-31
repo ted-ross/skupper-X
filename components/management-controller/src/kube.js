@@ -32,8 +32,6 @@ var client;
 var v1Api;
 var v1AppApi;
 var customApi;
-var serviceWatch;
-var depWatch;
 var secretWatch;
 var namespace = 'default';
 
@@ -55,8 +53,6 @@ exports.Start = function (in_cluster) {
         v1Api        = kc.makeApiClient(k8s.CoreV1Api);
         v1AppApi     = kc.makeApiClient(k8s.AppsV1Api);
         customApi    = kc.makeApiClient(k8s.CustomObjectsApi);
-        serviceWatch = new k8s.Watch(kc);
-        depWatch     = new k8s.Watch(kc);
         secretWatch  = new k8s.Watch(kc);
 
         try {
@@ -99,10 +95,6 @@ exports.LoadIssuer = function(name) {
     .then(issuer => issuer.body);
 }
 
-exports.CreateIssuer = function() {
-    // TODO
-}
-
 exports.DeleteIssuer = function(name) {
     return customApi.deleteNamespacedCustomObject(
         'cert-manager.io',
@@ -135,10 +127,6 @@ exports.LoadCertificate = function(name) {
     .then(issuer => issuer.body);
 }
 
-exports.CreateCertificate = function() {
-    // TODO
-}
-
 exports.DeleteCertificate = function(name) {
     return customApi.deleteNamespacedCustomObject(
         'cert-manager.io',
@@ -148,6 +136,11 @@ exports.DeleteCertificate = function(name) {
         name
     )
     .catch(err => `Error deleting issuer ${err.stack}`);
+}
+
+exports.GetSecrets = function() {
+    return v1Api.listNamespacedSecret(namespace)
+    .then(list => list.body.items);
 }
 
 exports.LoadSecret = function(name) {
@@ -213,94 +206,6 @@ exports.WatchSecrets = function(callback) {
             Log(`Secret Watch error: ${err.stack}`);
         }
     )
-}
-
-
-//==========================================================================
-// Deployment Watcher
-//==========================================================================
-var depResourceVersion = '';
-var depCallback;
-
-const depTracker = function(path, restart) {
-    depWatch.watch(
-        path,
-        {resourceVersion : depResourceVersion},
-        (type, apiObj, watchObj) => {
-            depCallback(type, apiObj)
-            .then(() => Log(`successful callback on deployment ${type}`))
-            .catch(err => Log(`Exception during deployment event: ${err.stack}`));
-        },
-        (err) => {
-            if (err) {
-                Log(`Deployment watch done: ${err}`);
-                restart();
-            }
-        })
-        .then(req => setTimeout(function() {
-            req.abort();
-            restart();
-        }, config.KubeWatchInterval() * 1000));
-}
-
-exports.WatchDeployments = function(callback, restart) {
-    return v1AppApi.listNamespacedDeployment(namespace)
-    .then(list => new Promise((resolve, reject) => {
-        depResourceVersion = list.body.metadata.resourceVersion;
-        let existsSet = [];
-        list.body.items.forEach(dep => {
-            dep.apiVersion = 'apps/v1';
-            existsSet.push(dep);
-        });
-        callback('EXISTS', existsSet);
-        resolve(`/apis/apps/v1/namespaces/${namespace}/deployments`);
-    }))
-    .then(path => {
-        depCallback = callback;
-        depTracker(path, restart);
-    });
-}
-
-//==========================================================================
-// Service Watcher
-//==========================================================================
-var serviceResourceVersion = '';
-var serviceCallback;
-
-const serviceTracker = function(path, restart) {
-    serviceWatch.watch(
-        path,
-        {resourceVersion : serviceResourceVersion},
-        (type, apiObj, watchObj) => {
-            serviceCallback(type, apiObj)
-            .then(() => Log(`successful callback on service ${type}`))
-            .catch(err => Log(`Exception during service event: ${err.stack}`));
-        },
-        (err) => {
-            if (err) {
-                Log(`Service watch done: ${err}`);
-                restart();
-            }
-        })
-        .then(req => setTimeout(function() {
-            req.abort();
-            restart();
-        }, config.KubeWatchInterval() * 1000));
-}
-
-exports.WatchServices = function(callback, restart) {
-    return v1Api.listNamespacedService(namespace)
-    .then(list => new Promise((resolve, reject) => {
-        serviceResourceVersion = list.body.metadata.resourceVersion;
-        let existsSet = [];
-        list.body.items.forEach(service => existsSet.push(service));
-        resolve(existsSet);
-    }))
-    .then(existsSet => callback('EXISTS', existsSet))
-    .then(() => {
-        serviceCallback = callback;
-        serviceTracker(`/api/v1/namespaces/${namespace}/services`, restart);
-    });
 }
 
 exports.GetObjects = function(kind) {
