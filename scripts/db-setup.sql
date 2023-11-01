@@ -179,7 +179,7 @@ CREATE TABLE SiteClasses (
 -- Content of an invitation-to-participate in a VAN
 --
 CREATE TABLE MemberInvitations (
-    Id UUID PRIMARY KEY,
+    Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     Lifecycle LifecycleType DEFAULT 'new',
     Failure text,
     label text,
@@ -204,7 +204,7 @@ CREATE TABLE EdgeLinks (
 -- Attached participant sites (accepted invitations)
 --
 CREATE TABLE MemberSites (
-    Id UUID PRIMARY KEY,
+    Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     Lifecycle LifecycleType DEFAULT 'new',
     Failure text,
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
