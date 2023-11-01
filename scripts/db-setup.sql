@@ -68,8 +68,9 @@ CREATE TYPE RoleType AS ENUM ('accept', 'connect', 'send', 'receive', 'asyncRequ
 --   cm_cert_created    A cert-manager Certificate object has been created
 --   cm_issuer_created  A cert-manager Issuer object has been created
 --   ready              The TlsCertificate is generated and linked to the object
+--   failed             An unrecoverable error occurred while processing this row, see the Failure column for details
 --
-CREATE TYPE LifecycleType AS ENUM ('new', 'skx_cr_created', 'cm_cert_created', 'cm_issuer_created', 'ready');
+CREATE TYPE LifecycleType AS ENUM ('new', 'skx_cr_created', 'cm_cert_created', 'cm_issuer_created', 'ready', 'failed');
 
 --
 -- Global configuration for Skupper-X
@@ -77,9 +78,9 @@ CREATE TYPE LifecycleType AS ENUM ('new', 'skx_cr_created', 'cm_cert_created', '
 CREATE TABLE Configuration (
     Id integer PRIMARY KEY CHECK (Id = 0),  -- Ensure that there's only one row in this table
     RootIssuer text,                        -- The name of the root-issuer for cert-manager
+    BackboneCaExpiration interval,
     DefaultCaExpiration interval,
     DefaultCertExpiration interval,
-    BackboneCaExpiration interval,
     VaultURL text,
     VaultToken text
 );
@@ -122,6 +123,7 @@ CREATE TABLE TlsCertificates (
 CREATE TABLE Backbones (
     Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     Lifecycle LifecycleType DEFAULT 'new',
+    Failure text,
     Name text,
     CertificateAuthority UUID REFERENCES TlsCertificates
 );
@@ -130,18 +132,20 @@ CREATE TABLE Backbones (
 -- Sites that form the interior transit backbone
 --
 CREATE TABLE InteriorSites (
-    Id text PRIMARY KEY,
+    Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    Name text,
     Backbone UUID REFERENCES Backbones,
     Lifecycle LifecycleType DEFAULT 'new',
-    InterRouterCertificate UUID REFERENCES TlsCertificates
+    Failure text,
+    RouterCertificate UUID REFERENCES TlsCertificates
 );
 
 --
 -- Links that interconnect the interior transit backbone routers
 --
 CREATE TABLE InterRouterLinks (
-    ListeningInteriorSite text REFERENCES InteriorSites ON DELETE CASCADE,
-    ConnectingInteriorSite text REFERENCES InteriorSites ON DELETE CASCADE,
+    ListeningInteriorSite UUID REFERENCES InteriorSites ON DELETE CASCADE,
+    ConnectingInteriorSite UUID REFERENCES InteriorSites ON DELETE CASCADE,
     Cost integer DEFAULT 1
 );
 
@@ -150,8 +154,9 @@ CREATE TABLE InterRouterLinks (
 --
 CREATE TABLE ApplicationNetworks (
     Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    Backbone UUID REFERENCES Backbones ON DELETE CASCADE,
+    Backbone UUID REFERENCES Backbones (Id) ON DELETE CASCADE,
     Lifecycle LifecycleType DEFAULT 'new',
+    Failure text,
     Name text UNIQUE,
     Owner integer REFERENCES Users,
     CertificateAuthority UUID REFERENCES TlsCertificates,
@@ -176,6 +181,7 @@ CREATE TABLE SiteClasses (
 CREATE TABLE MemberInvitations (
     Id UUID PRIMARY KEY,
     Lifecycle LifecycleType DEFAULT 'new',
+    Failure text,
     label text,
     JoinDeadline timestamptz,
     MemberClass UUID REFERENCES SiteClasses,
@@ -189,7 +195,7 @@ CREATE TABLE MemberInvitations (
 -- Mapping of participant sites to their backbone attach point(s)
 --
 CREATE TABLE EdgeLinks (
-    InteriorSite text REFERENCES InteriorSites ON DELETE CASCADE,
+    InteriorSite UUID REFERENCES InteriorSites ON DELETE CASCADE,
     EdgeToken UUID REFERENCES MemberInvitations ON DELETE CASCADE,
     Priority integer DEFAULT 4
 );
@@ -199,12 +205,14 @@ CREATE TABLE EdgeLinks (
 --
 CREATE TABLE MemberSites (
     Id UUID PRIMARY KEY,
+    Lifecycle LifecycleType DEFAULT 'new',
+    Failure text,
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
     Invitation UUID REFERENCES MemberInvitations ON DELETE CASCADE,
     Label text,
     SiteClass UUID REFERENCES SiteClasses,
-    ActiveAccessPoint text REFERENCES InteriorSites,
-    ClientCertificate UUID REFERENCES TlsCertificates
+    ActiveAccessPoint UUID REFERENCES InteriorSites,
+    RouterCertificate UUID REFERENCES TlsCertificates
 );
 
 --
@@ -215,6 +223,7 @@ CREATE TABLE CertificateRequests (
     RequestType CertificateRequestType,
     Issuer UUID REFERENCES TlsCertificates (Id) ON DELETE CASCADE,  -- NULL for the root CA issuer
     Lifecycle LifecycleType DEFAULT 'new',
+    Failure text,
 
     --
     -- The time when this request row was created.  This should be used to determine the order of processing
@@ -234,7 +243,7 @@ CREATE TABLE CertificateRequests (
     --
     DurationHours integer,
     Backbone UUID REFERENCES Backbones (Id) ON DELETE CASCADE,
-    InteriorSite text REFERENCES InteriorSites (Id) ON DELETE CASCADE,
+    InteriorSite UUID REFERENCES InteriorSites (Id) ON DELETE CASCADE,
     ApplicationNetwork UUID REFERENCES ApplicationNetworks (Id) ON DELETE CASCADE,
     Invitation UUID REFERENCES MemberInvitations (Id) ON DELETE CASCADE,
     Site UUID REFERENCES MemberSites (Id) ON DELETE CASCADE

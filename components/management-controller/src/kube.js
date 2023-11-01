@@ -206,7 +206,7 @@ exports.WatchSecrets = function(callback) {
             callback(type, apiObj);
         },
         (err) => {
-            Log(`Secret Watch error: ${err.stack}`);
+            Log(`Secret Watch error: ${err}`);
         }
     )
 }
@@ -219,7 +219,7 @@ exports.WatchCertificates = function(callback) {
             callback(type, apiObj);
         },
         (err) => {
-            Log(`Certificate Watch error: ${err.stack}`);
+            Log(`Certificate Watch error: ${err}`);
         }
     )
 }

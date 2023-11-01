@@ -84,7 +84,7 @@ const processNewNetworks = async function() {
             await client.query(
                 "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, ApplicationNetwork, Issuer) VALUES(gen_random_uuid(), 'vanCA', now(), $1, $2, $3, $4)",
                 [row.starttime, duration_ms / 3600000, row.id, row.bbca]
-                );
+            );
             await client.query("UPDATE ApplicationNetworks SET Lifecycle = 'skx_cr_created' WHERE Id = $1", [row.id]);
             reschedule_delay = 0;
         }
@@ -96,6 +96,40 @@ const processNewNetworks = async function() {
     } finally {
         client.release();
         setTimeout(processNewNetworks, reschedule_delay);
+    }
+}
+
+//
+// processNewInteriorSites
+//
+const processNewInteriorSites = async function() {
+    var reschedule_delay = 2000;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query('BEGIN');
+        const result = await client.query(
+            "SELECT InteriorSites.*, Backbones.Lifecycle as bblc, Backbones.CertificateAuthority as bbca FROM InteriorSites " + 
+            "JOIN Backbones ON InteriorSites.Backbone = Backbones.Id WHERE InteriorSites.Lifecycle = 'new' and Backbones.Lifecycle = 'ready' LIMIT 1"
+        );
+        if (result.rowCount == 1) {
+            const row = result.rows[0];
+            Log(`New Interior Site: ${row.name}`);
+            var duration_ms = db.IntervalMilliseconds(config.DefaultCertExpiration());
+            await client.query(
+                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, InteriorSite, Issuer) VALUES(gen_random_uuid(), 'interiorRouter', now(), now(), $1, $2, $3)",
+                [duration_ms / 3600000, row.id, row.bbca]
+            );
+            await client.query("UPDATE InteriorSites SET Lifecycle = 'skx_cr_created' WHERE Id = $1", [row.id]);
+            reschedule_delay = 0;
+        }
+        await client.query('COMMIT');
+    } catch (err) {
+        Log(`Rolling back new-interior-site transaction: ${err.stack}`);
+        await client.query('ROLLBACK');
+        reschedule_delay = 10000;
+    } finally {
+        client.release();
+        setTimeout(processNewInteriorSites, reschedule_delay);
     }
 }
 
@@ -125,6 +159,12 @@ const processNewCertificateRequests = async function() {
                     name   = `skx-van-ca-${row.id}`;
                     is_ca  = true;
                     issuer = row.issuer;
+                    break;
+                case 'interiorRouter':
+                    name   = `skx-interior-${row.id}`;
+                    is_ca  = false;
+                    issuer = row.issuer;
+                    break;
             }
 
             var issuer_name;
@@ -180,7 +220,7 @@ const secretAdded = async function(dblink, secret) {
             } else if (cert_request.interiorsite) {
                 ref_table  = 'InteriorSites';
                 ref_id     = cert_request.interiorsite;
-                ref_column = 'InterRouterCertificate';
+                ref_column = 'RouterCertificate';
             } else if (cert_request.applicationnetwork) {
                 ref_table  = 'ApplicationNetworks';
                 ref_id     = cert_request.applicationnetwork;
@@ -193,7 +233,7 @@ const secretAdded = async function(dblink, secret) {
             } else if (cert_request.site) {
                 ref_table  = 'MemberSites';
                 ref_id     = cert_request.site;
-                ref_column = 'ClientCertificate';
+                ref_column = 'RouterCertificate';
             } else {
                 throw new Error('Unknown Target');
             }
@@ -336,6 +376,7 @@ exports.Start = async function() {
     Log('[Certificate module starting]');
     setTimeout(processNewBackbones, 1000);
     setTimeout(processNewNetworks, 1000);
+    setTimeout(processNewInteriorSites, 1000);
     setTimeout(processNewCertificateRequests, 1000);
 
     kube.WatchSecrets(onSecretWatch);
