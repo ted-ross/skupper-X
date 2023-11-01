@@ -168,6 +168,40 @@ const processNewInvitations = async function() {
 }
 
 //
+// processNewMemberSites
+//
+const processNewMemberSites = async function() {
+    var reschedule_delay = 2000;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query('BEGIN');
+        const result = await client.query(
+            "SELECT MemberSites.*, ApplicationNetworks.Lifecycle as vanlc, ApplicationNetworks.CertificateAuthority as vanca FROM MemberSites " + 
+            "JOIN ApplicationNetworks ON MemberSites.MemberOf = ApplicationNetworks.Id WHERE MemberSites.Lifecycle = 'new' and ApplicationNetworks.Lifecycle = 'ready' LIMIT 1"
+        );
+        if (result.rowCount == 1) {
+            const row = result.rows[0];
+            Log(`New Member Site: ${row.label}`);
+            var duration_ms = db.IntervalMilliseconds(config.DefaultCertExpiration());
+            await client.query(
+                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, Site, Issuer) VALUES(gen_random_uuid(), 'vanSite', now(), now(), $1, $2, $3)",
+                [duration_ms / 3600000, row.id, row.vanca]
+            );
+            await client.query("UPDATE MemberSites SET Lifecycle = 'skx_cr_created' WHERE Id = $1", [row.id]);
+            reschedule_delay = 0;
+        }
+        await client.query('COMMIT');
+    } catch (err) {
+        Log(`Rolling back new-member-site transaction: ${err.stack}`);
+        await client.query('ROLLBACK');
+        reschedule_delay = 10000;
+    } finally {
+        client.release();
+        setTimeout(processNewMemberSites, reschedule_delay);
+    }
+}
+
+//
 // processCertificateRequests
 //
 // When new networks are created, add a certificate request to begin the full setup of the network.
@@ -201,6 +235,11 @@ const processNewCertificateRequests = async function() {
                     break;
                 case 'memberClaim':
                     name   = `skx-claim-${row.id}`;
+                    is_ca  = false;
+                    issuer = row.issuer;
+                    break;
+                case 'vanSite':
+                    name   = `skx-member-${row.id}`;
                     is_ca  = false;
                     issuer = row.issuer;
                     break;
@@ -417,6 +456,7 @@ exports.Start = async function() {
     setTimeout(processNewNetworks, 1000);
     setTimeout(processNewInteriorSites, 1000);
     setTimeout(processNewInvitations, 1000);
+    setTimeout(processNewMemberSites, 1000);
     setTimeout(processNewCertificateRequests, 1000);
 
     kube.WatchSecrets(onSecretWatch);
