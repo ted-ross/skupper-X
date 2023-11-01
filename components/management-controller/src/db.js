@@ -40,7 +40,7 @@ var dbConnected = false;
 
 var connectionPool;
 
-exports.Start = function() {
+exports.Start = async function() {
     Log('[Database module starting]');
     connectionPool = new Pool();
 }

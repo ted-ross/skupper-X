@@ -39,17 +39,18 @@ Log(`Standalone : ${STANDALONE}`);
 //
 // This is the main program startup sequence.
 //
-exports.Main = function() {
-    kube.Start(!STANDALONE)
-    .then(() => db.Start())
-    .then(() => config.Start())
-    .then(() => prune.Start())
-    .then(() => certs.Start())
-    .then(() => Log("[Management controller initialization completed successfully]"))
-    .catch(reason => {
+exports.Main = async function() {
+    try {
+        await kube.Start(!STANDALONE);
+        await db.Start();
+        await config.Start();
+        await prune.Start();
+        await certs.Start();
+        Log("[Management controller initialization completed successfully]");
+    } catch (reason) {
         Log(`Management controller initialization failed: ${reason.stack}`)
         Flush();
         process.exit(1);
-    });
+    };
 };
 

@@ -68,7 +68,10 @@ const processNewNetworks = async function() {
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
-        const result = await client.query("SELECT * FROM ApplicationNetworks WHERE Lifecycle = 'new' LIMIT 1");
+        const result = await client.query(
+            "SELECT ApplicationNetworks.*, Backbones.Lifecycle as bblc, Backbones.CertificateAuthority as bbca FROM ApplicationNetworks " + 
+            "JOIN Backbones ON ApplicationNetworks.Backbone = Backbones.Id WHERE ApplicationNetworks.Lifecycle = 'new' and Backbones.Lifecycle = 'ready' LIMIT 1"
+        );
         if (result.rowCount == 1) {
             const row = result.rows[0];
             Log(`New Application Network: ${row.name}`);
@@ -79,8 +82,8 @@ const processNewNetworks = async function() {
                 duration_ms = db.IntervalMilliseconds(config.DefaultCaExpiration());
             }
             await client.query(
-                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, ApplicationNetwork) VALUES(gen_random_uuid(), 'vanCA', now(), $1, $2, $3)",
-                [row.starttime, duration_ms / 3600000, row.id]
+                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, ApplicationNetwork, Issuer) VALUES(gen_random_uuid(), 'vanCA', now(), $1, $2, $3, $4)",
+                [row.starttime, duration_ms / 3600000, row.id, row.bbca]
                 );
             await client.query("UPDATE ApplicationNetworks SET Lifecycle = 'skx_cr_created' WHERE Id = $1", [row.id]);
             reschedule_delay = 0;
@@ -117,14 +120,26 @@ const processNewCertificateRequests = async function() {
                 case 'backboneCA':
                     name   = `skx-bb-ca-${row.id}`;
                     is_ca  = true;
-                    issuer = config.RootIssuer();
                     break;
                 case 'vanCA':
                     name   = `skx-van-ca-${row.id}`;
                     is_ca  = true;
                     issuer = row.issuer;
             }
-            var cert_obj = certificateObject(name, row.durationhours, is_ca, issuer, row.id);
+
+            var issuer_name;
+            if (!issuer) {
+                issuer_name = config.RootIssuer();
+            } else {
+                const issuer_result = await client.query("SELECT ObjectName FROM TlsCertificates WHERE Id = $1", [issuer]);
+                if (issuer_result.rowCount == 1) {
+                    issuer_name = issuer_result.rows[0].objectname;
+                } else {
+                    // TODO - Go to 'failed' state and store error
+                }
+            }
+
+            var cert_obj = certificateObject(name, row.durationhours, is_ca, issuer_name, row.id, row.issuer ? row.issuer : 'root');
             await kube.ApplyObject(cert_obj);
             await client.query("UPDATE CertificateRequests SET Lifecycle = 'cm_cert_created' WHERE Id = $1", [row.id]);
             reschedule_delay = 0;
@@ -185,10 +200,18 @@ const secretAdded = async function(dblink, secret) {
             const cert_object = await kube.LoadCertificate(secret.metadata.name);
             const expiration  = cert_object.status.notAfter    ? new Date(cert_object.status.notAfter) : undefined;
             const renewal     = cert_object.status.renewalTime ? new Date(cert_object.status.renewalTime) : undefined;
-            await client.query(
-                "INSERT INTO TlsCertificates (Id, IsCA, ObjectName, Expiration, RenewalTime) VALUES ($1, $2, $3, $4, $5)",
-                [dblink, is_ca, secret.metadata.name, expiration, renewal]
-            );
+            const signed_by   = secret.metadata.annotations['skupper.io/skx-issuerlink'];
+            if (signed_by == 'root') {
+                await client.query(
+                    "INSERT INTO TlsCertificates (Id, IsCA, ObjectName, Expiration, RenewalTime) VALUES ($1, $2, $3, $4, $5)",
+                    [dblink, is_ca, secret.metadata.name, expiration, renewal]
+                );
+            } else {
+                await client.query(
+                    "INSERT INTO TlsCertificates (Id, IsCA, ObjectName, Expiration, RenewalTime, SignedBy) VALUES ($1, $2, $3, $4, $5, $6)",
+                    [dblink, is_ca, secret.metadata.name, expiration, renewal, signed_by]
+                );
+            }
             await client.query(`UPDATE ${ref_table} SET ${ref_column} = $1, Lifecycle = 'ready' WHERE Id = $2`, [dblink, ref_id]);
             await client.query('DELETE FROM CertificateRequests WHERE Id = $1', [dblink]);
             if (is_ca) {
@@ -226,27 +249,27 @@ const onSecretWatch = function(action, secret) {
 // Handle watch events on Certificates
 //
 const onCertificateWatch = async function(action, cert) {
-    const client = await db.ClientFromPool();
     if (action == 'MODIFIED'
         && cert.metadata.annotations
         && cert.metadata.annotations['skupper.io/skx-controlled'] == 'true'
         && cert.status
         && cert.status.notAfter
         && cert.status.renewalTime) {
+        const client      = await db.ClientFromPool();
         const expiration  = new Date(cert.status.notAfter);
         const renewal     = new Date(cert.status.renewalTime);
         await client.query(
             "UPDATE TlsCertificates SET expiration = $1, renewalTime = $2 WHERE ObjectName = $3",
             [expiration, renewal, cert.metadata.name]
         );
+        client.release();
     }
-    client.release();
 }
 
 //
 // Generate a cert-manager Certificate object from a template.
 //
-const certificateObject = function(name, duration_hours, is_ca, issuer, db_link) {
+const certificateObject = function(name, duration_hours, is_ca, issuer, db_link, issuer_link) {
     return {
         apiVersion: 'cert-manager.io/v1',
         kind: 'Certificate',
@@ -262,6 +285,7 @@ const certificateObject = function(name, duration_hours, is_ca, issuer, db_link)
                 annotations: {
                     'skupper.io/skx-controlled': 'true',
                     'skupper.io/skx-dblink': db_link,
+                    'skupper.io/skx-issuerlink': issuer_link,
                 },
             },
             duration: `${duration_hours}h`,
@@ -308,7 +332,7 @@ const issuerObject = function(name, db_link) {
     };
 }
 
-exports.Start = function() {
+exports.Start = async function() {
     Log('[Certificate module starting]');
     setTimeout(processNewBackbones, 1000);
     setTimeout(processNewNetworks, 1000);
