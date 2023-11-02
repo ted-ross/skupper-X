@@ -338,6 +338,11 @@ const secretAdded = async function(dblink, secret) {
             }
             Log(`Certificate${is_ca ? ' Authority' : ''} created: ${secret.metadata.name}`)
             await client.query('COMMIT');
+        } else {
+            //
+            // There's been no meaningful action taken.  Roll back the transaction.
+            //
+            await client.query('ROLLBACK');
         }
     } catch (err) {
         Log(`Rolling back secret-added transaction: ${err.stack}`);

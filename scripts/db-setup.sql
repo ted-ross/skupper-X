@@ -112,7 +112,7 @@ CREATE TABLE TlsCertificates (
     Id UUID PRIMARY KEY,
     IsCA boolean,
     ObjectName text,                           -- The name of the secret, certificate, and issuer objects in k8s
-    SignedBy UUID REFERENCES TlsCertificates,  -- NULL => self-signed
+    SignedBy UUID REFERENCES TlsCertificates,  -- NULL => signed by the Root Issuer
     Expiration timestamptz,
     RenewalTime timestamptz
 );
@@ -125,6 +125,7 @@ CREATE TABLE Backbones (
     Lifecycle LifecycleType DEFAULT 'new',
     Failure text,
     Name text,
+    MultiTenant boolean,
     CertificateAuthority UUID REFERENCES TlsCertificates
 );
 

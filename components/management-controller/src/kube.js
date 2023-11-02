@@ -207,6 +207,7 @@ exports.WatchSecrets = function(callback) {
         },
         (err) => {
             Log(`Secret Watch error: ${err}`);
+            exports.WatchSecrets(callback);
         }
     )
 }
@@ -220,6 +221,7 @@ exports.WatchCertificates = function(callback) {
         },
         (err) => {
             Log(`Certificate Watch error: ${err}`);
+            exports.WatchCertificates(callback);
         }
     )
 }
