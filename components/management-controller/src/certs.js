@@ -69,7 +69,7 @@ const processNewNetworks = async function() {
     try {
         await client.query('BEGIN');
         const result = await client.query(
-            "SELECT ApplicationNetworks.*, Backbones.Lifecycle as bblc, Backbones.CertificateAuthority as bbca FROM ApplicationNetworks " + 
+            "SELECT ApplicationNetworks.*, Backbones.Lifecycle as bblc, Backbones.Certificate as bbca FROM ApplicationNetworks " + 
             "JOIN Backbones ON ApplicationNetworks.Backbone = Backbones.Id WHERE ApplicationNetworks.Lifecycle = 'new' and Backbones.Lifecycle = 'ready' LIMIT 1"
         );
         if (result.rowCount == 1) {
@@ -108,7 +108,7 @@ const processNewInteriorSites = async function() {
     try {
         await client.query('BEGIN');
         const result = await client.query(
-            "SELECT InteriorSites.*, Backbones.Lifecycle as bblc, Backbones.CertificateAuthority as bbca FROM InteriorSites " + 
+            "SELECT InteriorSites.*, Backbones.Lifecycle as bblc, Backbones.Certificate as bbca FROM InteriorSites " + 
             "JOIN Backbones ON InteriorSites.Backbone = Backbones.Id WHERE InteriorSites.Lifecycle = 'new' and Backbones.Lifecycle = 'ready' LIMIT 1"
         );
         if (result.rowCount == 1) {
@@ -142,12 +142,12 @@ const processNewInvitations = async function() {
     try {
         await client.query('BEGIN');
         const result = await client.query(
-            "SELECT MemberInvitations.*, ApplicationNetworks.Lifecycle as vanlc, ApplicationNetworks.CertificateAuthority as vanca FROM MemberInvitations " + 
+            "SELECT MemberInvitations.*, ApplicationNetworks.Lifecycle as vanlc, ApplicationNetworks.Certificate as vanca FROM MemberInvitations " + 
             "JOIN ApplicationNetworks ON MemberInvitations.MemberOf = ApplicationNetworks.Id WHERE MemberInvitations.Lifecycle = 'new' and ApplicationNetworks.Lifecycle = 'ready' LIMIT 1"
         );
         if (result.rowCount == 1) {
             const row = result.rows[0];
-            Log(`New Invitation: ${row.label}`);
+            Log(`New Invitation: ${row.name}`);
             var duration_ms = db.IntervalMilliseconds(config.DefaultCertExpiration());
             await client.query(
                 "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, Invitation, Issuer) VALUES(gen_random_uuid(), 'memberClaim', now(), now(), $1, $2, $3)",
@@ -176,12 +176,12 @@ const processNewMemberSites = async function() {
     try {
         await client.query('BEGIN');
         const result = await client.query(
-            "SELECT MemberSites.*, ApplicationNetworks.Lifecycle as vanlc, ApplicationNetworks.CertificateAuthority as vanca FROM MemberSites " + 
+            "SELECT MemberSites.*, ApplicationNetworks.Lifecycle as vanlc, ApplicationNetworks.Certificate as vanca FROM MemberSites " + 
             "JOIN ApplicationNetworks ON MemberSites.MemberOf = ApplicationNetworks.Id WHERE MemberSites.Lifecycle = 'new' and ApplicationNetworks.Lifecycle = 'ready' LIMIT 1"
         );
         if (result.rowCount == 1) {
             const row = result.rows[0];
-            Log(`New Member Site: ${row.label}`);
+            Log(`New Member Site: ${row.name}`);
             var duration_ms = db.IntervalMilliseconds(config.DefaultCertExpiration());
             await client.query(
                 "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, Site, Issuer) VALUES(gen_random_uuid(), 'vanSite', now(), now(), $1, $2, $3)",
@@ -284,7 +284,6 @@ const secretAdded = async function(dblink, secret) {
         const result = await client.query("SELECT * FROM CertificateRequests WHERE Id = $1", [dblink]);
         var ref_table;
         var ref_id;
-        var ref_column;
         var is_ca = false;
 
         if (result.rowCount == 1) {
@@ -293,25 +292,20 @@ const secretAdded = async function(dblink, secret) {
             if (cert_request.backbone) {
                 ref_table  = 'Backbones';
                 ref_id     = cert_request.backbone;
-                ref_column = 'CertificateAuthority';
                 is_ca      = true;
             } else if (cert_request.interiorsite) {
                 ref_table  = 'InteriorSites';
                 ref_id     = cert_request.interiorsite;
-                ref_column = 'RouterCertificate';
             } else if (cert_request.applicationnetwork) {
                 ref_table  = 'ApplicationNetworks';
                 ref_id     = cert_request.applicationnetwork;
-                ref_column = 'CertificateAuthority';
                 is_ca      = true;
             } else if (cert_request.invitation) {
                 ref_table  = 'MemberInvitations';
                 ref_id     = cert_request.invitation;
-                ref_column = 'ClaimCertificate';
             } else if (cert_request.site) {
                 ref_table  = 'MemberSites';
                 ref_id     = cert_request.site;
-                ref_column = 'RouterCertificate';
             } else {
                 throw new Error('Unknown Target');
             }
@@ -330,7 +324,7 @@ const secretAdded = async function(dblink, secret) {
                     [dblink, is_ca, secret.metadata.name, expiration, renewal, signed_by]
                 );
             }
-            await client.query(`UPDATE ${ref_table} SET ${ref_column} = $1, Lifecycle = 'ready' WHERE Id = $2`, [dblink, ref_id]);
+            await client.query(`UPDATE ${ref_table} SET Certificate = $1, Lifecycle = 'ready' WHERE Id = $2`, [dblink, ref_id]);
             await client.query('DELETE FROM CertificateRequests WHERE Id = $1', [dblink]);
             if (is_ca) {
                 var issuer_obj = issuerObject(secret.metadata.name, secret.metadata.annotations['skupper.io/skx-dblink']);
