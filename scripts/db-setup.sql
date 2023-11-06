@@ -167,6 +167,7 @@ CREATE TABLE ApplicationNetworks (
 
     Backbone UUID REFERENCES Backbones (Id) ON DELETE CASCADE,
     Owner integer REFERENCES Users,
+    VanId text,
     StartTime timestamptz DEFAULT now(),
     EndTime timestamptz,
     DeleteDelay interval second (0) DEFAULT '0 minutes'
@@ -251,6 +252,8 @@ CREATE TABLE CertificateRequests (
     -- (relatively long) expiration interval will be used.
     --
     DurationHours integer,
+
+    VanId text,
 
     --
     -- Link to the requesting

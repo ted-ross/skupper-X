@@ -75,7 +75,9 @@ const processNewNetworks = async function() {
         if (result.rowCount == 1) {
             const row = result.rows[0];
             Log(`New Application Network: ${row.name}`);
-            var duration_ms;
+            const van_id = row.id.substr(-5);
+            var   duration_ms;
+
             if (row.endtime) {
                 duration_ms = row.endtime.getTime() - row.starttime.getTime() + db.IntervalMilliseconds(row.deletedelay);
             } else {
@@ -85,7 +87,7 @@ const processNewNetworks = async function() {
                 "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, ApplicationNetwork, Issuer) VALUES(gen_random_uuid(), 'vanCA', now(), $1, $2, $3, $4)",
                 [row.starttime, duration_ms / 3600000, row.id, row.bbca]
             );
-            await client.query("UPDATE ApplicationNetworks SET Lifecycle = 'skx_cr_created' WHERE Id = $1", [row.id]);
+            await client.query("UPDATE ApplicationNetworks SET Lifecycle = 'skx_cr_created', VanId = $1 WHERE Id = $2", [van_id, row.id]);
             reschedule_delay = 0;
         }
         await client.query('COMMIT');
@@ -142,7 +144,7 @@ const processNewInvitations = async function() {
     try {
         await client.query('BEGIN');
         const result = await client.query(
-            "SELECT MemberInvitations.*, ApplicationNetworks.Lifecycle as vanlc, ApplicationNetworks.Certificate as vanca FROM MemberInvitations " + 
+            "SELECT MemberInvitations.*, ApplicationNetworks.Lifecycle as vanlc, ApplicationNetworks.Certificate as vanca , ApplicationNetworks.VanId as van_id FROM MemberInvitations " + 
             "JOIN ApplicationNetworks ON MemberInvitations.MemberOf = ApplicationNetworks.Id WHERE MemberInvitations.Lifecycle = 'new' and ApplicationNetworks.Lifecycle = 'ready' LIMIT 1"
         );
         if (result.rowCount == 1) {
@@ -150,8 +152,8 @@ const processNewInvitations = async function() {
             Log(`New Invitation: ${row.name}`);
             var duration_ms = db.IntervalMilliseconds(config.DefaultCertExpiration());
             await client.query(
-                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, Invitation, Issuer) VALUES(gen_random_uuid(), 'memberClaim', now(), now(), $1, $2, $3)",
-                [duration_ms / 3600000, row.id, row.vanca]
+                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, Invitation, Issuer, VanId) VALUES(gen_random_uuid(), 'memberClaim', now(), now(), $1, $2, $3, $4)",
+                [duration_ms / 3600000, row.id, row.vanca, row.van_id]
             );
             await client.query("UPDATE MemberInvitations SET Lifecycle = 'skx_cr_created' WHERE Id = $1", [row.id]);
             reschedule_delay = 0;
@@ -240,6 +242,7 @@ const processNewCertificateRequests = async function() {
                     issuer = row.issuer;
                     extra_annotations['skupper.io/skx-dataplane-image']  = config.SiteDataplaneImage();
                     extra_annotations['skupper.io/skx-controller-image'] = config.SiteControllerImage();
+                    extra_annotations['skupper.io/skx-van-id']           = row.vanid;
                     break;
                 case 'vanSite':
                     name   = `skx-member-${row.id}`;
@@ -430,7 +433,6 @@ const certificateObject = function(name, duration_hours, is_ca, issuer, db_link,
     };
 
     for (const [key, value] of Object.entries(extra_annotations)) {
-        Log(`    Extra annotation: [${key}] = ${value}`);
         cert.spec.secretTemplate.annotations[key] = value;
     }
 
