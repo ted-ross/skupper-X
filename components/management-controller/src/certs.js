@@ -218,6 +218,7 @@ const processNewCertificateRequests = async function() {
             var name;
             var is_ca;
             var issuer;
+            var extra_annotations = {};
             switch (row.requesttype) {
                 case 'backboneCA':
                     name   = `skx-bb-ca-${row.id}`;
@@ -237,6 +238,8 @@ const processNewCertificateRequests = async function() {
                     name   = `skx-claim-${row.id}`;
                     is_ca  = false;
                     issuer = row.issuer;
+                    extra_annotations['skupper.io/skx-dataplane-image']  = config.SiteDataplaneImage();
+                    extra_annotations['skupper.io/skx-controller-image'] = config.SiteControllerImage();
                     break;
                 case 'vanSite':
                     name   = `skx-member-${row.id}`;
@@ -257,7 +260,7 @@ const processNewCertificateRequests = async function() {
                 }
             }
 
-            var cert_obj = certificateObject(name, row.durationhours, is_ca, issuer_name, row.id, row.issuer ? row.issuer : 'root');
+            var cert_obj = certificateObject(name, row.durationhours, is_ca, issuer_name, row.id, row.issuer ? row.issuer : 'root', extra_annotations);
             await kube.ApplyObject(cert_obj);
             await client.query("UPDATE CertificateRequests SET Lifecycle = 'cm_cert_created' WHERE Id = $1", [row.id]);
             reschedule_delay = 0;
@@ -386,8 +389,8 @@ const onCertificateWatch = async function(action, cert) {
 //
 // Generate a cert-manager Certificate object from a template.
 //
-const certificateObject = function(name, duration_hours, is_ca, issuer, db_link, issuer_link) {
-    return {
+const certificateObject = function(name, duration_hours, is_ca, issuer, db_link, issuer_link, extra_annotations) {
+    var cert = {
         apiVersion: 'cert-manager.io/v1',
         kind: 'Certificate',
         metadata: {
@@ -425,6 +428,13 @@ const certificateObject = function(name, duration_hours, is_ca, issuer, db_link,
             },
         },
     };
+
+    for (const [key, value] of Object.entries(extra_annotations)) {
+        Log(`    Extra annotation: [${key}] = ${value}`);
+        cert.spec.secretTemplate.annotations[key] = value;
+    }
+
+    return cert;
 }
 
 //

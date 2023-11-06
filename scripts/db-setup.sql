@@ -82,6 +82,8 @@ CREATE TABLE Configuration (
     BackboneCaExpiration interval,
     DefaultCaExpiration interval,
     DefaultCertExpiration interval,
+    SiteDataplaneImage text,
+    SiteControllerImage text,
     VaultURL text,
     VaultToken text
 );
@@ -128,7 +130,7 @@ CREATE TABLE Backbones (
     Failure text,
     Certificate UUID REFERENCES TlsCertificates,
 
-    MultiTenant boolean
+    MultiTenant boolean DEFAULT true
 );
 
 --
@@ -342,7 +344,8 @@ CREATE TABLE ServiceLinkAttaches (
 --
 -- Pre-populate the database with some test data.
 --
-INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpiration, BackboneCaExpiration) VALUES (0, 'skupperx-root', '30 days', '1 week', '1 year');
+INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpiration, BackboneCaExpiration, SiteDataplaneImage, SiteControllerImage)
+    VALUES (0, 'skupperx-root', '30 days', '1 week', '1 year', 'quay.io/tedlross/skupper-router', 'quay.io/tedlross/skupperx-sitecontroller');
 INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 'tross@redhat.com', '18f4e1168a37a7a2d5ac2bff043c12c862d515a2cbb9ab5fe207ab4ef235e129c1a475ffca25c4cb3831886158c3836664d489c98f68c0ac7af5a8f6d35e04fa');
 INSERT INTO WebSessions (Id, UserId) values (gen_random_uuid(), 1);
 

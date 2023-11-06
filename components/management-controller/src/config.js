@@ -29,6 +29,8 @@ exports.RootIssuer            = () => config.rootissuer;
 exports.DefaultCaExpiration   = () => config.defaultcaexpiration;
 exports.DefaultCertExpiration = () => config.defaultcertexpiration;
 exports.BackboneExpiration    = () => config.backbonecaexpiration;
+exports.SiteDataplaneImage    = () => config.sitedataplaneimage;
+exports.SiteControllerImage   = () => config.sitecontrollerimage;
 
 const updateConfiguration = function() {
     return db.QueryConfig()
