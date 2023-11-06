@@ -12,6 +12,7 @@
     "@kubernetes/client-node": "^0.14.0",
     "axios": "^0.21.1",
     "express": "^4.17.1",
+    "js-yaml": "^4.1.0",
     "net": "^1.0.2",
     "pg": "^8.11.3",
     "rhea": "^2.0.4",

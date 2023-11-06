@@ -25,6 +25,7 @@ const prune       = require('./prune.js');
 const db          = require('./db.js');
 const kube        = require('./kube.js');
 const config      = require('./config.js');
+const apiserver   = require('./apiserver.js');
 const axios       = require('axios');
 const fs          = require('fs');
 const Log         = require('./log.js').Log;
@@ -46,6 +47,7 @@ exports.Main = async function() {
         await config.Start();
         await prune.Start();
         await certs.Start();
+        await apiserver.Start();
         Log("[Management controller initialization completed successfully]");
     } catch (reason) {
         Log(`Management controller initialization failed: ${reason.stack}`)
