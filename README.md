@@ -72,6 +72,8 @@ A Link is a collection of related attach points within an application network.  
 
 Note that this is very different from a model in which connectivity is achieved using addresses, where an offered "service" using an address can be accessed by others that know the address and thereby use the service.  The link concept is a more tightly defined set of participants for a particular interaction.  This allows better security and tighter control on who can talk to what.
 
+The link controls data distribution, whether it is anycast or multicast.  It also controls the scope of addressing for the underlying communication.  VAN-scope means that all linked service providers share the data load, either as multicast or by load balancing anycast.  Site scope allows service providers in different sites to be individually addressed.
+
 ### Components
 
 A Component is an entity that uses attach points to interact with other components.  An obvious instance of a component is a running software process, or container, that either offers services or requires the services of others.  Components can also be ingresses or egresses on the application network.  Since the application network is isolated from the outside, an ingress is used to allow outside consumers to access the services od the application network.  Likewise, an egress is used to allow the application network to access resources outside of itself.
@@ -99,6 +101,13 @@ Component types and attach point types may be contained within a library that is
 ### x.509 Certificate Architecture
 
 ### Claim-to-Site Bootstrapping
+
+### APIs and User Access
+
+ - **Service Administrator** - Can create, delete, and manage all backbones and application networks.
+ - **Backbone Administator** - Can manage assigned backbone and all of its application networks.
+ - **User** - Can create, delete, and manage application networks on permitted backbones.
+ - **Participant** - Can accept an invitation and see/manage only the access points in their site.  No central user authentication is needed.  The invitation claim is the only credential needed to participate.
 
 ## Demo Scenarios
 
