@@ -8,5 +8,5 @@ metadata:
 data:
   POSTGRES_DB: studiodb
   POSTGRES_USER: access
-  POSTGRES_PASSWORD: loodaloo
+  POSTGRES_PASSWORD: password
 

@@ -69,9 +69,10 @@ CREATE TYPE RoleType AS ENUM ('accept', 'connect', 'send', 'receive', 'asyncRequ
 --   cm_issuer_created  A cert-manager Issuer object has been created
 --   ready              The TlsCertificate is generated and linked to the object
 --   active             For member sites, the site has successfully joined the backbone
+--   expired            The object is no longer available for use
 --   failed             An unrecoverable error occurred while processing this row, see the Failure column for details
 --
-CREATE TYPE LifecycleType AS ENUM ('new', 'skx_cr_created', 'cm_cert_created', 'cm_issuer_created', 'ready', 'active', 'failed');
+CREATE TYPE LifecycleType AS ENUM ('new', 'skx_cr_created', 'cm_cert_created', 'cm_issuer_created', 'ready', 'active', 'expired', 'failed');
 
 --
 -- Global configuration for Skupper-X
@@ -273,6 +274,7 @@ CREATE TABLE CertificateRequests (
 
 --
 -- Available process images
+-- RENAME: ComponentTypes
 --
 CREATE TABLE ImageTemplates (
     Id UUID PRIMARY KEY,
@@ -284,7 +286,7 @@ CREATE TABLE ImageTemplates (
 
 --
 -- Services offered by processes
--- RENAME: AttachTemplates
+-- RENAME: AttachPointTypes
 --
 CREATE TABLE Services (
     Id UUID PRIMARY KEY,
@@ -338,7 +340,7 @@ CREATE TABLE ServiceLinks (
 );
 
 --
--- RENAME: AttachPointLinkages
+-- RENAME: AttachPointLinkages - This table needs to be re-thinked
 --
 CREATE TABLE ServiceLinkAttaches (
     MemberOf     UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
