@@ -243,6 +243,7 @@ const processNewCertificateRequests = async function() {
                     extra_annotations['skupper.io/skx-dataplane-image']  = config.SiteDataplaneImage();
                     extra_annotations['skupper.io/skx-controller-image'] = config.SiteControllerImage();
                     extra_annotations['skupper.io/skx-van-id']           = row.vanid;
+                    // TODO - Add annotations for valid and expiration times for this claim
                     break;
                 case 'vanSite':
                     name   = `skx-member-${row.id}`;
@@ -414,7 +415,7 @@ const certificateObject = function(name, duration_hours, is_ca, issuer, db_link,
             duration: `${duration_hours}h`,
             //renewBefore: '360h',
             subject: {
-                organizations: ['redhat.com'],
+                organizations: ['skupper.io'],
             },
             isCA: is_ca,
             privateKey: {

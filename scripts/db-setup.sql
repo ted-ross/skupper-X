@@ -380,5 +380,11 @@ Notes:
 
   - (DONE) Consider allowing for multiple, disjoint backbone networks.
 
+  - Add a pre-start buffer time to the lifecycle of ApplicationNetworks (default 5-minutes) so that
+    invitations can be activated before the exact start time.
+
+  - Problem:  Figure out how to issue invitations well prior to the start time of ApplicationNetworks.
+    Perhaps use the backbone CA to sign claims.
+
 */
 

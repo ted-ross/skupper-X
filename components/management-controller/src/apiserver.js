@@ -29,6 +29,17 @@ const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8085;
 var api;
 
+const listInvitations = async function(res) {
+    const client = await db.ClientFromPool();
+    const result = await client.query("SELECT Id FROM MemberInvitations");
+    var list = [];
+    result.rows.forEach(row => {
+        list.push(row.id);
+    });
+    res.send(JSON.stringify(list));
+    res.status(200).end();
+}
+
 const deployment_object = function(name, image) {
     return {
         apiVersion: 'apps/v1',
@@ -80,7 +91,7 @@ const secret_object = function(name, source_secret) {
     };
 }
 
-const fetchInvitation = async function (iid, res) {
+const fetchInvitationKube = async function (iid, res) {
     const client = await db.ClientFromPool();
     const result = await client.query("SELECT MemberInvitations.*, TlsCertificates.ObjectName as secret_name FROM MemberInvitations " +
                                       "JOIN TlsCertificates ON MemberInvitations.Certificate = TlsCertificates.Id WHERE MemberInvitations.Id = $1", [iid]);
@@ -106,9 +117,13 @@ exports.Start = async function() {
     Log('[API Server module started]');
     api = express();
 
-    api.get(API_PREFIX + 'invitation/:iid', (req, res) => {
-        Log(`Request for invitation: ${req.params.iid}`);
-        fetchInvitation(req.params.iid, res);
+    api.get(API_PREFIX + 'invitations', (req, res) => {
+        listInvitations(res);
+    });
+
+    api.get(API_PREFIX + 'invitation/kube/:iid', (req, res) => {
+        Log(`Request for invitation (Kubernetes): ${req.params.iid}`);
+        fetchInvitationKube(req.params.iid, res);
     });
 
     let server = api.listen(API_PORT, () => {
