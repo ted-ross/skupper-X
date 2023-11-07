@@ -31,10 +31,10 @@ var api;
 
 const listInvitations = async function(res) {
     const client = await db.ClientFromPool();
-    const result = await client.query("SELECT Id FROM MemberInvitations");
+    const result = await client.query("SELECT Id, Name, Lifecycle, Failure FROM MemberInvitations");
     var list = [];
     result.rows.forEach(row => {
-        list.push(row.id);
+        list.push(row);
     });
     res.send(JSON.stringify(list));
     res.status(200).end();
@@ -84,6 +84,8 @@ const secret_object = function(name, source_secret) {
             annotations: {
                 'skupper.io/skx-controlled': 'true',
                 'skupper.io/skx-van-id': source_secret.metadata.annotations['skupper.io/skx-van-id'],
+                'skupper.io/skx-dataplane-image': source_secret.metadata.annotations['skupper.io/skx-dataplane-image'],
+                'skupper.io/skx-configsync-image': source_secret.metadata.annotations['skupper.io/skx-configsync-image'],
                 // TODO - Add access URLs here
             }
         },
@@ -100,7 +102,6 @@ const fetchInvitationKube = async function (iid, res) {
         const secret = await kube.LoadSecret(row.secret_name);
         var   invitation = '';
 
-        invitation += "---\n" + yaml.dump(deployment_object('skupper-router', secret.metadata.annotations['skupper.io/skx-dataplane-image']));
         invitation += "---\n" + yaml.dump(deployment_object('skupperx-sitecontroller', secret.metadata.annotations['skupper.io/skx-controller-image']));
         invitation += "---\n" + yaml.dump(secret_object('skupperx-claim', secret));
 

@@ -241,6 +241,7 @@ const processNewCertificateRequests = async function() {
                     is_ca  = false;
                     issuer = row.issuer;
                     extra_annotations['skupper.io/skx-dataplane-image']  = config.SiteDataplaneImage();
+                    extra_annotations['skupper.io/skx-configsync-image'] = config.ConfigSyncImage();
                     extra_annotations['skupper.io/skx-controller-image'] = config.SiteControllerImage();
                     extra_annotations['skupper.io/skx-van-id']           = row.vanid;
                     // TODO - Add annotations for valid and expiration times for this claim

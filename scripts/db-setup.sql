@@ -83,6 +83,7 @@ CREATE TABLE Configuration (
     DefaultCaExpiration interval,
     DefaultCertExpiration interval,
     SiteDataplaneImage text,
+    ConfigSyncImage text,
     SiteControllerImage text,
     VaultURL text,
     VaultToken text
@@ -283,6 +284,7 @@ CREATE TABLE ImageTemplates (
 
 --
 -- Services offered by processes
+-- RENAME: AttachTemplates
 --
 CREATE TABLE Services (
     Id UUID PRIMARY KEY,
@@ -298,6 +300,7 @@ CREATE TABLE Services (
 
 --
 -- Mapping of services to the components that participate in that service
+-- RENAME: AttachPoints
 --
 CREATE TABLE ServiceAttaches (
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE, -- optional
@@ -323,6 +326,7 @@ CREATE TABLE Components (
 
 --
 -- Specific interconnect between running images and endpoints
+-- RENAME: Links
 --
 CREATE TABLE ServiceLinks (
     Id UUID PRIMARY KEY,
@@ -334,7 +338,7 @@ CREATE TABLE ServiceLinks (
 );
 
 --
---
+-- RENAME: AttachPointLinkages
 --
 CREATE TABLE ServiceLinkAttaches (
     MemberOf     UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
@@ -347,8 +351,8 @@ CREATE TABLE ServiceLinkAttaches (
 --
 -- Pre-populate the database with some test data.
 --
-INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpiration, BackboneCaExpiration, SiteDataplaneImage, SiteControllerImage)
-    VALUES (0, 'skupperx-root', '30 days', '1 week', '1 year', 'quay.io/tedlross/skupper-router', 'quay.io/tedlross/skupperx-sitecontroller');
+INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpiration, BackboneCaExpiration, SiteDataplaneImage, ConfigSyncImage, SiteControllerImage)
+    VALUES (0, 'skupperx-root', '30 days', '1 week', '1 year', 'quay.io/skupper/skupper-router:2.4.3', 'quay.io/skupper/config-sync:1.4.3', 'quay.io/tedlross/skupperx-sitecontroller');
 INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 'tross@redhat.com', '18f4e1168a37a7a2d5ac2bff043c12c862d515a2cbb9ab5fe207ab4ef235e129c1a475ffca25c4cb3831886158c3836664d489c98f68c0ac7af5a8f6d35e04fa');
 INSERT INTO WebSessions (Id, UserId) values (gen_random_uuid(), 1);
 
