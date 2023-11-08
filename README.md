@@ -18,6 +18,14 @@ Features:
 * Forcible removal of an entire VAN as one operation
 * Forcible removal of a site/participant from the VAN
 
+## Principles
+
+ * Distributed domain of trust - don't expect/require components of an application to authenticate to each other.
+ * App network is isolated - no ingress or attack surface unless expressly created.
+ * No sign-up needed to participate in networked applications.
+ * The workflow for application network setup is similar to that of setting up a video-conference meeting.
+ * Network topology and Application topology are orthogonal.  Each can change dymanically without affecting the other.
+
 ## Central Concepts for Network Topology
 
 "Network Topology" is concerned with the spatial layout and connectivity of locations where components of distributed software systems may reside.  This is the dimension of Application Networking that is most closely associated with the underlying data networking infrastructure.
@@ -54,17 +62,20 @@ All of the sites in an application network are able to host components of a dist
 
 ### Attach Points with Roles
 
-An Attach Point is a site-specific way that a software component can interact with other components.  A Role describes the way that the attached software component interacts.  From a model persective, this concept is quite general in order to be able to describe a wide variety of possible interactions.
+An Attach Point is a site-specific way that a software component interacts with other components.  A Role describes the way that the attached software component interacts.  From a model persective, this concept is quite general in order to be able to describe a wide variety of possible interactions.
 
 Roles are extensible to support future interaction patterns.  The initial set of roles is as follows:
 
- - **Connect** - An attach point for this role is a listening socket to be used by components that _connect_ to other components using a stream socket (i.e. TCP).
- - **Accept** - The counterpart for _Connect_.  A connecting socket that extablishes connections to components that _accept_ incoming connections via a stream socket.
- - **Send** - An attach point used by components that _send_ data messages to other components.  This could be a datagram socket or a messaging endpoint.
- - **Receive** - The counterpart for _Send_.
- - **AsyncRequest** - An attach point for components that issue asynchronous requests to peers.
- - **AsyncReply** - The counterpart for _AsyncRequest_.
- - **Peer** - An attach point that for shared access to a channel.  This could be an IP subnet where each attached component is assigned a unicast IP address within the subnet.
+ * **Connect** - An attach point for this role is a listening socket to be used by components that _connect_ to other components using a stream socket (i.e. TCP).
+ * **Accept** - The counterpart for _Connect_.  A connecting socket that extablishes connections to components that _accept_ incoming connections via a stream socket.
+ ---
+ * **Send** - An attach point used by components that _send_ data messages or streams to other components.  This could be a datagram socket or a messaging endpoint.
+ * **Receive** - The counterpart for _Send_.
+ ---
+ * **AsyncRequest** - An attach point for components that issue asynchronous requests to peers.
+ * **AsyncReply** - The counterpart for _AsyncRequest_.
+ ---
+ * **Peer** - An attach point for shared access to a channel.  This could be an IP subnet where each attach point is assigned a unicast and broadcast IP address within the subnet.
 
 ### Links
 
@@ -90,19 +101,63 @@ Component types and attach point types may be contained within a library that is
 
 ### Management and Control Plane
 
+The management plane components are logically centralized.  They may be physically distributed and replicated for availability and scale.  The management plane does not need to be deployed in the most "public" location.  Participating sites may join application networks from locations that cannot access the management plane via TCP/IP.
+
 #### Database
+
+A relational database (Postgres) is used as the central persistent store of configuration and current state.  The schema for the database can be found in `scripts/db-setup.sql`.
+
+#### Certificate Management
+
+The `cert-manager` package is installed as part of the management plane.  This component orchestrates the creation and maintenance of x.509 certificates.  It provides flexibility into how the PKI (Private Key Infrastructure) is operated in the customer's environment.
 
 #### Management Controller
 
+The management controller orchestrates the setup and maintenance of backbone networks, application networks, intivation claims, and member sites.  It also manages the creation, deletion, and rotation of x.509 certificates.  It provides an API that can be used by an administrative console or external software components.
+
 #### Site Controller
+
+The site controller runs at backbone sites and at application network member sites.  It communicates in-band with the management controller and orchestrates the setup, maintenance, and monitoring of local certificates, access points, and application components.
+
+The site controller provides an API for local control and monitoring.  The API supports a local console usable by application network participants.
 
 ### Data Plane
 
+The data plane in use is the Skupper router network.  This provides maximum flexibility and ease of setup due to its highly abstract nature.  The architecture will be developed with a mind toward as narrow as possible a coupling between the data plane and the other components of the architecture in order to open the possibility of supporting other data planes.
+
 ### x.509 Certificate Architecture
+
+A hierarchy of intermediate certificate authorities (CAs) is used to provide security across the backbones and the application networks.  The root CA for the entire system is external and must be established by the administrator before any subservient CAs or certificates can be created and signed.
+
+The hierarchy is as follows, with certificates being signed by their immediate superior:
+
+ * (Root CA)
+    * Backbone CA
+        * Backbone Site Certificate
+        * Application Network CA
+            * Invitation Claim Certificate
+            * Member Site Certificate
+
+The hierarchy allows for entire subtrees (application networks) to be invalidated in one operation.  Furthermore, individual member sites can be invalidated via expiration or revocation.
 
 ### Claim-to-Site Bootstrapping
 
-### APIs and User Access
+When an application network is created, is is given a start time and an optional end time.  If the start time is in the future, the CA for the network is created immediately so that invitations to the network can be signed.  The network CA is not loaded into the backbone until right before the network's start time.  This prevents the invitation-claim certificates from being used prematurely.
+
+The sequence of events from the creation of an invitation to the establishment of a member site is as follows:
+
+ 1. The invitation is created.  A certificate is created for the invitation and that certificate is signed by the application network CA.
+ 1. The invitation text is generated for a particular kind of environment (e.g. Kubernetes) and delivered by any means to the invitee(s).
+ 1. The invitee applies the invitation in their own environment.  This causes the site-controller executable to be launched.
+ 1. The site-controller uses the metadata in the invitation certificat-secret to deploy the dataplane component(s) and configure them to attach to the backbone using the invitation claim certificate.
+ 1. The connected backbone component validates the certificate and, seeing that it is an invitation claim, restricts the traffic flowing from the new site to the claim-redemption protocol.
+ 1. The site-controller contacts the management-controller via the backbone network and provides the claim.
+ 1. The management-controller validates the claim and if ok, creates a new member-site for the successful invitee.  This member site has a new certificate signed by the application-network CA.  This certificate is sent back to the site.
+ 1. The site-controller re-configures the data plane to connect with the new site certificate, granting full access to the application network via the backbone.
+ 1. The management-controller can then send the site-controller configuration for access points and possibly components that are intended to be deployed on that site.
+ 1. The site-controller can then either automatically deploy the configuration or present it to the participant user for approval.  In some cases, the access points may need to be locally modified to properly operate in the participant's environment.
+
+### Personas, APIs, and User Access
 
  - **Service Administrator** - Can create, delete, and manage all backbones and application networks.
  - **Backbone Administator** - Can manage assigned backbone and all of its application networks.
