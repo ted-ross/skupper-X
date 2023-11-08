@@ -276,7 +276,7 @@ CREATE TABLE CertificateRequests (
 -- Available process images
 -- RENAME: ComponentTypes
 --
-CREATE TABLE ImageTemplates (
+CREATE TABLE ComponentTypes (
     Id UUID PRIMARY KEY,
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE, -- optional in case of image-library
     Name text,
@@ -286,9 +286,9 @@ CREATE TABLE ImageTemplates (
 
 --
 -- Services offered by processes
--- RENAME: AttachPointTypes
+-- RENAME: InterfaceTypes
 --
-CREATE TABLE Services (
+CREATE TABLE InterfaceTypes (
     Id UUID PRIMARY KEY,
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE, -- optional in case of service-library
     Name text,
@@ -302,12 +302,13 @@ CREATE TABLE Services (
 
 --
 -- Mapping of services to the components that participate in that service
--- RENAME: AttachPoints
+-- RENAME: Interfaces
 --
-CREATE TABLE ServiceAttaches (
+CREATE TABLE Interfaces (
+    Id UUID PRIMARY KEY,
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE, -- optional
-    ImageTemplate UUID REFERENCES ImageTemplates,
-    Service UUID REFERENCES Services,
+    ComponentType UUID REFERENCES ComponentTypes,
+    InterfaceType UUID REFERENCES InterfaceTypes,
     Role RoleType,
     HostNameUsed text,
     ActualPort text
@@ -322,30 +323,30 @@ CREATE TABLE Components (
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
     SiteClass UUID REFERENCES SiteClasses,
     Site UUID REFERENCES MemberSites,
-    ImageTemplate UUID REFERENCES ImageTemplates,
+    ComponentType UUID REFERENCES ComponentTypes,
     IngressHost text
 );
 
 --
 -- Specific interconnect between running images and endpoints
--- RENAME: Links
+-- RENAME: Bindings
 --
-CREATE TABLE ServiceLinks (
+CREATE TABLE Bindings (
     Id UUID PRIMARY KEY,
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
-    Service UUID REFERENCES Services,
+    InterfaceType UUID REFERENCES InterfaceTypes,
     VanAddress text,
     Distribution DistributionType DEFAULT 'anycast',
     Scope AddressScopeType DEFAULT 'van'
 );
 
 --
--- RENAME: AttachPointLinkages - This table needs to be re-thinked
+-- RENAME: InterfaceBindings - This table needs to be re-thinked
 --
-CREATE TABLE ServiceLinkAttaches (
-    MemberOf     UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
-    Component    UUID REFERENCES Components          ON DELETE CASCADE, -- Should this be a ServiceAttach?
-    ServiceLink  UUID REFERENCES ServiceLinks        ON DELETE CASCADE, -- Is this needed?
+CREATE TABLE InterfaceBindings (
+    MemberOf   UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
+    Component  UUID REFERENCES Components          ON DELETE CASCADE, -- Should this be a ServiceAttach?
+    Interface  UUID REFERENCES Interfaces          ON DELETE CASCADE, -- Is this needed?
     Role RoleType
 );
 
@@ -391,6 +392,7 @@ Notes:
 
   - Problem:  Figure out how to issue invitations well prior to the start time of ApplicationNetworks.
     Perhaps use the backbone CA to sign claims.
+       o Generate van CAs immediately to sign invitations but don't install the van CAs until the pre-start time.
 
 */
 

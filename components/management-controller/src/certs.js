@@ -265,7 +265,7 @@ const processNewCertificateRequests = async function() {
                 }
             }
 
-            var cert_obj = certificateObject(name, row.durationhours, is_ca, issuer_name, row.id, row.issuer ? row.issuer : 'root', extra_annotations);
+            var cert_obj = certificateObject(name, row.durationhours, is_ca, issuer_name, row.id, row.issuer ? row.issuer : 'root', extra_annotations, name);
             await kube.ApplyObject(cert_obj);
             await client.query("UPDATE CertificateRequests SET Lifecycle = 'cm_cert_created' WHERE Id = $1", [row.id]);
             reschedule_delay = 0;
@@ -394,7 +394,7 @@ const onCertificateWatch = async function(action, cert) {
 //
 // Generate a cert-manager Certificate object from a template.
 //
-const certificateObject = function(name, duration_hours, is_ca, issuer, db_link, issuer_link, extra_annotations) {
+const certificateObject = function(name, duration_hours, is_ca, issuer, db_link, issuer_link, extra_annotations, common_name) {
     var cert = {
         apiVersion: 'cert-manager.io/v1',
         kind: 'Certificate',
@@ -418,6 +418,7 @@ const certificateObject = function(name, duration_hours, is_ca, issuer, db_link,
             subject: {
                 organizations: ['skupper.io'],
             },
+            commonName: common_name,
             isCA: is_ca,
             privateKey: {
                 algorithm: 'RSA',

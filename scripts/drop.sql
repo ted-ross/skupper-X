@@ -12,12 +12,12 @@
  * limitations under the License.
  */
 
-DROP TABLE ServiceLinkAttaches;
-DROP TABLE ServiceLinks;
+DROP TABLE InterfaceBindings;
+DROP TABLE Bindings;
 DROP TABLE Components;
-DROP TABLE ServiceAttaches;
-DROP TABLE Services;
-DROP TABLE ImageTemplates;
+DROP TABLE Interfaces;
+DROP TABLE InterfaceTypes;
+DROP TABLE ComponentTypes;
 DROP TABLE CertificateRequests;
 DROP TABLE MemberSites;
 DROP TABLE EdgeLinks;
