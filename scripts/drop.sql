@@ -27,6 +27,7 @@ DROP TABLE ApplicationNetworks;
 DROP TABLE InterRouterLinks;
 DROP TABLE InteriorSites;
 DROP TABLE Backbones;
+DROP TABLE ManagementControllers;
 DROP TABLE TlsCertificates;
 DROP TABLE WebSessions;
 DROP TABLE Users;

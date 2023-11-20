@@ -24,7 +24,7 @@ Features:
  * App network is isolated - no ingress or attack surface unless expressly created.
  * No sign-up needed to participate in networked applications.
  * The workflow for application network setup is similar to that of setting up a video-conference meeting.
- * Network topology and Application topology are orthogonal.  Each can change dymanically without affecting the other.
+ * Network topology and Application topology are orthogonal.  Each can change dynamically without affecting the other.
 
 ## Central Concepts for Network Topology
 

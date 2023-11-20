@@ -38,13 +38,14 @@ CREATE TYPE DistributionType AS ENUM ('anycast', 'multicast', 'forbidden');
 
 --
 -- CertificateRequestType
+--   mgmtController  Generate a certificate, signed by the rootCA, to be used by the management controller to connect to backbones
 --   backboneCA      Generate a CA for an interior backbone, signed by the rootCA
 --   interiorRouter  Generate a certificate for an interior router, signed by the interiorCA
 --   vanCA           Generate a CA for an application network, signed by the rootCA
 --   memberClaim     Generate a claim certificate for invitees, signed by the vanCA
 --   vanSite         Generate a certificate for a joining member site, signed by the vanCA
 --
-CREATE TYPE CertificateRequestType AS ENUM ('backboneCA', 'interiorRouter', 'vanCA', 'memberClaim', 'vanSite');
+CREATE TYPE CertificateRequestType AS ENUM ('mgmtController', 'backboneCA', 'interiorRouter', 'vanCA', 'memberClaim', 'vanSite');
 
 --
 -- RoleType
@@ -120,6 +121,17 @@ CREATE TABLE TlsCertificates (
     SignedBy UUID REFERENCES TlsCertificates,  -- NULL => signed by the Root Issuer
     Expiration timestamptz,
     RenewalTime timestamptz
+);
+
+--
+-- Instances of redundant management controllers.
+--
+CREATE TABLE ManagementControllers (
+    Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    Name text UNIQUE,
+    Lifecycle LifecycleType DEFAULT 'new',
+    Failure text,
+    Certificate UUID REFERENCES TlsCertificates
 );
 
 --
@@ -260,6 +272,7 @@ CREATE TABLE CertificateRequests (
     --
     -- Link to the requesting
     --
+    ManagementController UUID REFERENCES ManagementControllers (Id) ON DELETE CASCADE,
     Backbone UUID REFERENCES Backbones (Id) ON DELETE CASCADE,
     InteriorSite UUID REFERENCES InteriorSites (Id) ON DELETE CASCADE,
     ApplicationNetwork UUID REFERENCES ApplicationNetworks (Id) ON DELETE CASCADE,
@@ -357,7 +370,8 @@ CREATE TABLE InterfaceBindings (
 INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpiration, BackboneCaExpiration, SiteDataplaneImage, ConfigSyncImage, SiteControllerImage)
     VALUES (0, 'skupperx-root', '30 days', '1 week', '1 year', 'quay.io/skupper/skupper-router:2.4.3', 'quay.io/skupper/config-sync:1.4.3', 'quay.io/tedlross/skupperx-sitecontroller');
 INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 'tross@redhat.com', '18f4e1168a37a7a2d5ac2bff043c12c862d515a2cbb9ab5fe207ab4ef235e129c1a475ffca25c4cb3831886158c3836664d489c98f68c0ac7af5a8f6d35e04fa');
-INSERT INTO WebSessions (Id, UserId) values (gen_random_uuid(), 1);
+INSERT INTO WebSessions (Id, UserId) VALUES (gen_random_uuid(), 1);
+INSERT INTO ManagementControllers (Name) VALUES ('Main Controller');
 
 
 /*
