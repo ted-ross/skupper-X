@@ -19,7 +19,7 @@
 
 "use strict";
 
-const Log  = require('./log.js').Log;
+const Log  = require('./common/log.js').Log;
 const Pool = require('pg').Pool;
 
 var connectionPool;

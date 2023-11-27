@@ -22,7 +22,7 @@
 const k8s  = require('@kubernetes/client-node');
 const fs   = require('fs');
 const YAML = require('yaml');
-const Log  = require('./log.js').Log;
+const Log  = require('./common/log.js').Log;
 
 var kc;
 var client;

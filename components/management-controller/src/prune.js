@@ -20,7 +20,7 @@
 "use strict";
 
 const kube   = require('./kube.js');
-const Log    = require('./log.js').Log;
+const Log    = require('./common/log.js').Log;
 const db     = require('./db.js');
 
 const reconcileCertificates = async function() {

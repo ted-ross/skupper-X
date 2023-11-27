@@ -28,8 +28,8 @@ const config      = require('./config.js');
 const apiserver   = require('./apiserver.js');
 const axios       = require('axios');
 const fs          = require('fs');
-const Log         = require('./log.js').Log;
-const Flush       = require('./log.js').Flush;
+const Log         = require('./common/log.js').Log;
+const Flush       = require('./common/log.js').Flush;
 
 const VERSION     = '0.1.1';
 const STANDALONE  = (process.env.SKX_STANDALONE || 'NO') == 'YES';

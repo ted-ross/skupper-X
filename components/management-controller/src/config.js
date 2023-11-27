@@ -20,7 +20,7 @@
 "use strict";
 
 const db   = require('./db.js');
-const Log  = require('./log.js').Log
+const Log  = require('./common/log.js').Log
 
 var config;
 var changeListeners = [];
