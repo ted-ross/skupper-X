@@ -22,8 +22,6 @@
 const kube   = require('./kube.js');
 const Log    = require('./log.js').Log;
 const db     = require('./db.js');
-const config = require('./config.js');
-
 
 const reconcileCertificates = async function() {
     const client = await db.ClientFromPool();

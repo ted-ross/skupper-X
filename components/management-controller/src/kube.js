@@ -19,13 +19,10 @@
 
 "use strict";
 
-const k8s         = require('@kubernetes/client-node');
-const fs          = require('fs');
-const YAML        = require('yaml');
-const db          = require('./db.js');
-const config      = require('./config.js');
-const Log         = require('./log.js').Log;
-const Flush       = require('./log.js').Flush;
+const k8s  = require('@kubernetes/client-node');
+const fs   = require('fs');
+const YAML = require('yaml');
+const Log  = require('./log.js').Log;
 
 var kc;
 var client;
@@ -35,8 +32,6 @@ var customApi;
 var secretWatch;
 var certificateWatch;
 var namespace = 'default';
-
-const KUBECONFIG = process.env.KUBECONFIG || '~/.kube/config';
 
 exports.Namespace = function() {
     return namespace;

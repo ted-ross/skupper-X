@@ -22,21 +22,6 @@
 const Log  = require('./log.js').Log;
 const Pool = require('pg').Pool;
 
-var appConfig;
-var db;
-var observer1;
-var observer2;
-var observer3;
-var observer4;
-const USER_ID  = process.env.NH_USER       || '';
-const AGENT_ID = process.env.NH_ROUTER_KEY || '';
-var cloudId;
-var networkId;
-var lastStatus = {status : 'UNKNOWN'};
-var selfCallbacks = [];
-var selfDoc;
-var dbConnected = false;
-
 var connectionPool;
 
 exports.Start = async function() {
