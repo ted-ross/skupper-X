@@ -19,7 +19,6 @@
 
 "use strict";
 
-const kube = require('./kube.js');
 const Log  = require('./log.js').Log;
 const Pool = require('pg').Pool;
 

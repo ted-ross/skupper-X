@@ -74,7 +74,7 @@ const deployment_object = function(name, image) {
     };
 }
 
-const secret_object = function(name, source_secret) {
+const secret_object = function(name, source_secret, invitation) {
     return {
         apiVersion: 'v1',
         kind: 'Secret',
@@ -82,10 +82,11 @@ const secret_object = function(name, source_secret) {
         metadata: {
             name: name,
             annotations: {
-                'skupper.io/skx-controlled': 'true',
-                'skupper.io/skx-van-id': source_secret.metadata.annotations['skupper.io/skx-van-id'],
-                'skupper.io/skx-dataplane-image': source_secret.metadata.annotations['skupper.io/skx-dataplane-image'],
+                'skupper.io/skx-controlled':       'true',
+                'skupper.io/skx-van-id':           source_secret.metadata.annotations['skupper.io/skx-van-id'],
+                'skupper.io/skx-dataplane-image':  source_secret.metadata.annotations['skupper.io/skx-dataplane-image'],
                 'skupper.io/skx-configsync-image': source_secret.metadata.annotations['skupper.io/skx-configsync-image'],
+                'skupper.io/skx-interactive':      invitation.interactiveclaim ? 'true' : 'false',
                 // TODO - Add access URLs here
             }
         },
@@ -103,7 +104,7 @@ const fetchInvitationKube = async function (iid, res) {
         var   invitation = '';
 
         invitation += "---\n" + yaml.dump(deployment_object('skupperx-sitecontroller', secret.metadata.annotations['skupper.io/skx-controller-image']));
-        invitation += "---\n" + yaml.dump(secret_object('skupperx-claim', secret));
+        invitation += "---\n" + yaml.dump(secret_object('skupperx-claim', secret, row));
 
         res.send(invitation);
         res.status(200).end();

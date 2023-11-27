@@ -124,17 +124,6 @@ CREATE TABLE TlsCertificates (
 );
 
 --
--- Instances of redundant management controllers.
---
-CREATE TABLE ManagementControllers (
-    Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    Name text UNIQUE,
-    Lifecycle LifecycleType DEFAULT 'new',
-    Failure text,
-    Certificate UUID REFERENCES TlsCertificates
-);
-
---
 -- Interior backbone networks
 --
 CREATE TABLE Backbones (
@@ -148,6 +137,18 @@ CREATE TABLE Backbones (
 );
 
 --
+-- Access URL for a subset of the interior routers in a backbone network.
+-- This is used to configure global-DNS configuration for backbone access.
+--
+CREATE TABLE BackboneAccessPoints (
+    Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    Backbone UUID REFERENCES Backbones,
+    Name text,
+    Url text,
+    managementAccess boolean DEFAULT false   -- True if this access point is to be used by the management controllers
+);
+
+--
 -- Sites that form the interior transit backbone
 --
 CREATE TABLE InteriorSites (
@@ -157,7 +158,9 @@ CREATE TABLE InteriorSites (
     Failure text,
     Certificate UUID REFERENCES TlsCertificates,
 
-    Backbone UUID REFERENCES Backbones
+    Backbone UUID REFERENCES Backbones,
+    MemberAccess UUID REFERENCES BackboneAccessPoints,
+    ManagementAccess UUID REFERENCES BackboneAccessPoints
 );
 
 --
@@ -167,6 +170,17 @@ CREATE TABLE InterRouterLinks (
     ListeningInteriorSite UUID REFERENCES InteriorSites ON DELETE CASCADE,
     ConnectingInteriorSite UUID REFERENCES InteriorSites ON DELETE CASCADE,
     Cost integer DEFAULT 1
+);
+
+--
+-- Instances of redundant management controllers.
+--
+CREATE TABLE ManagementControllers (
+    Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    Name text UNIQUE,
+    Lifecycle LifecycleType DEFAULT 'new',
+    Failure text,
+    Certificate UUID REFERENCES TlsCertificates
 );
 
 --
@@ -207,18 +221,20 @@ CREATE TABLE MemberInvitations (
     Failure text,
     Certificate UUID REFERENCES TlsCertificates,
 
+    BackboneAccess UUID REFERENCES BackboneAccessPoints,
     JoinDeadline timestamptz,
     MemberClass UUID REFERENCES SiteClasses,
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
     InstanceLimit integer,
-    InstanceCount integer
+    InstanceCount integer,
+    InteractiveClaim boolean DEFAULT false    -- If true, don't assert the claim until the invitee intervenes
 );
 
 --
 -- Mapping of participant sites to their backbone attach point(s)
 --
 CREATE TABLE EdgeLinks (
-    InteriorSite UUID REFERENCES InteriorSites ON DELETE CASCADE,
+    AccessPoint UUID REFERENCES BackboneAccessPoints ON DELETE CASCADE,
     EdgeToken UUID REFERENCES MemberInvitations ON DELETE CASCADE,
     Priority integer DEFAULT 4
 );
@@ -236,7 +252,7 @@ CREATE TABLE MemberSites (
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
     Invitation UUID REFERENCES MemberInvitations ON DELETE CASCADE,
     SiteClass UUID REFERENCES SiteClasses,
-    ActiveAccessPoint UUID REFERENCES InteriorSites
+    ActiveAccessPoint UUID REFERENCES BackboneAccessPoints
 );
 
 --
@@ -407,6 +423,9 @@ Notes:
   - Problem:  Figure out how to issue invitations well prior to the start time of ApplicationNetworks.
     Perhaps use the backbone CA to sign claims.
        o Generate van CAs immediately to sign invitations but don't install the van CAs until the pre-start time.
+
+  - Add state to the invitation that controls whether the participant may or may not create their own interfaces in the
+    application network.  If not permitted, the participant is limited to only using the allocated interfaces.
 
 */
 
