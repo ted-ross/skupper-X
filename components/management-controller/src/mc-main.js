@@ -20,18 +20,21 @@
 "use strict";
 
 const router      = require('./router.js');
+const certs       = require('./certs.js');
+const prune       = require('./prune.js');
+const db          = require('./db.js');
 const kube        = require('./kube.js');
 const config      = require('./config.js');
-const apiserver   = require('./apiserver.js');
+const apiserver   = require('./mc-apiserver.js');
 const axios       = require('axios');
 const fs          = require('fs');
-const Log         = require('./log.js').Log;
-const Flush       = require('./log.js').Flush;
+const Log         = require('./common/log.js').Log;
+const Flush       = require('./common/log.js').Flush;
 
 const VERSION     = '0.1.1';
 const STANDALONE  = (process.env.SKX_STANDALONE || 'NO') == 'YES';
 
-Log(`Skupper-X Site controller version ${VERSION}`);
+Log(`Skupper-X Management controller version ${VERSION}`);
 Log(`Standalone : ${STANDALONE}`);
 
 //
@@ -40,11 +43,14 @@ Log(`Standalone : ${STANDALONE}`);
 exports.Main = async function() {
     try {
         await kube.Start(!STANDALONE);
+        await db.Start();
         await config.Start();
+        await prune.Start();
+        await certs.Start();
         await apiserver.Start();
-        Log("[Site controller initialization completed successfully]");
+        Log("[Management controller initialization completed successfully]");
     } catch (reason) {
-        Log(`Site controller initialization failed: ${reason.stack}`)
+        Log(`Management controller initialization failed: ${reason.stack}`)
         Flush();
         process.exit(1);
     };
