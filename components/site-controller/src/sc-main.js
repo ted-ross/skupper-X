@@ -19,14 +19,14 @@
 
 "use strict";
 
-const router      = require('./router.js');
-const kube        = require('./kube.js');
-const config      = require('./config.js');
-const apiserver   = require('./sc-apiserver.js');
-const axios       = require('axios');
+const k8s         = require('@kubernetes/client-node');
+const yaml        = require('yaml');
 const fs          = require('fs');
-const Log         = require('./log.js').Log;
-const Flush       = require('./log.js').Flush;
+const router      = require('./router.js');
+const kube        = require('./common/kube.js');
+const apiserver   = require('./sc-apiserver.js');
+const Log         = require('./common/log.js').Log;
+const Flush       = require('./common/log.js').Flush;
 
 const VERSION     = '0.1.1';
 const STANDALONE  = (process.env.SKX_STANDALONE || 'NO') == 'YES';
@@ -39,8 +39,7 @@ Log(`Standalone : ${STANDALONE}`);
 //
 exports.Main = async function() {
     try {
-        await kube.Start(!STANDALONE);
-        await config.Start();
+        await kube.Start(k8s, fs, yaml, !STANDALONE);
         await apiserver.Start();
         Log("[Site controller initialization completed successfully]");
     } catch (reason) {

@@ -20,10 +20,8 @@
 "use strict";
 
 const amqp   = require('rhea');
-const db     = require('./db.js');
 const fs     = require('fs');
-const config = require('./config.js');
-const Log    = require('./log.js').Log;
+const Log    = require('./common/log.js').Log;
 const { resolve } = require('path');
 
 const QUERY_TIMEOUT_SECONDS = 5;
