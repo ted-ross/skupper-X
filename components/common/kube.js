@@ -19,11 +19,11 @@
 
 "use strict";
 
-const k8s  = require('@kubernetes/client-node');
-const fs   = require('fs');
-const YAML = require('yaml');
-const Log  = require('./common/log.js').Log;
+const Log  = require('./log.js').Log;
 
+var fs;
+var YAML;
+var k8s;
 var kc;
 var client;
 var v1Api;
@@ -37,7 +37,10 @@ exports.Namespace = function() {
     return namespace;
 }
 
-exports.Start = function (in_cluster) {
+exports.Start = function (k8s_mod, fs_mod, yaml_mod, in_cluster) {
+    k8s  = k8s_mod;
+    fs   = fs_mod;
+    YAML = yaml_mod;
     return new Promise((resolve, reject) => {
         kc = new k8s.KubeConfig();
         if (in_cluster) {

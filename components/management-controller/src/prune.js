@@ -19,7 +19,7 @@
 
 "use strict";
 
-const kube   = require('./kube.js');
+const kube   = require('./common/kube.js');
 const Log    = require('./common/log.js').Log;
 const db     = require('./db.js');
 

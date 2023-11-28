@@ -19,15 +19,16 @@
 
 "use strict";
 
+const k8s         = require('@kubernetes/client-node');
+const yaml        = require('yaml');
+const fs          = require('fs');
 const router      = require('./router.js');
 const certs       = require('./certs.js');
 const prune       = require('./prune.js');
 const db          = require('./db.js');
-const kube        = require('./kube.js');
+const kube        = require('./common/kube.js');
 const config      = require('./config.js');
 const apiserver   = require('./mc-apiserver.js');
-const axios       = require('axios');
-const fs          = require('fs');
 const Log         = require('./common/log.js').Log;
 const Flush       = require('./common/log.js').Flush;
 
@@ -42,7 +43,7 @@ Log(`Standalone : ${STANDALONE}`);
 //
 exports.Main = async function() {
     try {
-        await kube.Start(!STANDALONE);
+        await kube.Start(k8s, fs, yaml, !STANDALONE);
         await db.Start();
         await config.Start();
         await prune.Start();

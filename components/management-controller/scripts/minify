@@ -5,11 +5,11 @@ mkdir app
 mkdir app/src
 mkdir app/src/common
 uglifyjs index.js -c -m -o app/index.js
-for MODULE in mc-apiserver certs config db kube mc-main prune router
+for MODULE in mc-apiserver certs config db mc-main prune router
 do
     uglifyjs src/$MODULE.js --toplevel -c -m -o app/src/$MODULE.js
 done
-for MODULE in log util
+for MODULE in log util kube
 do
     uglifyjs ../common/$MODULE.js --toplevel -c -m -o app/src/common/$MODULE.js
 done

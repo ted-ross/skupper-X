@@ -22,7 +22,7 @@
 const express = require('express');
 const yaml    = require('js-yaml');
 const db      = require('./db.js');
-const kube    = require('./kube.js');
+const kube    = require('./common/kube.js');
 const Log     = require('./common/log.js').Log;
 
 const API_PREFIX = '/api/v1alpha1/';
