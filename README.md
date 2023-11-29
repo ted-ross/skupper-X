@@ -149,7 +149,7 @@ The sequence of events from the creation of an invitation to the establishment o
  1. The invitation is created.  A certificate is created for the invitation and that certificate is signed by the application network CA.
  1. The invitation text is generated for a particular kind of environment (e.g. Kubernetes) and delivered by any means to the invitee(s).
  1. The invitee applies the invitation in their own environment.  This causes the site-controller executable to be launched.
- 1. The site-controller uses the metadata in the invitation certificat-secret to deploy the dataplane component(s) and configure them to attach to the backbone using the invitation claim certificate.
+ 1. The site-controller uses the metadata in the invitation certificate-secret to deploy the dataplane component(s) and configure them to attach to the backbone using the invitation claim certificate.
  1. The connected backbone component validates the certificate and, seeing that it is an invitation claim, restricts the traffic flowing from the new site to the claim-redemption protocol.
  1. The site-controller contacts the management-controller via the backbone network and provides the claim.
  1. The management-controller validates the claim and if ok, creates a new member-site for the successful invitee.  This member site has a new certificate signed by the application-network CA.  This certificate is sent back to the site.
