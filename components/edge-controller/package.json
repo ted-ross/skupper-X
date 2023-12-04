@@ -1,7 +1,7 @@
 {
-  "name": "skupperx-management-controller",
+  "name": "skupperx-edge-controller",
   "version": "0.1.1",
-  "description": "Skupper-X Management Controller",
+  "description": "Skupper-X Edge Controller",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

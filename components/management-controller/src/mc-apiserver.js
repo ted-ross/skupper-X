@@ -21,6 +21,7 @@
 
 const express = require('express');
 const yaml    = require('js-yaml');
+const crypto  = require('crypto');
 const db      = require('./db.js');
 const kube    = require('./common/kube.js');
 const Log     = require('./common/log.js').Log;
@@ -40,8 +41,8 @@ const listInvitations = async function(res) {
     res.status(200).end();
 }
 
-const deployment_object = function(name, image) {
-    return {
+const deployment_object = function(name, image, env = undefined) {
+    let dep = {
         apiVersion: 'apps/v1',
         kind: 'Deployment',
         metadata: {
@@ -54,24 +55,31 @@ const deployment_object = function(name, image) {
                     app: name,
                 },
             },
-        },
-        template: {
-            metadata: {
-                labels: {
-                    app: name,
-                },
-            },
-            spec: {
-                containers: [
-                    {
-                        image: image,
-                        imagePullPolicy: 'IfNotPresent',
-                        name: name,
+            template: {
+                metadata: {
+                    labels: {
+                        app: name,
                     },
-                ],
+                },
+                spec: {
+                    serviceAccountName: 'skupper-site-controller',
+                    containers: [
+                        {
+                            image: image,
+                            imagePullPolicy: 'IfNotPresent',
+                            name: name,
+                        },
+                    ],
+                },
             },
         },
     };
+
+    if (env) {
+        dep.spec.template.spec.containers[0].env = env;
+    }
+
+    return dep;
 }
 
 const secret_object = function(name, source_secret, invitation) {
@@ -94,6 +102,110 @@ const secret_object = function(name, source_secret, invitation) {
     };
 }
 
+const service_account = function(name, application) {
+    return {
+        apiVersion: 'v1',
+        kind: 'ServiceAccount',
+        metadata: {
+            name: name,
+            labels: {
+                application: application,
+            },
+        },
+    };
+}
+
+const role = function(name, application) {
+    return {
+        apiVersion: 'rbac.authorization.k8s.io/v1',
+        kind: 'Role',
+        metadata: {
+            name: name,
+            labels: {
+                application: application,
+            },
+        },
+        rules: [
+            {
+                apiGroups: [""],
+                resources: ['configmaps', 'pods', 'pods/exec', 'services', 'secrets', 'serviceaccounts', 'events'],
+                verbs: ['get', 'list', 'watch', 'create', 'update', 'delete', 'patch'],
+            },
+            {
+                apiGroups: ['apps'],
+                resources: ['deployments', 'statefulsets', 'daemonsets'],
+                verbs: ['get', 'list', 'watch', 'create', 'update', 'delete'],
+            },
+            {
+                apiGroups: ['route.openshift.io'],
+                resources: ['routes'],
+                verbs: ['get', 'list', 'watch', 'create', 'update', 'delete'],
+            },
+            {
+                apiGroups: ['networking.k8s.io'],
+                resources: ['ingresses', 'networkpolicies'],
+                verbs: ['get', 'list', 'watch', 'create', 'delete'],
+            },
+            {
+                apiGroups: ['projectcontour.io'],
+                resources: ['httpproxies'],
+                verbs: ['get', 'list', 'watch', 'create', 'delete'],
+            },
+            {
+                apiGroups: ['rbac.authorization.k8s.io'],
+                resources: ['rolebindings', 'roles'],
+                verbs: ['get', 'list', 'watch', 'create', 'delete'],
+            },
+            {
+                apiGroups: ['apps.openshift.io'],
+                resources: ['deploymentconfigs'],
+                verbs: ['get', 'list', 'watch'],
+            },
+        ],
+    };
+}
+
+const role_binding = function(name, application) {
+    return {
+        apiVersion: 'rbac.authorization.k8s.io/v1',
+        kind: 'RoleBinding',
+        metadata: {
+            name: name,
+            labels: {
+                application: application,
+            },
+        },
+        subjects: [
+            {
+                kind: 'ServiceAccount',
+                name: name,
+            }
+        ],
+        roleRef: {
+            apiGroup: 'rbac.authorization.k8s.io',
+            kind: 'Role',
+            name: name,
+        },
+    };
+}
+
+const site_config_map = function(site_name, van_id) {
+    return {
+        apiVersion: 'v1',
+        kind: 'ConfigMap',
+        metadata: {
+            name: 'skupper-site',
+        },
+        data: {
+            name: site_name,
+            'router-mode': 'edge',
+            'service-controller': 'true',
+            'service-sync': 'false',
+            'van-id': van_id,
+        },
+    };
+}
+
 const fetchInvitationKube = async function (iid, res) {
     const client = await db.ClientFromPool();
     const result = await client.query("SELECT MemberInvitations.*, TlsCertificates.ObjectName as secret_name FROM MemberInvitations " +
@@ -103,8 +215,16 @@ const fetchInvitationKube = async function (iid, res) {
         const secret = await kube.LoadSecret(row.secret_name);
         var   invitation = '';
 
-        invitation += "---\n" + yaml.dump(deployment_object('skupperx-sitecontroller', secret.metadata.annotations['skupper.io/skx-controller-image']));
+        invitation += "---\n" + yaml.dump(service_account('skupper-site-controller', 'skupper-site-controller'));
+        invitation += "---\n" + yaml.dump(role('skupper-site-controller', 'skupper-site-controller'));
+        invitation += "---\n" + yaml.dump(role_binding('skupper-site-controller', 'skupper-site-controller'));
+        invitation += "---\n" + yaml.dump(deployment_object('skupper-site-controller', secret.metadata.annotations['skupper.io/skx-controller-image'], [
+            {name: 'WATCH_NAMESPACE', valueFrom: {fieldRef: {fieldPath: 'metadata.namespace'}}},
+            {name: 'QDROUTERD_IMAGE', value: secret.metadata.annotations['skupper.io/skx-dataplane-image']},
+            {name: 'SKUPPER_CONFIG_SYNC_IMAGE', value: secret.metadata.annotations['skupper.io/skx-configsync-image']},
+        ]));
         invitation += "---\n" + yaml.dump(secret_object('skupperx-claim', secret, row));
+        invitation += "---\n" + yaml.dump(site_config_map(crypto.randomUUID(), secret.metadata.annotations['skupper.io/skx-van-id']));
 
         res.send(invitation);
         res.status(200).end();

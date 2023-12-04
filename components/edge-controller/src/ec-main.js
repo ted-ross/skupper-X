@@ -24,7 +24,7 @@ const yaml        = require('yaml');
 const fs          = require('fs');
 const router      = require('./router.js');
 const kube        = require('./common/kube.js');
-const apiserver   = require('./sc-apiserver.js');
+const apiserver   = require('./ec-apiserver.js');
 const Log         = require('./common/log.js').Log;
 const Flush       = require('./common/log.js').Flush;
 

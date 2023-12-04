@@ -87,6 +87,7 @@ CREATE TABLE Configuration (
     SiteDataplaneImage text,
     ConfigSyncImage text,
     SiteControllerImage text,
+    EdgeControllerImage text,
     VaultURL text,
     VaultToken text
 );
@@ -384,7 +385,7 @@ CREATE TABLE InterfaceBindings (
 -- Pre-populate the database with some test data.
 --
 INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpiration, BackboneCaExpiration, SiteDataplaneImage, ConfigSyncImage, SiteControllerImage)
-    VALUES (0, 'skupperx-root', '30 days', '1 week', '1 year', 'quay.io/skupper/skupper-router:2.4.3', 'quay.io/skupper/config-sync:1.4.3', 'quay.io/tedlross/skupperx-sitecontroller');
+    VALUES (0, 'skupperx-root', '30 days', '1 week', '1 year', 'quay.io/tedlross/skupper-router:skx-0.1.1', 'quay.io/tedlross/skupper-config-sync:skx-0.1.1', 'quay.io/tedlross/skupper-site-controller:skx-0.1.1');
 INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 'tross@redhat.com', '18f4e1168a37a7a2d5ac2bff043c12c862d515a2cbb9ab5fe207ab4ef235e129c1a475ffca25c4cb3831886158c3836664d489c98f68c0ac7af5a8f6d35e04fa');
 INSERT INTO WebSessions (Id, UserId) VALUES (gen_random_uuid(), 1);
 INSERT INTO ManagementControllers (Name) VALUES ('Main Controller');
@@ -426,6 +427,8 @@ Notes:
 
   - Add state to the invitation that controls whether the participant may or may not create their own interfaces in the
     application network.  If not permitted, the participant is limited to only using the allocated interfaces.
+
+  - Consider issuing a certificate per backbone-access point that contains the hostname of the access point.
 
 */
 
