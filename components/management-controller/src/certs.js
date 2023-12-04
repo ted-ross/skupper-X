@@ -116,8 +116,8 @@ const processNewAccessPoints = async function() {
                 duration_ms = db.IntervalMilliseconds(config.DefaultCaExpiration());
             }
             await client.query(
-                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, AccessPoint, Issuer) VALUES(gen_random_uuid(), 'accessPoint', now(), now(), $1, $2, $3)",
-                [duration_ms / 3600000, row.id, row.bbca]
+                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, AccessPoint, Issuer, Hostname) VALUES(gen_random_uuid(), 'accessPoint', now(), now(), $1, $2, $3, $4)",
+                [duration_ms / 3600000, row.id, row.bbca, row.hostname]
             );
             await client.query("UPDATE BackboneAccessPoints SET Lifecycle = 'skx_cr_created' WHERE Id = $1", [row.id]);
             reschedule_delay = 0;
@@ -296,31 +296,41 @@ const processNewCertificateRequests = async function() {
             var is_ca;
             var issuer;
             var extra_annotations = {};
+            var dns_name;
+            var usage;
             switch (row.requesttype) {
                 case 'mgmtController':
                     name   = `skx-mgmt-controller-${row.id}`;
+                    usage  = 'client auth';
                     break;
                 case 'backboneCA':
                     name   = `skx-bb-ca-${row.id}`;
                     is_ca  = true;
+                    usage  = 'signing';
                     break;
                 case 'accessPoint':
-                    name   = `skx-access-${row.id}`;
+                    name     = `skx-access-${row.id}`;
+                    issuer   = row.issuer;
+                    usage    = 'server auth';
+                    dns_name = row.hostname;
                     break;
                 case 'vanCA':
                     name   = `skx-van-ca-${row.id}`;
                     is_ca  = true;
                     issuer = row.issuer;
+                    usage  = 'signing';
                     break;
                 case 'interiorRouter':
                     name   = `skx-interior-${row.id}`;
                     is_ca  = false;
                     issuer = row.issuer;
+                    usage  = 'client auth';
                     break;
                 case 'memberClaim':
                     name   = `skx-claim-${row.id}`;
                     is_ca  = false;
                     issuer = row.issuer;
+                    usage  = 'client auth';
                     extra_annotations['skupper.io/skx-dataplane-image']  = config.SiteDataplaneImage();
                     extra_annotations['skupper.io/skx-configsync-image'] = config.ConfigSyncImage();
                     extra_annotations['skupper.io/skx-controller-image'] = config.SiteControllerImage();
@@ -331,6 +341,7 @@ const processNewCertificateRequests = async function() {
                     name   = `skx-member-${row.id}`;
                     is_ca  = false;
                     issuer = row.issuer;
+                    usage  = 'client auth';
                     break;
             }
 
@@ -346,7 +357,7 @@ const processNewCertificateRequests = async function() {
                 }
             }
 
-            var cert_obj = certificateObject(name, row.durationhours, is_ca, issuer_name, row.id, row.issuer ? row.issuer : 'root', extra_annotations, name);
+            var cert_obj = certificateObject(name, row.durationhours, is_ca, issuer_name, row.id, row.issuer ? row.issuer : 'root', extra_annotations, name, dns_name, usage);
             await kube.ApplyObject(cert_obj);
             await client.query("UPDATE CertificateRequests SET Lifecycle = 'cm_cert_created' WHERE Id = $1", [row.id]);
             reschedule_delay = 0;
@@ -481,7 +492,7 @@ const onCertificateWatch = async function(action, cert) {
 //
 // Generate a cert-manager Certificate object from a template.
 //
-const certificateObject = function(name, duration_hours, is_ca, issuer, db_link, issuer_link, extra_annotations, common_name) {
+const certificateObject = function(name, duration_hours, is_ca, issuer, db_link, issuer_link, extra_annotations, common_name, dns_name, usage) {
     var cert = {
         apiVersion: 'cert-manager.io/v1',
         kind: 'Certificate',
@@ -512,8 +523,7 @@ const certificateObject = function(name, duration_hours, is_ca, issuer, db_link,
                 encoding: 'PKCS1',
                 size: 2048,
             },
-            usages: ['server auth', 'client auth'],
-            dnsNames: ['example.com', 'www.example.com'],
+            usages: [usage],
             issuerRef: {
                 name: issuer,
                 kind: 'Issuer',
@@ -521,6 +531,10 @@ const certificateObject = function(name, duration_hours, is_ca, issuer, db_link,
             },
         },
     };
+
+    if (dns_name) {
+        cert.spec.dnsNames = [dns_name];
+    }
 
     for (const [key, value] of Object.entries(extra_annotations)) {
         cert.spec.secretTemplate.annotations[key] = value;

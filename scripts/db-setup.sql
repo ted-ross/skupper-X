@@ -272,6 +272,11 @@ CREATE TABLE CertificateRequests (
     Failure text,
 
     --
+    -- Optional hostname for the certificate
+    --
+    Hostname text,
+
+    --
     -- The time when this request row was created.  This should be used to determine the order of processing
     -- when there are multiple actionable requests in the table.  First-created, first-processed.
     --
