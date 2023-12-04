@@ -93,6 +93,47 @@ const processNewBackbones = async function() {
 }
 
 //
+//
+//
+const processNewAccessPoints = async function() {
+    var reschedule_delay = 2000;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query('BEGIN');
+        const result = await client.query(
+            "SELECT BackboneAccessPoints.*, Backbones.Lifecycle as bblc, Backbones.Certificate as bbca FROM BackboneAccessPoints " + 
+            "JOIN Backbones ON BackboneAccessPoints.Backbone = Backbones.Id WHERE BackboneAccessPoints.Lifecycle = 'new' and Backbones.Lifecycle = 'ready' LIMIT 1"
+        );
+        if (result.rowCount == 1) {
+            const row = result.rows[0];
+            Log(`New Backbone Access Point: ${row.name}`);
+            const van_id = row.id.substr(-5);
+            var   duration_ms;
+
+            if (row.endtime) {
+                duration_ms = row.endtime.getTime() - row.starttime.getTime() + db.IntervalMilliseconds(row.deletedelay);
+            } else {
+                duration_ms = db.IntervalMilliseconds(config.DefaultCaExpiration());
+            }
+            await client.query(
+                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, AccessPoint, Issuer) VALUES(gen_random_uuid(), 'accessPoint', now(), now(), $1, $2, $3)",
+                [duration_ms / 3600000, row.id, row.bbca]
+            );
+            await client.query("UPDATE BackboneAccessPoints SET Lifecycle = 'skx_cr_created' WHERE Id = $1", [row.id]);
+            reschedule_delay = 0;
+        }
+        await client.query('COMMIT');
+    } catch (err) {
+        Log(`Rolling back new-access-point transaction: ${err.stack}`);
+        await client.query('ROLLBACK');
+        reschedule_delay = 10000;
+    } finally {
+        client.release();
+        setTimeout(processNewAccessPoints, reschedule_delay);
+    }
+}
+
+//
 // processNewNetworks
 //
 // When new networks are created, add a certificate request to begin the full setup of the network.
@@ -263,6 +304,9 @@ const processNewCertificateRequests = async function() {
                     name   = `skx-bb-ca-${row.id}`;
                     is_ca  = true;
                     break;
+                case 'accessPoint':
+                    name   = `skx-access-${row.id}`;
+                    break;
                 case 'vanCA':
                     name   = `skx-van-ca-${row.id}`;
                     is_ca  = true;
@@ -344,6 +388,9 @@ const secretAdded = async function(dblink, secret) {
             } else if (cert_request.interiorsite) {
                 ref_table  = 'InteriorSites';
                 ref_id     = cert_request.interiorsite;
+            } else if (cert_request.accesspoint) {
+                ref_table  = 'BackboneAccessPoints';
+                ref_id     = cert_request.accesspoint;
             } else if (cert_request.applicationnetwork) {
                 ref_table  = 'ApplicationNetworks';
                 ref_id     = cert_request.applicationnetwork;
@@ -508,6 +555,7 @@ exports.Start = async function() {
     Log('[Certificate module starting]');
     setTimeout(processNewManagementControllers, 1000);
     setTimeout(processNewBackbones, 1000);
+    setTimeout(processNewAccessPoints, 1000);
     setTimeout(processNewNetworks, 1000);
     setTimeout(processNewInteriorSites, 1000);
     setTimeout(processNewInvitations, 1000);

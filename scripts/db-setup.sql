@@ -38,14 +38,15 @@ CREATE TYPE DistributionType AS ENUM ('anycast', 'multicast', 'forbidden');
 
 --
 -- CertificateRequestType
---   mgmtController  Generate a certificate, signed by the rootCA, to be used by the management controller to connect to backbones
+--   mgmtController  Generate a client certificate, signed by the rootCA, to be used by the management controller to connect to backbones
 --   backboneCA      Generate a CA for an interior backbone, signed by the rootCA
---   interiorRouter  Generate a certificate for an interior router, signed by the interiorCA
+--   interiorRouter  Generate a client certificate for an interior router, signed by the interiorCA
+--   accessPoint     Generate a server certificate for an access point, served by one or more interior routers
 --   vanCA           Generate a CA for an application network, signed by the rootCA
 --   memberClaim     Generate a claim certificate for invitees, signed by the vanCA
---   vanSite         Generate a certificate for a joining member site, signed by the vanCA
+--   vanSite         Generate a client certificate for a joining member site, signed by the vanCA
 --
-CREATE TYPE CertificateRequestType AS ENUM ('mgmtController', 'backboneCA', 'interiorRouter', 'vanCA', 'memberClaim', 'vanSite');
+CREATE TYPE CertificateRequestType AS ENUM ('mgmtController', 'backboneCA', 'interiorRouter', 'accessPoint', 'vanCA', 'memberClaim', 'vanSite');
 
 --
 -- RoleType
@@ -143,9 +144,13 @@ CREATE TABLE Backbones (
 --
 CREATE TABLE BackboneAccessPoints (
     Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    Backbone UUID REFERENCES Backbones,
     Name text,
-    Url text,
+    Lifecycle LifecycleType DEFAULT 'new',
+    Failure text,
+    Certificate UUID REFERENCES TlsCertificates,
+    Hostname text,
+
+    Backbone UUID REFERENCES Backbones,
     managementAccess boolean DEFAULT false   -- True if this access point is to be used by the management controllers
 );
 
@@ -292,6 +297,7 @@ CREATE TABLE CertificateRequests (
     ManagementController UUID REFERENCES ManagementControllers (Id) ON DELETE CASCADE,
     Backbone UUID REFERENCES Backbones (Id) ON DELETE CASCADE,
     InteriorSite UUID REFERENCES InteriorSites (Id) ON DELETE CASCADE,
+    AccessPoint UUID REFERENCES BackboneAccessPoints (Id) ON DELETE CASCADE,
     ApplicationNetwork UUID REFERENCES ApplicationNetworks (Id) ON DELETE CASCADE,
     Invitation UUID REFERENCES MemberInvitations (Id) ON DELETE CASCADE,
     Site UUID REFERENCES MemberSites (Id) ON DELETE CASCADE
