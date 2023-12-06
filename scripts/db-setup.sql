@@ -49,6 +49,15 @@ CREATE TYPE DistributionType AS ENUM ('anycast', 'multicast', 'forbidden');
 CREATE TYPE CertificateRequestType AS ENUM ('mgmtController', 'backboneCA', 'interiorRouter', 'accessPoint', 'vanCA', 'memberClaim', 'vanSite');
 
 --
+-- AccessPointType
+--   claim       Ingress for claim (normal) access
+--   peer        Ingress for peer backbone router (inter-router) access
+--   member      Ingress for member (edge) access
+--   management  Ingress for the management (normal) controller
+--
+CREATE TYPE AccessPointType AS ENUM ('claim', 'peer', 'member', 'management');
+
+--
 -- RoleType
 --   accept        Accepts incoming connections
 --   connect       Initiates outgoing connections
@@ -65,6 +74,7 @@ CREATE TYPE RoleType AS ENUM ('accept', 'connect', 'send', 'receive', 'asyncRequ
 --
 -- Used to trace the lifecycle of various objects in the DB
 --
+--   partial            The object is partially specified.  There is not enough information yet to start the lifecycle.
 --   new                A new object has been created
 --   skx_cr_created     A CertificateRequest has been created for the object
 --   cm_cert_created    A cert-manager Certificate object has been created
@@ -74,7 +84,7 @@ CREATE TYPE RoleType AS ENUM ('accept', 'connect', 'send', 'receive', 'asyncRequ
 --   expired            The object is no longer available for use
 --   failed             An unrecoverable error occurred while processing this row, see the Failure column for details
 --
-CREATE TYPE LifecycleType AS ENUM ('new', 'skx_cr_created', 'cm_cert_created', 'cm_issuer_created', 'ready', 'active', 'expired', 'failed');
+CREATE TYPE LifecycleType AS ENUM ('partial', 'new', 'skx_cr_created', 'cm_cert_created', 'cm_issuer_created', 'ready', 'active', 'expired', 'failed');
 
 --
 -- Global configuration for Skupper-X
@@ -140,22 +150,26 @@ CREATE TABLE Backbones (
 
 --
 -- Access URL for a subset of the interior routers in a backbone network.
--- This is used to configure global-DNS configuration for backbone access.
+-- This is either simply an ingress-spec for backbone listeners or it can be
+-- used to configure global-DNS configuration for backbone access.
 --
 CREATE TABLE BackboneAccessPoints (
     Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     Name text,
-    Lifecycle LifecycleType DEFAULT 'new',
+    Lifecycle LifecycleType DEFAULT 'partial',
     Failure text,
     Certificate UUID REFERENCES TlsCertificates,
     Hostname text,
 
-    Backbone UUID REFERENCES Backbones,
-    managementAccess boolean DEFAULT false   -- True if this access point is to be used by the management controllers
+    Kind AccessPointType,
+    Backbone UUID REFERENCES Backbones
 );
 
 --
 -- Sites that form the interior transit backbone
+--
+-- The site's certificate is used as a client-auth certificate for outgoing inter-router links.
+-- The access points are used as certificates/CAs for incoming connections on separate ingresses.
 --
 CREATE TABLE InteriorSites (
     Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -165,6 +179,8 @@ CREATE TABLE InteriorSites (
     Certificate UUID REFERENCES TlsCertificates,
 
     Backbone UUID REFERENCES Backbones,
+    ClaimAccess UUID REFERENCES BackboneAccessPoints,
+    PeerAccess UUID REFERENCES BackboneAccessPoints,
     MemberAccess UUID REFERENCES BackboneAccessPoints,
     ManagementAccess UUID REFERENCES BackboneAccessPoints
 );
@@ -227,7 +243,7 @@ CREATE TABLE MemberInvitations (
     Failure text,
     Certificate UUID REFERENCES TlsCertificates,
 
-    BackboneAccess UUID REFERENCES BackboneAccessPoints,
+    ClaimAccess UUID REFERENCES BackboneAccessPoints,
     JoinDeadline timestamptz,
     MemberClass UUID REFERENCES SiteClasses,
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,

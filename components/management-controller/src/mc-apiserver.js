@@ -19,12 +19,13 @@
 
 "use strict";
 
-const express = require('express');
-const yaml    = require('js-yaml');
-const crypto  = require('crypto');
-const db      = require('./db.js');
-const kube    = require('./common/kube.js');
-const Log     = require('./common/log.js').Log;
+const express  = require('express');
+const yaml     = require('js-yaml');
+const crypto   = require('crypto');
+const db       = require('./db.js');
+const backbone = require('./backbone.js');
+const kube     = require('./common/kube.js');
+const Log      = require('./common/log.js').Log;
 
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8085;
@@ -39,6 +40,7 @@ const listInvitations = async function(res) {
     });
     res.send(JSON.stringify(list));
     res.status(200).end();
+    client.release();
 }
 
 const deployment_object = function(name, image, env = undefined) {
@@ -82,7 +84,7 @@ const deployment_object = function(name, image, env = undefined) {
     return dep;
 }
 
-const secret_object = function(name, source_secret, invitation) {
+const secret_object_claim = function(name, source_secret, invitation) {
     return {
         apiVersion: 'v1',
         kind: 'Secret',
@@ -189,7 +191,72 @@ const role_binding = function(name, application) {
     };
 }
 
-const site_config_map = function(site_name, van_id) {
+const backbone_service = function() {
+    return {
+        apiVersion: 'v1',
+        kind: 'Service',
+        metadata: {
+            name: 'skx-router',
+        },
+        spec: {
+            type: 'ClusterIP',
+            internalTrafficPolicy: 'Cluster',
+            ports: [
+                {
+                    name:       'peer',
+                    port:       55671,
+                    protocol:   'TCP',
+                    targetPort: 55671,
+                },
+                {
+                    name:       'member',
+                    port:       45671,
+                    protocol:   'TCP',
+                    targetPort: 45671,
+                },
+                {
+                    name:       'claim',
+                    port:       45672,
+                    protocol:   'TCP',
+                    targetPort: 45672,
+                },
+                {
+                    name:       'manage',
+                    port:       45673,
+                    protocol:   'TCP',
+                    targetPort: 45673,
+                },
+            ],
+            selector: {
+                application: 'skx-router',
+            },
+        }
+    };
+}
+
+const backbone_route = function(name, socket) {
+    return {
+        apiVersion: 'route.openshift.io/v1',
+        kind: 'Route',
+        metadata: {
+            name: name,
+        },
+        spec: {
+            port: {
+                targetPort: socket,
+            },
+            tls: {
+                termination: 'passthrough',
+            },
+            to: {
+                kind: 'Service',
+                name: 'skx-router',
+            },
+        },
+    };
+}
+
+const site_config_map_edge = function(site_name, van_id) {
     return {
         apiVersion: 'v1',
         kind: 'ConfigMap',
@@ -202,6 +269,22 @@ const site_config_map = function(site_name, van_id) {
             'service-controller': 'true',
             'service-sync': 'false',
             'van-id': van_id,
+        },
+    };
+}
+
+const site_config_map_interior = function(site_name) {
+    return {
+        apiVersion: 'v1',
+        kind: 'ConfigMap',
+        metadata: {
+            name: 'skupper-site',
+        },
+        data: {
+            name: site_name,
+            'router-mode': 'interior',
+            'service-controller': 'false',
+            'service-sync': 'false',
         },
     };
 }
@@ -223,8 +306,8 @@ const fetchInvitationKube = async function (iid, res) {
             {name: 'QDROUTERD_IMAGE', value: secret.metadata.annotations['skupper.io/skx-dataplane-image']},
             {name: 'SKUPPER_CONFIG_SYNC_IMAGE', value: secret.metadata.annotations['skupper.io/skx-configsync-image']},
         ]));
-        invitation += "---\n" + yaml.dump(secret_object('skupperx-claim', secret, row));
-        invitation += "---\n" + yaml.dump(site_config_map(crypto.randomUUID(), secret.metadata.annotations['skupper.io/skx-van-id']));
+        invitation += "---\n" + yaml.dump(secret_object_claim('skupperx-claim', secret, row));
+        invitation += "---\n" + yaml.dump(site_config_map_edge(crypto.randomUUID(), secret.metadata.annotations['skupper.io/skx-van-id']));
 
         res.send(invitation);
         res.status(200).end();
@@ -233,6 +316,38 @@ const fetchInvitationKube = async function (iid, res) {
     }
 
     client.release();
+}
+
+const fetchBackboneSiteKube = async function (bsid, res) {
+    const client = await db.ClientFromPool();
+    try {
+        await client.query('BEGIN');
+        const result = await client.query(
+            'SELECT InteriorSites.Certificate, TlsCertificates.ObjectName as secret_name FROM InteriorSites ' +
+            'JOIN TlsCertificates ON InteriorSites.Certificate = TlsCertificates.Id WHERE Interiorsites.Id = $1', [bsid]);
+        if (result.rowCount == 1) {
+            let secret = await kube.LoadSecret(result.rows[0].secret_name);
+            let text = '';
+            text += backbone.ServiceAccountYaml();
+            text += backbone.RoleYaml();
+            text += backbone.RoleBindingYaml();
+            text += backbone.ConfigMapYaml();
+            text += backbone.DeploymentYaml();
+            text += backbone.SecretYaml(secret);
+
+            res.send(text);
+            res.status(200).end();
+        } else {
+            throw Error('Site secret not found');
+        }
+        await client.query('COMMIT');
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.send(err.stack);
+        res.status(404).end();
+    } finally {
+        client.release();
+    }
 }
 
 exports.Start = async function() {
@@ -246,6 +361,11 @@ exports.Start = async function() {
     api.get(API_PREFIX + 'invitation/kube/:iid', (req, res) => {
         Log(`Request for invitation (Kubernetes): ${req.params.iid}`);
         fetchInvitationKube(req.params.iid, res);
+    });
+
+    api.get(API_PREFIX + 'backbonesite/kube/:bsid', (req, res) => {
+        Log(`Request for backbone site (Kubernetes): ${req.params.bsid}`);
+        fetchBackboneSiteKube(req.params.bsid, res);
     });
 
     let server = api.listen(API_PORT, () => {

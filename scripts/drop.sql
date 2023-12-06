@@ -37,6 +37,7 @@ DROP TABLE Configuration;
 DROP TYPE AddressScopeType;
 DROP TYPE StickyMechanismType;
 DROP TYPE DistributionType;
+DROP TYPE AccessPointType;
 DROP TYPE CertificateRequestType;
 DROP TYPE RoleType;
 DROP TYPE LifecycleType;
