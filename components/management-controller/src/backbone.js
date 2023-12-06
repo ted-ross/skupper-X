@@ -261,7 +261,7 @@ spec:
           value: /etc/skupper-router/config/skrouterd.json
         - name: QDROUTERD_CONF_TYPE
           value: json
-        image: quay.io/tedlross/skupper-router:skx-0.1.1
+        image: ${config.SiteDataplaneImage()}
         imagePullPolicy: Always
         livenessProbe:
           failureThreshold: 3
@@ -307,7 +307,7 @@ spec:
           name: router-config
         - mountPath: /etc/skupper-router-certs
           name: skupper-router-certs
-      - image: quay.io/tedlross/skupperx-bb-controller:skx-0.1.1
+      - image: ${config.BackboneControllerImage()}
         imagePullPolicy: Always
         name: controller
         ports:
