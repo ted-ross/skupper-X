@@ -166,7 +166,7 @@ data:
                 "id": "skx-bb-\${HOSTNAME}",
                 "mode": "interior",
                 "helloMaxAgeSeconds": "3",
-                "metadata": "{\"version\":\"1.4.3\",\"platform\":\"kubernetes\"}"
+                "metadata": "{\\"version\\":\\"1.4.3\\",\\"platform\\":\\"kubernetes\\"}"
             }
         ],
         [
@@ -310,11 +310,15 @@ spec:
       - image: quay.io/tedlross/skupperx-bb-controller:skx-0.1.1
         imagePullPolicy: Always
         name: controller
+        ports:
+        - containerPort: 8086
+          name: http
+          protocol: TCP
         readinessProbe:
           failureThreshold: 3
           httpGet:
             path: /healthz
-            port: 9191
+            port: 8086
             scheme: HTTP
           initialDelaySeconds: 1
           periodSeconds: 10
