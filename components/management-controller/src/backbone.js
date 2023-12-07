@@ -26,6 +26,7 @@ const SA_NAME           = 'skupperx-backbone';
 const ROLE_NAME         = SA_NAME;
 const ROLE_BINDING_NAME = SA_NAME;
 const APPLICATION       = 'skupperx';
+const ROUTER_LABEL      = 'skx-router';
 const CM_NAME           = 'skupper-internal';
 const DEPLOYMENT_NAME   = 'skupperx-backbone';
 
@@ -207,7 +208,7 @@ data:
 `;
 }
 
-exports.DeploymentYaml = function() {
+exports.DeploymentYaml = function(bsid) {
     return `---
 apiVersion: apps/v1
 kind: Deployment
@@ -238,7 +239,7 @@ spec:
       labels:
         app.kubernetes.io/name: ${DEPLOYMENT_NAME}
         app.kubernetes.io/part-of: skupperx
-        application: ${APPLICATION}
+        application: ${ROUTER_LABEL}
         skupper.io/component: router
     spec:
       containers:
@@ -310,6 +311,9 @@ spec:
       - image: ${config.BackboneControllerImage()}
         imagePullPolicy: Always
         name: controller
+        env:
+        - name: SKUPPERX_SITE_ID
+          value: ${bsid}
         ports:
         - containerPort: 8086
           name: http

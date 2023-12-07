@@ -154,6 +154,21 @@ exports.GetDeployments = async function() {
     return list.body.items;
 }
 
+exports.GetServices = async function() {
+    let list = await v1Api.listNamespacedService(namespace);
+    return list.body.items;
+}
+
+exports.GetRoutes = async function() {
+    let list = await customApi.listNamespacedCustomObject(
+        'route.openshift.io',
+        'v1',
+        namespace,
+        'routes'
+    );
+    return list.body.items;
+}
+
 exports.LoadDeployment = async function(name) {
     let dep = await v1AppApi.readNamespacedDeployment(name, namespace);
     return dep.body;

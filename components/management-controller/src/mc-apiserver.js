@@ -191,71 +191,6 @@ const role_binding = function(name, application) {
     };
 }
 
-const backbone_service = function() {
-    return {
-        apiVersion: 'v1',
-        kind: 'Service',
-        metadata: {
-            name: 'skx-router',
-        },
-        spec: {
-            type: 'ClusterIP',
-            internalTrafficPolicy: 'Cluster',
-            ports: [
-                {
-                    name:       'peer',
-                    port:       55671,
-                    protocol:   'TCP',
-                    targetPort: 55671,
-                },
-                {
-                    name:       'member',
-                    port:       45671,
-                    protocol:   'TCP',
-                    targetPort: 45671,
-                },
-                {
-                    name:       'claim',
-                    port:       45672,
-                    protocol:   'TCP',
-                    targetPort: 45672,
-                },
-                {
-                    name:       'manage',
-                    port:       45673,
-                    protocol:   'TCP',
-                    targetPort: 45673,
-                },
-            ],
-            selector: {
-                application: 'skx-router',
-            },
-        }
-    };
-}
-
-const backbone_route = function(name, socket) {
-    return {
-        apiVersion: 'route.openshift.io/v1',
-        kind: 'Route',
-        metadata: {
-            name: name,
-        },
-        spec: {
-            port: {
-                targetPort: socket,
-            },
-            tls: {
-                termination: 'passthrough',
-            },
-            to: {
-                kind: 'Service',
-                name: 'skx-router',
-            },
-        },
-    };
-}
-
 const site_config_map_edge = function(site_name, van_id) {
     return {
         apiVersion: 'v1',
@@ -332,7 +267,7 @@ const fetchBackboneSiteKube = async function (bsid, res) {
             text += backbone.RoleYaml();
             text += backbone.RoleBindingYaml();
             text += backbone.ConfigMapYaml();
-            text += backbone.DeploymentYaml();
+            text += backbone.DeploymentYaml(bsid);
             text += backbone.SecretYaml(secret);
 
             res.send(text);

@@ -9,7 +9,7 @@
   "author": "Theodore L. Ross",
   "license": "Apache-2.0",
   "dependencies": {
-    "@kubernetes/client-node": "^0.14.0",
+    "@kubernetes/client-node": ">=0.14.0",
     "crypto": "^1.0.1",
     "express": "^4.17.1",
     "js-yaml": "^4.1.0",

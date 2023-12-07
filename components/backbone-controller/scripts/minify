@@ -5,7 +5,7 @@ mkdir app
 mkdir app/src
 mkdir app/src/common
 uglifyjs index.js -c -m -o app/index.js
-for MODULE in bc-main bc-apiserver
+for MODULE in bc-main bc-apiserver bc-amqp ingress
 do
     uglifyjs src/$MODULE.js --toplevel -c -m -o app/src/$MODULE.js
 done
