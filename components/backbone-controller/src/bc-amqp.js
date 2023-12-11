@@ -63,6 +63,7 @@ container.on('connection_open', function(context) {
 container.on('receiver_open', function(context) {
     replyTo = context.receiver.source.address;
     if (!receiverReady) {
+        Log("  receiverReady");
         receiverReady = true;
         notify_mgmt_waiters();
         notify_api_waiters();
@@ -73,9 +74,27 @@ container.on('receiver_open', function(context) {
 container.on('sendable', function(context) {
     if (context.sender == apiSender) {
         Log('Management controller is reachable');
+        apiSenderReady = true;
         notify_api_waiters();
     } else if (context.sender == mgmtSender) {
+        mgmtSenderReady = true;
         notify_mgmt_waiters();
+    }
+});
+
+container.on('message', function (context) {
+    let response = context.message;
+    let cid      = response.correlation_id;
+    var handler;
+    if (cid) {
+        handler = inFlight[cid];
+        if (handler) {
+            delete inFlight[cid];
+        }
+    }
+
+    if (handler) {
+        handler(response);
     }
 });
 
@@ -173,16 +192,16 @@ exports.DeleteManagementEntity = function(entityType, name, timeout) {
     });
 }
 
-exports.ListSslProfiles = function(attributes = []) {
-    return exports.ListManagementEntity('io.skupper.router.sslProfile', QUERY_TIMEOUT_SECONDS, attributes);
+exports.ListSslProfiles = async function(attributes = []) {
+    return await exports.ListManagementEntity('io.skupper.router.sslProfile', QUERY_TIMEOUT_SECONDS, attributes);
 }
 
-exports.CreateSslProfile = function(name, obj) {
-    return exports.CreateManagementEntity('io.skupper.router.sslProfile', name, obj, QUERY_TIMEOUT_SECONDS);
+exports.CreateSslProfile = async function(name, obj) {
+    await exports.CreateManagementEntity('io.skupper.router.sslProfile', name, obj, QUERY_TIMEOUT_SECONDS);
 }
 
-exports.DeleteSslProfile = function(name) {
-    return exports.DeleteManagementEntity('io.skupper.router.sslProfile', name, QUERY_TIMEOUT_SECONDS);
+exports.DeleteSslProfile = async function(name) {
+    await exports.DeleteManagementEntity('io.skupper.router.sslProfile', name, QUERY_TIMEOUT_SECONDS);
 }
 
 exports.ListConnectors = function(attributes = []) {

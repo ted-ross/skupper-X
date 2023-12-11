@@ -22,7 +22,7 @@
 const kube = require('./common/kube.js');
 const Log  = require('./common/log.js').Log;
 const amqp = require('./bc-amqp.js');
-const fs   = require('fs');
+const fs   = require('fs/promises');
 
 const SERVICE_NAME = 'skx-router';
 const ROUTER_LABEL = 'skx-router';
@@ -134,20 +134,26 @@ const sync_ingress = async function() {
 }
 
 const add_profile = async function(name, secret) {
+    let path = CERT_DIRECTORY + name + '/';
     let profile = {
         name: name,
-        caCertFile:     CERT_DIRECTORY + 'ca.crt',
-        certFile:       CERT_DIRECTORY + 'tls.crt',
-        privateKeyFile: CERT_DIRECTORY + 'tls.key',
+        caCertFile:     path + 'ca.crt',
+        certFile:       path + 'tls.crt',
+        privateKeyFile: path + 'tls.key',
     };
 
     await amqp.CreateSslProfile(name, profile);
-
-    for (const [key, value] of Object.entries(secret.data)) {
-        let filepath = CERT_DIRECTORY + key;
-        let text     = Buffer.from(value, "base64");
-        Log(filepath);
-        Log(text);
+    Log(`Created new SslProfile: ${name}`);
+    try {
+        await fs.mkdir(CERT_DIRECTORY + name);
+        for (const [key, value] of Object.entries(secret.data)) {
+            let filepath = path + key;
+            let text     = Buffer.from(value, "base64");
+            await fs.writeFile(filepath, text);
+            Log(`  Wrote secret data to profile path: ${filepath}`);
+        }
+    } catch (error) {
+        Log(`Exception during profile creation: ${error.message}`);
     }
 }
 
@@ -160,23 +166,25 @@ const sync_ssl_profiles = async function() {
         profiles[p.name] = p;
     });
 
-    secrets.forEach(secret => {
+    for (const secret of secrets) {
         let profile_name = secret.metadata.annotations ? secret.metadata.annotations['skupper.io/skx-inject'] : undefined;
         if (profile_name) {
             if (profile_name in profiles) {
                 profiles.delete(profile_name);
             } else {
-                add_profile(profile_name, secret)
+                await add_profile(profile_name, secret)
             }
         }
-    });
+    };
 
-    profiles.forEach(p => {
-        amqp.DeleteSslProfile(p.name);
-    });
+    for (const p of profiles) {
+        await amqp.DeleteSslProfile(p.name);
+        await fs.rm(CERT_DIRECTORY + p.name, force=true, recursive=true);
+    };
 }
 
 const start_config_sync = async function() {
+    Log('start_config_sync');
     await sync_ssl_profiles();
 }
 
