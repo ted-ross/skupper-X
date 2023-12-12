@@ -21,12 +21,24 @@
 
 const express  = require('express');
 const yaml     = require('js-yaml');
+const ingress  = require('./ingress.js');
 const kube     = require('./common/kube.js');
 const Log      = require('./common/log.js').Log;
 
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8086;
 var api;
+
+const get_hostnames = function(res) {
+    let ingress_bundle = ingress.GetIngressBundle();
+    if (ingress_bundle.ready) {
+        res.send(yaml.dump(ingress_bundle));
+        res.status(200).end();
+    } else {
+        res.send('Ingress content is not yet available');
+        res.status(204).end();
+    }
+}
 
 exports.Start = async function() {
     Log('[API Server module started]');
@@ -35,6 +47,11 @@ exports.Start = async function() {
     api.get('/healthz', (req, res) => {
         res.send('OK');
         res.status(200).end();
+    });
+
+    api.get(API_PREFIX + 'hostnames', (req, res) => {
+        Log(`API: Hostname request from ${req.ip}`);
+        get_hostnames(res);
     });
 
     let server = api.listen(API_PORT, () => {

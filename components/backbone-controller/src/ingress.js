@@ -28,6 +28,12 @@ const SERVICE_NAME = 'skx-router';
 const ROUTER_LABEL = 'skx-router';
 const CERT_DIRECTORY = '/etc/skupper-router-certs/';
 
+var ingress_bundle = {
+    ready:     false,
+    siteId:    process.env.SKUPPERX_SITE_ID,
+    ingresses: {},
+};
+
 const backbone_service = function() {
     return {
         apiVersion: 'v1',
@@ -99,9 +105,6 @@ const sync_kube_service = async function() {
         }
     });
 
-    //
-    // No service, create it.
-    //
     if (!found) {
         let service = backbone_service();
         await kube.ApplyObject(service);
@@ -114,7 +117,7 @@ const sync_route = async function(name, socket) {
     routes.forEach(route => {
         if (route.metadata.name == name) {
             if (!route.metadata.annotations || route.metadata.annotations['skupper.io/skx-controlled'] != 'true') {
-                throw Error('Existing route ${name} found that is not controller by skupper-X');
+                throw Error(`Existing route ${name} found that is not controller by skupper-X`);
             }
             found = true;
         }
@@ -126,11 +129,34 @@ const sync_route = async function(name, socket) {
     }
 }
 
+const resolve_ingress = async function() {
+    let routes = await kube.GetRoutes();
+
+    for (const route of routes) {
+        for (const name of ['skx-peer', 'skx-member', 'skx-manage']) {
+            if (route.metadata.name == name && route.spec.host) {
+                ingress_bundle.ingresses[name] = {
+                    host: route.spec.host,
+                    port: 443,
+                };
+            }
+        }
+    }
+
+    if (Object.keys(ingress_bundle.ingresses).length == 3) {
+        ingress_bundle.ready = true;
+        Log('Hosts for the ingress are resolved');
+    } else {
+        setTimeout(resolve_ingress, 1000);
+    }
+}
+
 const sync_ingress = async function() {
     await sync_kube_service();
     await sync_route('skx-peer',   'peer');
     await sync_route('skx-member', 'member');
     await sync_route('skx-manage', 'manage');
+    setTimeout(resolve_ingress, 1000);
 }
 
 const add_profile = async function(name, secret) {
@@ -184,8 +210,11 @@ const sync_ssl_profiles = async function() {
 }
 
 const start_config_sync = async function() {
-    Log('start_config_sync');
     await sync_ssl_profiles();
+}
+
+exports.GetIngressBundle = function() {
+    return ingress_bundle;
 }
 
 exports.Start = async function() {

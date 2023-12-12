@@ -63,7 +63,6 @@ container.on('connection_open', function(context) {
 container.on('receiver_open', function(context) {
     replyTo = context.receiver.source.address;
     if (!receiverReady) {
-        Log("  receiverReady");
         receiverReady = true;
         notify_mgmt_waiters();
         notify_api_waiters();
@@ -90,11 +89,8 @@ container.on('message', function (context) {
         handler = inFlight[cid];
         if (handler) {
             delete inFlight[cid];
+            handler(response);
         }
-    }
-
-    if (handler) {
-        handler(response);
     }
 });
 
@@ -204,28 +200,28 @@ exports.DeleteSslProfile = async function(name) {
     await exports.DeleteManagementEntity('io.skupper.router.sslProfile', name, QUERY_TIMEOUT_SECONDS);
 }
 
-exports.ListConnectors = function(attributes = []) {
-    return exports.ListManagementEntity('io.skupper.router.connector', QUERY_TIMEOUT_SECONDS, attributes);
+exports.ListConnectors = async function(attributes = []) {
+    return await exports.ListManagementEntity('io.skupper.router.connector', QUERY_TIMEOUT_SECONDS, attributes);
 }
 
-exports.CreateConnector = function(name, obj) {
-    return exports.CreateManagementEntity('io.skupper.router.connector', name, obj, QUERY_TIMEOUT_SECONDS);
+exports.CreateConnector = async function(name, obj) {
+    await exports.CreateManagementEntity('io.skupper.router.connector', name, obj, QUERY_TIMEOUT_SECONDS);
 }
 
-exports.DeleteConnector = function(name) {
-    return exports.DeleteManagementEntity('io.skupper.router.connector', name, QUERY_TIMEOUT_SECONDS);
+exports.DeleteConnector = async function(name) {
+    await exports.DeleteManagementEntity('io.skupper.router.connector', name, QUERY_TIMEOUT_SECONDS);
 }
 
-exports.ListListeners = function(attributes = []) {
-    return exports.ListManagementEntity('io.skupper.router.listener', QUERY_TIMEOUT_SECONDS, attributes);
+exports.ListListeners = async function(attributes = []) {
+    return await exports.ListManagementEntity('io.skupper.router.listener', QUERY_TIMEOUT_SECONDS, attributes);
 }
 
-exports.CreateListener = function(name, obj) {
-    return exports.CreateManagementEntity('io.skupper.router.listener', name, obj, QUERY_TIMEOUT_SECONDS);
+exports.CreateListener = async function(name, obj) {
+    await exports.CreateManagementEntity('io.skupper.router.listener', name, obj, QUERY_TIMEOUT_SECONDS);
 }
 
-exports.DeleteListener = function(name) {
-    return exports.DeleteManagementEntity('io.skupper.router.listener', name, QUERY_TIMEOUT_SECONDS);
+exports.DeleteListener = async function(name) {
+    await exports.DeleteManagementEntity('io.skupper.router.listener', name, QUERY_TIMEOUT_SECONDS);
 }
 
 exports.NotifyMgmtReady = function(cb) {
