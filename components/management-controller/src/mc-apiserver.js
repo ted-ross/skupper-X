@@ -43,6 +43,30 @@ const listInvitations = async function(res) {
     client.release();
 }
 
+const listBackbones = async function(res) {
+    const client = await db.ClientFromPool();
+    const result = await client.query("SELECT Id, Name, Lifecycle, Failure FROM Backbones");
+    var list = [];
+    result.rows.forEach(row => {
+        list.push(row);
+    });
+    res.send(JSON.stringify(list));
+    res.status(200).end();
+    client.release();
+}
+
+const listBackboneSites = async function(bid, res) {
+    const client = await db.ClientFromPool();
+    const result = await client.query("SELECT Id, Name, Lifecycle, Failure FROM InteriorSites WHERE Backbone = $1", [bid]);
+    var list = [];
+    result.rows.forEach(row => {
+        list.push(row);
+    });
+    res.send(JSON.stringify(list));
+    res.status(200).end();
+    client.release();
+}
+
 const deployment_object = function(name, image, env = undefined) {
     let dep = {
         apiVersion: 'apps/v1',
@@ -291,6 +315,14 @@ exports.Start = async function() {
 
     api.get(API_PREFIX + 'invitations', (req, res) => {
         listInvitations(res);
+    });
+
+    api.get(API_PREFIX + 'backbones', (req, res) => {
+        listBackbones(res);
+    });
+
+    api.get(API_PREFIX + 'backbone/:bid/sites', (req, res) => {
+        listBackboneSites(req.params.bid, res);
     });
 
     api.get(API_PREFIX + 'invitation/kube/:iid', (req, res) => {

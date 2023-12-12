@@ -50,12 +50,12 @@ CREATE TYPE CertificateRequestType AS ENUM ('mgmtController', 'backboneCA', 'int
 
 --
 -- AccessPointType
---   claim       Ingress for claim (normal) access
---   peer        Ingress for peer backbone router (inter-router) access
---   member      Ingress for member (edge) access
---   management  Ingress for the management (normal) controller
+--   claim   Ingress for claim (normal) access
+--   peer    Ingress for peer backbone router (inter-router) access
+--   member  Ingress for member (edge) access
+--   manage  Ingress for the management (normal) controller
 --
-CREATE TYPE AccessPointType AS ENUM ('claim', 'peer', 'member', 'management');
+CREATE TYPE AccessPointType AS ENUM ('claim', 'peer', 'member', 'manage');
 
 --
 -- RoleType
