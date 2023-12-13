@@ -161,6 +161,7 @@ CREATE TABLE BackboneAccessPoints (
     Failure text,
     Certificate UUID REFERENCES TlsCertificates,
     Hostname text,
+    Port text,
 
     Kind AccessPointType,
     Backbone UUID REFERENCES Backbones

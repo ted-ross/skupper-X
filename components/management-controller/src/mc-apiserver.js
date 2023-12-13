@@ -19,13 +19,15 @@
 
 "use strict";
 
-const express  = require('express');
-const yaml     = require('js-yaml');
-const crypto   = require('crypto');
-const db       = require('./db.js');
-const backbone = require('./backbone.js');
-const kube     = require('./common/kube.js');
-const Log      = require('./common/log.js').Log;
+const express    = require('express');
+const formidable = require('formidable');
+const yaml       = require('js-yaml');
+const crypto     = require('crypto');
+const db         = require('./db.js');
+const backbone   = require('./backbone.js');
+const kube       = require('./common/kube.js');
+const { isObject } = require('util');
+const Log        = require('./common/log.js').Log;
 
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8085;
@@ -309,6 +311,65 @@ const fetchBackboneSiteKube = async function (bsid, res) {
     }
 }
 
+const fetchBackboneLinksKube = async function (bsid, res) {
+    res.status(404).end();
+}
+
+const addHostToAccessPoint = async function(bsid, key, hostname, port) {
+    let retval = 1;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query('BEGIN');
+        var ref;
+        switch (key) {
+            case 'skx-manage' : ref = 'ManagementAccess';  break;
+            case 'skx-member' : ref = 'MemberAccess';      break;
+            case 'skx-peer'   : ref = 'PeerAccess';        break;
+            default: throw Error(`Invalid ingress key: ${key}`);
+        }
+        const result = await client.query(`SELECT ${ref} as access_ref, BackboneAccessPoints.* FROM InteriorSites JOIN BackboneAccessPoints ON ${ref} = BackboneAccessPoints.Id WHERE InteriorSites.Id = $1`, [bsid]);
+        if (result.rowCount == 1) {
+            let access = result.rows[0];
+            if (access.hostname) {
+                throw Error(`Referenced access (${access.access_ref}) already has a hostname`);
+            }
+            if (access.lifecycle != 'partial') {
+                throw Error(`Referenced access (${access.access_ref}) has lifecycle ${access.lifecycle}, expected partial`);
+            }
+            await client.query("UPDATE BackboneAccessPoints SET Hostname = $1, Port=$2, Lifecycle='new' WHERE Id = $3", [hostname, port, access.access_ref]);
+            await client.query("COMMIT");
+        } else {
+            throw Error(`Access point not found for site ${bsid} (${ref})`);
+        }
+    } catch (err) {
+        await client.query('ROLLBACK');
+        Log(`Host add to AccessPoint failed: ${err.message}`);
+        retval = 0;
+    } finally {
+        client.release();
+    }
+    return retval;
+}
+
+const postBackboneIngress = async function (bsid, req, res) {
+    const form = new formidable.IncomingForm();
+    form.parse(req, async function(err, fields, files) {
+        if (err != null) {
+            Log(err)
+            res.status(400).json({ message: err.message });
+        }
+
+        let count = 0;
+        if (typeof fields.ingresses == 'object') {
+            for (const [key, obj] of Object.entries(fields.ingresses)) {
+                count += await addHostToAccessPoint(bsid, key, obj.host, obj.port);
+            }
+        }
+
+        res.json({ processed: count });
+    });
+}
+
 exports.Start = async function() {
     Log('[API Server module started]');
     api = express();
@@ -333,6 +394,16 @@ exports.Start = async function() {
     api.get(API_PREFIX + 'backbonesite/kube/:bsid', (req, res) => {
         Log(`Request for backbone site (Kubernetes): ${req.params.bsid}`);
         fetchBackboneSiteKube(req.params.bsid, res);
+    });
+
+    api.get(API_PREFIX + 'backbonelinks/kube/:bsid', (req, res) => {
+        Log(`Request for backbone links (Kubernetes): ${req.params.bsid}`);
+        fetchBackboneLinksKube(req.params.bsid, res);
+    });
+
+    api.post(API_PREFIX + 'backboneingress/:bsid', (req, res) => {
+        Log(`POST - backbone site ingress data for site ${req.params.bsid}`);
+        postBackboneIngress(req.params.bsid, req, res);
     });
 
     let server = api.listen(API_PORT, () => {

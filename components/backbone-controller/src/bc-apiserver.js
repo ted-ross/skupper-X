@@ -32,7 +32,7 @@ var api;
 const get_hostnames = function(res) {
     let ingress_bundle = ingress.GetIngressBundle();
     if (ingress_bundle.ready) {
-        res.send(yaml.dump(ingress_bundle));
+        res.send(JSON.stringify(ingress_bundle));
         res.status(200).end();
     } else {
         res.send('Ingress content is not yet available');
