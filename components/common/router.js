@@ -19,14 +19,12 @@
 
 "use strict";
 
-const container = require('rhea');
-const Log       = require('./common/log.js').Log;
-
-container.options.enable_sasl_external = true;
+const Log = require('./log.js').Log;
 
 const QUERY_TIMEOUT_SECONDS = 5;
 const API_ADDRESS = 'skx/controller/bb';
 
+var container;
 var conn;
 var replyReceiver;
 var replyTo;
@@ -56,43 +54,47 @@ const notify_api_waiters = function() {
     }
 }
 
-container.on('connection_open', function(context) {
-    Log('Connection to the local access point is open');
-});
+const rhea_handlers = function() {
+    container.options.enable_sasl_external = true;
 
-container.on('receiver_open', function(context) {
-    replyTo = context.receiver.source.address;
-    if (!receiverReady) {
-        receiverReady = true;
-        notify_mgmt_waiters();
-        notify_api_waiters();
-    }
-    Log(`AMQP dynamic reply address: ${replyTo}`);
-});
+    container.on('connection_open', function(context) {
+        Log('Connection to the local access point is open');
+    });
 
-container.on('sendable', function(context) {
-    if (context.sender == apiSender) {
-        Log('Management controller is reachable');
-        apiSenderReady = true;
-        notify_api_waiters();
-    } else if (context.sender == mgmtSender) {
-        mgmtSenderReady = true;
-        notify_mgmt_waiters();
-    }
-});
-
-container.on('message', function (context) {
-    let response = context.message;
-    let cid      = response.correlation_id;
-    var handler;
-    if (cid) {
-        handler = inFlight[cid];
-        if (handler) {
-            delete inFlight[cid];
-            handler(response);
+    container.on('receiver_open', function(context) {
+        replyTo = context.receiver.source.address;
+        if (!receiverReady) {
+            receiverReady = true;
+            notify_mgmt_waiters();
+            notify_api_waiters();
         }
-    }
-});
+        Log(`AMQP dynamic reply address: ${replyTo}`);
+    });
+
+    container.on('sendable', function(context) {
+        if (context.sender == apiSender) {
+            Log('Management controller is reachable');
+            apiSenderReady = true;
+            notify_api_waiters();
+        } else if (context.sender == mgmtSender) {
+            mgmtSenderReady = true;
+            notify_mgmt_waiters();
+        }
+    });
+
+    container.on('message', function (context) {
+        let response = context.message;
+        let cid      = response.correlation_id;
+        var handler;
+        if (cid) {
+            handler = inFlight[cid];
+            if (handler) {
+                delete inFlight[cid];
+                handler(response);
+            }
+        }
+    });
+}
 
 const convertBodyToItems = function(body) {
     let keys  = body.attributeNames;
@@ -234,8 +236,10 @@ exports.NotifyApiReady = function(cb) {
     notify_api_waiters();
 }
 
-exports.Start = async function() {
-    Log('[AMQP module started]')
+exports.Start = async function(rhea) {
+    Log('[Router module started]')
+    container = rhea;
+    rhea_handlers();
     conn = container.connect();
     replyReceiver = conn.open_receiver({source:{dynamic:true}});
     apiSender     = conn.open_sender(API_ADDRESS);

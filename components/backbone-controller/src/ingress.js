@@ -19,10 +19,10 @@
 
 "use strict";
 
-const kube = require('./common/kube.js');
-const Log  = require('./common/log.js').Log;
-const amqp = require('./bc-amqp.js');
-const fs   = require('fs/promises');
+const kube   = require('./common/kube.js');
+const Log    = require('./common/log.js').Log;
+const router = require('./common/router.js');
+const fs     = require('fs/promises');
 
 const SERVICE_NAME = 'skx-router';
 const ROUTER_LABEL = 'skx-router';
@@ -168,7 +168,7 @@ const add_profile = async function(name, secret) {
         privateKeyFile: path + 'tls.key',
     };
 
-    await amqp.CreateSslProfile(name, profile);
+    await router.CreateSslProfile(name, profile);
     Log(`Created new SslProfile: ${name}`);
     try {
         await fs.mkdir(CERT_DIRECTORY + name);
@@ -184,7 +184,7 @@ const add_profile = async function(name, secret) {
 }
 
 const sync_ssl_profiles = async function() {
-    let router_profiles = await amqp.ListSslProfiles();
+    let router_profiles = await router.ListSslProfiles();
     let secrets         = await kube.GetSecrets();
     let profiles        = [];
 
@@ -204,7 +204,7 @@ const sync_ssl_profiles = async function() {
     };
 
     for (const p of profiles) {
-        await amqp.DeleteSslProfile(p.name);
+        await router.DeleteSslProfile(p.name);
         await fs.rm(CERT_DIRECTORY + p.name, force=true, recursive=true);
     };
 }
@@ -220,7 +220,7 @@ exports.GetIngressBundle = function() {
 exports.Start = async function() {
     Log('[Ingress module started]');
     await sync_ingress();
-    amqp.NotifyMgmtReady(() => {
+    router.NotifyMgmtReady(() => {
         start_config_sync();
     });
 }

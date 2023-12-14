@@ -22,9 +22,11 @@
 const k8s         = require('@kubernetes/client-node');
 const yaml        = require('yaml');
 const fs          = require('fs');
+const rhea        = require('rhea');
 const kube        = require('./common/kube.js');
 const apiserver   = require('./bc-apiserver.js');
-const amqp        = require('./bc-amqp.js');
+const router      = require('./common/router.js');
+const links       = require('./common/links.js');
 const ingress     = require('./ingress.js');
 const Log         = require('./common/log.js').Log;
 const Flush       = require('./common/log.js').Flush;
@@ -41,7 +43,8 @@ Log(`Standalone : ${STANDALONE}`);
 exports.Main = async function() {
     try {
         await kube.Start(k8s, fs, yaml, !STANDALONE);
-        await amqp.Start();
+        await router.Start(rhea);
+        await links.Start();
         await ingress.Start();
         await apiserver.Start();
         Log("[Backbone site controller initialization completed successfully]");

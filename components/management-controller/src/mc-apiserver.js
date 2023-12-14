@@ -234,22 +234,6 @@ const site_config_map_edge = function(site_name, van_id) {
     };
 }
 
-const site_config_map_interior = function(site_name) {
-    return {
-        apiVersion: 'v1',
-        kind: 'ConfigMap',
-        metadata: {
-            name: 'skupper-site',
-        },
-        data: {
-            name: site_name,
-            'router-mode': 'interior',
-            'service-controller': 'false',
-            'service-sync': 'false',
-        },
-    };
-}
-
 const fetchInvitationKube = async function (iid, res) {
     const client = await db.ClientFromPool();
     const result = await client.query("SELECT MemberInvitations.*, TlsCertificates.ObjectName as secret_name FROM MemberInvitations " +
