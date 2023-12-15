@@ -31,6 +31,7 @@ var v1AppApi;
 var customApi;
 var secretWatch;
 var certificateWatch;
+var configMapWatch;
 var namespace = 'default';
 
 exports.Namespace = function() {
@@ -56,6 +57,7 @@ exports.Start = async function (k8s_mod, fs_mod, yaml_mod, in_cluster) {
 
     secretWatch      = new k8s.Watch(kc);
     certificateWatch = new k8s.Watch(kc);
+    configMapWatch   = new k8s.Watch(kc);
 
     try {
         if (in_cluster) {
@@ -149,6 +151,20 @@ exports.DeleteSecret = async function(name) {
     await v1Api.deleteNamespacedSecret(name, namespace);
 }
 
+exports.GetConfigmaps = async function() {
+    let list = await v1Api.listNamespacedConfigMap(namespace);
+    return list.body.items;
+}
+
+exports.LoadConfigmap = async function(name) {
+    let secret = await v1Api.readNamespacedConfigMap(name, namespace);
+    return secret.body;
+}
+
+exports.DeleteConfigmap = async function(name) {
+    await v1Api.deleteNamespacedConfigMap(name, namespace);
+}
+
 exports.GetDeployments = async function() {
     let list = await v1AppApi.listNamespacedDeployment(namespace);
     return list.body.items;
@@ -195,6 +211,22 @@ exports.WatchSecrets = function(callback) {
                 Log(`Secret Watch error: ${err}`);
             }
             exports.WatchSecrets(callback);
+        }
+    )
+}
+
+exports.WatchConfigMaps = function(callback) {
+    configMapWatch.watch(
+        `/api/v1/namespaces/${namespace}/configmaps`,
+        {},
+        (type, apiObj, watchObj) => {
+            callback(type, apiObj);
+        },
+        (err) => {
+            if (err) {
+                Log(`Configmap Watch error: ${err}`);
+            }
+            exports.WatchConfigMaps(callback);
         }
     )
 }

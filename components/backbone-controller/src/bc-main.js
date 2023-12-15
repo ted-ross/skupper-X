@@ -22,6 +22,7 @@
 const k8s         = require('@kubernetes/client-node');
 const yaml        = require('yaml');
 const fs          = require('fs');
+const fsp         = require('fs/promises');
 const rhea        = require('rhea');
 const kube        = require('./common/kube.js');
 const apiserver   = require('./bc-apiserver.js');
@@ -44,7 +45,7 @@ exports.Main = async function() {
     try {
         await kube.Start(k8s, fs, yaml, !STANDALONE);
         await router.Start(rhea);
-        await links.Start();
+        await links.Start(fsp);
         await ingress.Start();
         await apiserver.Start();
         Log("[Backbone site controller initialization completed successfully]");

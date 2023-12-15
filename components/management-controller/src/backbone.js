@@ -173,7 +173,7 @@ data:
         [
             "listener",
             {
-                "name": "@9090",
+                "name": "health",
                 "role": "normal",
                 "port": 9090,
                 "http": true,
@@ -185,7 +185,7 @@ data:
         [
             "listener",
             {
-                "name": "amqp",
+                "name": "sidecar",
                 "host": "localhost",
                 "port": 5672
             }

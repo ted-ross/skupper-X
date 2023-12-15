@@ -22,11 +22,9 @@
 const kube   = require('./common/kube.js');
 const Log    = require('./common/log.js').Log;
 const router = require('./common/router.js');
-const fs     = require('fs/promises');
 
 const SERVICE_NAME = 'skx-router';
 const ROUTER_LABEL = 'skx-router';
-const CERT_DIRECTORY = '/etc/skupper-router-certs/';
 
 var ingress_bundle = {
     ready:     false,
@@ -159,60 +157,6 @@ const sync_ingress = async function() {
     setTimeout(resolve_ingress, 1000);
 }
 
-const add_profile = async function(name, secret) {
-    let path = CERT_DIRECTORY + name + '/';
-    let profile = {
-        name: name,
-        caCertFile:     path + 'ca.crt',
-        certFile:       path + 'tls.crt',
-        privateKeyFile: path + 'tls.key',
-    };
-
-    await router.CreateSslProfile(name, profile);
-    Log(`Created new SslProfile: ${name}`);
-    try {
-        await fs.mkdir(CERT_DIRECTORY + name);
-        for (const [key, value] of Object.entries(secret.data)) {
-            let filepath = path + key;
-            let text     = Buffer.from(value, "base64");
-            await fs.writeFile(filepath, text);
-            Log(`  Wrote secret data to profile path: ${filepath}`);
-        }
-    } catch (error) {
-        Log(`Exception during profile creation: ${error.message}`);
-    }
-}
-
-const sync_ssl_profiles = async function() {
-    let router_profiles = await router.ListSslProfiles();
-    let secrets         = await kube.GetSecrets();
-    let profiles        = [];
-
-    router_profiles.forEach(p => {
-        profiles[p.name] = p;
-    });
-
-    for (const secret of secrets) {
-        let profile_name = secret.metadata.annotations ? secret.metadata.annotations['skupper.io/skx-inject'] : undefined;
-        if (profile_name) {
-            if (profile_name in profiles) {
-                profiles.delete(profile_name);
-            } else {
-                await add_profile(profile_name, secret)
-            }
-        }
-    };
-
-    for (const p of profiles) {
-        await router.DeleteSslProfile(p.name);
-        await fs.rm(CERT_DIRECTORY + p.name, force=true, recursive=true);
-    };
-}
-
-const start_config_sync = async function() {
-    await sync_ssl_profiles();
-}
-
 exports.GetIngressBundle = function() {
     return ingress_bundle;
 }
@@ -220,7 +164,4 @@ exports.GetIngressBundle = function() {
 exports.Start = async function() {
     Log('[Ingress module started]');
     await sync_ingress();
-    router.NotifyMgmtReady(() => {
-        start_config_sync();
-    });
 }
