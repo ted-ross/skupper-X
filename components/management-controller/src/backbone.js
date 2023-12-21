@@ -354,15 +354,15 @@ spec:
 `;
 }
 
-exports.SecretYaml = function(certificate) {
+exports.SecretYaml = function(certificate, profile_name) {
     let secret = {
         apiVersion: 'v1',
         kind: 'Secret',
         type: 'kubernetes.io/tls',
         metadata: {
-            name: 'skupperx-bb-client',
+            name: 'skupperx-' + profile_name.replaceAll('_', '-'),
             annotations: {
-                'skupper.io/skx-inject' : 'backbone-client',
+                'skupper.io/skx-inject' : profile_name,
             },
         },
         data: certificate.data,

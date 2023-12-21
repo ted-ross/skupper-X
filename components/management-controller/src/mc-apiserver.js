@@ -234,6 +234,20 @@ const site_config_map_edge = function(site_name, van_id) {
     };
 }
 
+const link_config_map_yaml = function(name, data) {
+    let result = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${name}
+data:
+`;
+    for (const [key, value] of Object.entries(data)) {
+        result += `  ${key}: '${value}'\n`;
+    }
+
+    return result;
+}
+
 const fetchInvitationKube = async function (iid, res) {
     const client = await db.ClientFromPool();
     const result = await client.query("SELECT MemberInvitations.*, TlsCertificates.ObjectName as secret_name FROM MemberInvitations " +
@@ -278,7 +292,7 @@ const fetchBackboneSiteKube = async function (bsid, res) {
             text += backbone.RoleBindingYaml();
             text += backbone.ConfigMapYaml();
             text += backbone.DeploymentYaml(bsid);
-            text += backbone.SecretYaml(secret);
+            text += backbone.SecretYaml(secret, 'backbone-client');
 
             res.send(text);
             res.status(200).end();
@@ -295,8 +309,87 @@ const fetchBackboneSiteKube = async function (bsid, res) {
     }
 }
 
-const fetchBackboneLinksKube = async function (bsid, res) {
-    res.status(404).end();
+const fetchBackboneLinksIncomingKube = async function (bsid, res) {
+    const client = await db.ClientFromPool();
+    try {
+        await client.query('BEGIN');
+        const result = await client.query(
+            'SELECT * FROM InteriorSites WHERE Id = $1', [bsid]);
+        if (result.rowCount == 1) {
+            let site = result.rows[0];
+            let text = '';
+            let incoming = {};
+            const worklist = [
+                {ap_ref: site.peeraccess,       profile: 'peer_access',   port: '55671', role: 'inter-router'},
+                {ap_ref: site.memberaccess,     profile: 'member_access', port: '45671', role: 'edge'},
+                {ap_ref: site.managementaccess, profile: 'manage_access', port: '45670', role: 'normal'},
+            ]
+
+            for (const work of worklist) {
+                if (work.ap_ref) {
+                    const ap_result = await client.query('SELECT *, TlsCertificates.ObjectName FROM BackboneAccessPoints JOIN TlsCertificates ON TlsCertificates.Id = Certificate WHERE BackboneAccessPoints.Id = $1', [work.ap_ref]);
+                    if (ap_result.rowCount == 1) {
+                        let ap = ap_result.rows[0];
+                        let secret = await kube.LoadSecret(ap.objectname);
+                        text += backbone.SecretYaml(secret, work.profile);
+
+                        incoming[work.profile] = JSON.stringify({
+                            host: '',
+                            port: work.port,
+                            role: work.role,
+                            cost: '1',
+                            profile: work.profile,
+                        });
+                    }
+                }
+            }
+
+            text += "---\n" + link_config_map_yaml('skupperx-incoming', incoming);
+
+            res.send(text);
+            res.status(200).end();
+        } else {
+            throw Error('Site not found');
+        }
+        await client.query('COMMIT');
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.send(err.message);
+        res.status(404).end();
+    } finally {
+        client.release();
+    }
+}
+
+const fetchBackboneLinksOutgoingKube = async function (bsid, res) {
+    const client = await db.ClientFromPool();
+    try {
+        await client.query('BEGIN');
+        const result = await client.query(
+            'SELECT *, BackboneAccessPoints.Hostname, BackboneAccessPoints.Port FROM InterRouterLinks ' +
+            'JOIN InteriorSites ON InteriorSites.Id = ListeningInteriorSite ' +
+            'JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = InteriorSites.PeerAccess ' +
+            'WHERE ConnectingInteriorSite = $1', [bsid]);
+        let outgoing = {};
+        for (const connection of result.rows) {
+            outgoing[connection.listeninginteriorsite] = JSON.stringify({
+                host: connection.hostname,
+                port: connection.port,
+                role: 'inter-router',
+                cost: connection.cost.toString(),
+                profile: 'backbone-client',
+            });
+        }
+        res.send(link_config_map_yaml('skupperx-outgoing', outgoing));
+        res.status(200).end();
+        await client.query('COMMIT');
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.send(err.message);
+        res.status(404).end();
+    } finally {
+        client.release();
+    }
 }
 
 const addHostToAccessPoint = async function(bsid, key, hostname, port) {
@@ -380,9 +473,14 @@ exports.Start = async function() {
         fetchBackboneSiteKube(req.params.bsid, res);
     });
 
-    api.get(API_PREFIX + 'backbonelinks/kube/:bsid', (req, res) => {
-        Log(`Request for backbone links (Kubernetes): ${req.params.bsid}`);
-        fetchBackboneLinksKube(req.params.bsid, res);
+    api.get(API_PREFIX + 'backbonelinks/incoming/kube/:bsid', (req, res) => {
+        Log(`Request for incoming backbone links (Kubernetes): ${req.params.bsid}`);
+        fetchBackboneLinksIncomingKube(req.params.bsid, res);
+    });
+
+    api.get(API_PREFIX + 'backbonelinks/outgoing/kube/:bsid', (req, res) => {
+        Log(`Request for outgoing backbone links (Kubernetes): ${req.params.bsid}`);
+        fetchBackboneLinksOutgoingKube(req.params.bsid, res);
     });
 
     api.post(API_PREFIX + 'backboneingress/:bsid', (req, res) => {

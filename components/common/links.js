@@ -20,7 +20,7 @@
 "use strict";
 
 /*
- * This module is responsible for synchronizing secrets to router ssl-profiles and the 'skupperx-links' config map to connectors and listeners.
+ * This module is responsible for synchronizing secrets to router ssl-profiles and the 'skupperx-[incom,outgo]ing' config maps to connectors and listeners.
  */
 
 const Log    = require('./log.js').Log;
@@ -28,19 +28,18 @@ const kube   = require('./kube.js');
 const router = require('./router.js');
 var   fs;   // require('fs/promises);
 
-const CERT_DIRECTORY = '/etc/skupper-router-certs/';
+const CERT_DIRECTORY = process.env.SKX_CERT_PATH || '/etc/skupper-router-certs/';
 
 const inject_profile = async function(name, secret) {
     let path = CERT_DIRECTORY + name + '/';
     let profile = {
-        name: name,
         caCertFile:     path + 'ca.crt',
         certFile:       path + 'tls.crt',
         privateKeyFile: path + 'tls.key',
     };
 
+    Log(`Creating new SslProfile: ${name}`);
     await router.CreateSslProfile(name, profile);
-    Log(`Created new SslProfile: ${name}`);
     try {
         await fs.mkdir(CERT_DIRECTORY + name);
         for (const [key, value] of Object.entries(secret.data)) {
@@ -55,6 +54,7 @@ const inject_profile = async function(name, secret) {
 }
 
 const sync_secrets = async function() {
+    Log('Syncing Secrets for SslProfiles...');
     let router_profiles = await router.ListSslProfiles();
     let secrets         = await kube.GetSecrets();
     let profiles        = {};
@@ -80,96 +80,129 @@ const sync_secrets = async function() {
     };
 }
 
-const sync_listeners = async function(router_listeners, config_listeners) {
-    //
-    // Build a map of the synchronizable listeners.  Exclude the builtin listeners.
-    //
-    let listener_map = {};
-    for (const rl of router_listeners) {
-        if (rl.name != 'health' && rl.name != 'sidecar') {
-            listener_map[rl.name] = rl;
+const sync_listeners = async function(router_listeners, config_listeners_json) {
+    try {
+        //
+        // Build a map of the synchronizable listeners.  Exclude the builtin listeners.
+        //
+        let listener_map = {};
+        for (const rl of router_listeners) {
+            if (rl.name != 'health' && rl.name != 'sidecar') {
+                listener_map[rl.name] = rl;
+            }
         }
-    }
 
-    for (const cl of config_listeners) {
-        let name = `dynamic-${cl.port}`;
-        if (name in listener_map) {
-            delete listener_map[name];
-        } else {
-            Log(`Creating router listener ${name}`);
-            await router.CreateListener(name, {
-                host:              cl.host,
-                port:              cl.port,
-                role:              cl.role,
-                cost:              cl.cost,
-                sslProfile:        cl.profile,
-                saslMechanisms:    'EXTERNAL',
-                authenticatePeer:  true,
-                requireEncryption: true,
-                requireSsl:        true,
-            });
+        //
+        // Decode the JSON-strings in the config
+        //
+        var config_listeners = {};
+        for (const [key, value] of Object.entries(config_listeners_json)) {
+            config_listeners[key] = JSON.parse(value);
         }
-    }
 
-    //
-    // Any listeners remaining in the map were not mentioned in the config and should be removed.
-    //
-    for (const lname of Object.keys(listener_map)) {
-        Log(`Deleting router listener ${lname}`);
-        await router.DeleteListener(lname);
+        for (const [_lname, cl] of Object.entries(config_listeners)) {
+            const lname = 'listener_' + _lname;
+            if (lname in listener_map) {
+                delete listener_map[lname];
+            } else {
+                Log(`Creating router listener ${lname}`);
+                await router.CreateListener(lname, {
+                    host:              cl.host,
+                    port:              cl.port,
+                    role:              cl.role,
+                    cost:              cl.cost,
+                    sslProfile:        cl.profile,
+                    saslMechanisms:    'EXTERNAL',
+                    authenticatePeer:  true,
+                    requireEncryption: true,
+                    requireSsl:        true,
+                });
+            }
+        }
+
+        //
+        // Any listeners remaining in the map were not mentioned in the config and should be removed.
+        //
+        for (const lname of Object.keys(listener_map)) {
+            Log(`Deleting router listener ${lname}`);
+            await router.DeleteListener(lname);
+        }
+    } catch (err) {
+        Log(`Exception in sync_listeners: ${err.message}`);
     }
 }
 
-const sync_connectors = async function(router_connectors, config_connectors) {
-    //
-    // Build a map of the connectors.
-    //
-    let connector_map = {};
-    for (const rc of router_connectors) {
-        connector_map[rc.name] = rc;
-    }
-
-    for (const cc of config_connectors) {
-        if (cc.name in connector_map) {
-            delete connector_map[cc.name];
-        } else {
-            Log(`Creating router connector ${cc.name}`);
-            await router.CreateConnector(cc.name, {
-                host:           cc.host,
-                port:           cc.port,
-                role:           cc.role,
-                cost:           cc.cost,
-                sslProfile:     cc.profile,
-                saslMechanisms: 'EXTERNAL',
-                verifyHostname: true,
-            });
+const sync_connectors = async function(router_connectors, config_connectors_json) {
+    try {
+        //
+        // Build a map of the connectors.
+        //
+        let connector_map = {};
+        for (const rc of router_connectors) {
+            connector_map[rc.name] = rc;
         }
-    }
 
-    //
-    // Any connectors remaining in the map were not mentioned in the config and should be removed.
-    //
-    for (const cname of Object.keys(connector_map)) {
-        Log(`Deleting router connector ${cname}`);
-        await router.DeleteListener(cname);
+        var config_connectors = {};
+        for (const [key, value] of Object.entries(config_connectors_json)) {
+            config_connectors[key] = JSON.parse(value);
+        }
+
+        for (const [cname, cc] of Object.entries(config_connectors)) {
+            if (cname in connector_map) {
+                delete connector_map[cname];
+            } else {
+                Log(`Creating router connector connector_${cname}`);
+                await router.CreateConnector('connector_' + cname, {
+                    host:           cc.host,
+                    port:           cc.port,
+                    role:           cc.role,
+                    cost:           cc.cost,
+                    sslProfile:     cc.profile,
+                    saslMechanisms: 'EXTERNAL',
+                    verifyHostname: true,
+                });
+            }
+        }
+
+        //
+        // Any connectors remaining in the map were not mentioned in the config and should be removed.
+        //
+        for (const cname of Object.keys(connector_map)) {
+            Log(`Deleting router connector ${cname}`);
+            await router.DeleteListener(cname);
+        }
+    } catch (err) {
+        Log(`Exception in sync_connectors: ${err.message}`);
     }
 }
 
-const sync_config_map = async function() {
+const sync_config_map_incoming = async function() {
     var configmap;
     try {
-        configmap = await kube.LoadConfigmap('skupperx-links');
+        configmap = await kube.LoadConfigmap('skupperx-incoming');
     } catch(err) {
-        Log(`Failed to load skupperx-links config-map, no links created`);
+        Log(`Failed to load skupperx-incoming config-map, no links created`);
         return;
     }
 
     let actual_listeners  = await router.ListListeners();
-    let actual_connectors = await router.ListConnectors();
-    let config_listeners  = configmap.data.incoming;
-    let config_connectors = configmap.data.outgoing;
+    let config_listeners  = configmap.data;
 
     await sync_listeners(actual_listeners, config_listeners);
+}
+
+const sync_config_map_outgoing = async function() {
+    var configmap;
+    try {
+        configmap = await kube.LoadConfigmap('skupperx-outgoing');
+    } catch(err) {
+        Log(`Failed to load skupperx-outgoing config-map, no links created`);
+        return;
+    }
+
+    let actual_connectors = await router.ListConnectors();
+    let config_connectors = configmap.data;
+
     await sync_connectors(actual_connectors, config_connectors);
 }
 
@@ -180,17 +213,20 @@ const on_secret_watch = async function(kind, obj) {
 }
 
 const on_configmap_watch = async function(kind, obj) {
-    if (obj.metadata.name == 'skupperx-links') {
-        await sync_config_map();
+    if (obj.metadata.name == 'skupperx-incoming') {
+        await sync_config_map_incoming();
+    } else if (obj.metadata.name == 'skupperx-outgoing') {
+        await sync_config_map_outgoing();
     }
 }
 
 const start_sync_loop = async function () {
     Log('Link module sync-loop starting');
+    await sync_secrets();
+    await sync_config_map_incoming();
+    await sync_config_map_outgoing();
     kube.WatchSecrets(on_secret_watch);
     kube.WatchConfigMaps(on_configmap_watch);
-    await sync_secrets();
-    await sync_config_map();
 }
 
 exports.Start = async function (_fs) {

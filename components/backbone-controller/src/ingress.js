@@ -82,11 +82,14 @@ const backbone_route = function(name, socket) {
             },
             tls: {
                 termination: 'passthrough',
+                insecureEdgeTerminationPolicy: 'None',
             },
             to: {
                 kind: 'Service',
                 name: SERVICE_NAME,
+                weight: 100,
             },
+            wildcardPolicy: 'None',
         },
     };
 }
