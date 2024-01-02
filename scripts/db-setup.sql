@@ -80,7 +80,7 @@ CREATE TYPE RoleType AS ENUM ('accept', 'connect', 'send', 'receive', 'asyncRequ
 --   cm_cert_created    A cert-manager Certificate object has been created
 --   cm_issuer_created  A cert-manager Issuer object has been created
 --   ready              The TlsCertificate is generated and linked to the object
---   active             For member sites, the site has successfully joined the backbone
+--   active             For member or interior sites, the site has successfully joined the backbone
 --   expired            The object is no longer available for use
 --   failed             An unrecoverable error occurred while processing this row, see the Failure column for details
 --
@@ -417,7 +417,7 @@ INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpir
     VALUES (0, 'skupperx-root', '30 days', '1 week', '1 year', 'quay.io/tedlross/skupper-router:skx-0.1.1', 'quay.io/tedlross/skupperx-bb-controller:skx-0.1.1', 'quay.io/tedlross/skupper-config-sync:skx-0.1.1', 'quay.io/tedlross/skupper-site-controller:skx-0.1.1');
 INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 'tross@redhat.com', '18f4e1168a37a7a2d5ac2bff043c12c862d515a2cbb9ab5fe207ab4ef235e129c1a475ffca25c4cb3831886158c3836664d489c98f68c0ac7af5a8f6d35e04fa');
 INSERT INTO WebSessions (Id, UserId) VALUES (gen_random_uuid(), 1);
-INSERT INTO ManagementControllers (Name) VALUES ('Main Controller');
+INSERT INTO ManagementControllers (Name) VALUES ('main-controller');
 
 
 /*

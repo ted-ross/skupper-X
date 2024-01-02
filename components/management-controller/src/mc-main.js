@@ -22,7 +22,8 @@
 const k8s         = require('@kubernetes/client-node');
 const yaml        = require('yaml');
 const fs          = require('fs');
-const router      = require('./router.js');
+const rhea        = require('rhea');
+const inband      = require('./inband.js');
 const certs       = require('./certs.js');
 const prune       = require('./prune.js');
 const db          = require('./db.js');
@@ -34,6 +35,7 @@ const Flush       = require('./common/log.js').Flush;
 
 const VERSION     = '0.1.1';
 const STANDALONE  = (process.env.SKX_STANDALONE || 'NO') == 'YES';
+const CONTROLLER  = process.env.SKX_CONTROLLER_NAME || process.env.HOSTNAME || 'main-controller';
 
 Log(`Skupper-X Management controller version ${VERSION}`);
 Log(`Standalone : ${STANDALONE}`);
@@ -49,6 +51,7 @@ exports.Main = async function() {
         await prune.Start();
         await certs.Start();
         await apiserver.Start();
+        await inband.Start(CONTROLLER, rhea);
         Log("[Management controller initialization completed successfully]");
     } catch (reason) {
         Log(`Management controller initialization failed: ${reason.stack}`)
