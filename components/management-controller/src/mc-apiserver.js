@@ -294,6 +294,9 @@ const fetchBackboneSiteKube = async function (bsid, res) {
             text += backbone.DeploymentYaml(bsid);
             text += backbone.SecretYaml(secret, 'backbone-client');
 
+            const outgoing = await getBackboneConnectors_TX(client, bsid);
+            text += "---\n" + link_config_map_yaml('skupperx-outgoing', outgoing);
+
             res.send(text);
             res.status(200).end();
         } else {
@@ -361,25 +364,30 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
     }
 }
 
+const getBackboneConnectors_TX = async function (client, bsid) {
+    const result = await client.query(
+        'SELECT *, BackboneAccessPoints.Hostname, BackboneAccessPoints.Port FROM InterRouterLinks ' +
+        'JOIN InteriorSites ON InteriorSites.Id = ListeningInteriorSite ' +
+        'JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = InteriorSites.PeerAccess ' +
+        'WHERE ConnectingInteriorSite = $1', [bsid]);
+    let outgoing = {};
+    for (const connection of result.rows) {
+        outgoing[connection.listeninginteriorsite] = JSON.stringify({
+            host: connection.hostname,
+            port: connection.port,
+            role: 'inter-router',
+            cost: connection.cost.toString(),
+            profile: 'backbone-client',
+        });
+    }
+    return outgoing;
+}
+
 const fetchBackboneLinksOutgoingKube = async function (bsid, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
-        const result = await client.query(
-            'SELECT *, BackboneAccessPoints.Hostname, BackboneAccessPoints.Port FROM InterRouterLinks ' +
-            'JOIN InteriorSites ON InteriorSites.Id = ListeningInteriorSite ' +
-            'JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = InteriorSites.PeerAccess ' +
-            'WHERE ConnectingInteriorSite = $1', [bsid]);
-        let outgoing = {};
-        for (const connection of result.rows) {
-            outgoing[connection.listeninginteriorsite] = JSON.stringify({
-                host: connection.hostname,
-                port: connection.port,
-                role: 'inter-router',
-                cost: connection.cost.toString(),
-                profile: 'backbone-client',
-            });
-        }
+        const outgoing = await getBackboneConnectors_TX(client, bsid);
         res.send(link_config_map_yaml('skupperx-outgoing', outgoing));
         res.status(200).end();
         await client.query('COMMIT');
@@ -463,27 +471,27 @@ exports.Start = async function() {
         listBackboneSites(req.params.bid, res);
     });
 
-    api.get(API_PREFIX + 'invitation/kube/:iid', (req, res) => {
+    api.get(API_PREFIX + 'invitation/:iid/kube', (req, res) => {
         Log(`Request for invitation (Kubernetes): ${req.params.iid}`);
         fetchInvitationKube(req.params.iid, res);
     });
 
-    api.get(API_PREFIX + 'backbonesite/kube/:bsid', (req, res) => {
+    api.get(API_PREFIX + 'backbonesite/:bsid/kube', (req, res) => {
         Log(`Request for backbone site (Kubernetes): ${req.params.bsid}`);
         fetchBackboneSiteKube(req.params.bsid, res);
     });
 
-    api.get(API_PREFIX + 'backbonelinks/incoming/kube/:bsid', (req, res) => {
+    api.get(API_PREFIX + 'backbonesite/:bsid/links/incoming/kube', (req, res) => {
         Log(`Request for incoming backbone links (Kubernetes): ${req.params.bsid}`);
         fetchBackboneLinksIncomingKube(req.params.bsid, res);
     });
 
-    api.get(API_PREFIX + 'backbonelinks/outgoing/kube/:bsid', (req, res) => {
+    api.get(API_PREFIX + 'backbonesite/:bsid/links/outgoing/kube', (req, res) => {
         Log(`Request for outgoing backbone links (Kubernetes): ${req.params.bsid}`);
         fetchBackboneLinksOutgoingKube(req.params.bsid, res);
     });
 
-    api.post(API_PREFIX + 'backboneingress/:bsid', (req, res) => {
+    api.post(API_PREFIX + 'backbonesite/:bsid/ingress', (req, res) => {
         Log(`POST - backbone site ingress data for site ${req.params.bsid}`);
         postBackboneIngress(req.params.bsid, req, res);
     });
