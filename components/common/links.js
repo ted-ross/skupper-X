@@ -54,7 +54,6 @@ const inject_profile = async function(name, secret) {
 }
 
 const sync_secrets = async function() {
-    Log('Syncing Secrets for SslProfiles...');
     let router_profiles = await router.ListSslProfiles();
     let secrets         = await kube.GetSecrets();
     let profiles        = {};

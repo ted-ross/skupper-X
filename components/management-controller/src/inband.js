@@ -64,6 +64,9 @@ const createConnection = function(bbid, row) {
         key:  tls_key,
         cert: tls_cert,
     });
+
+    bb_connections[bbid].receiver = bb_connections[bbid].conn.open_receiver('skx/controller/bb');
+    bb_connections[bbid].receiver.bbid = bbid;
 }
 
 const deleteConnection = function(bbid) {
