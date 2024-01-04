@@ -22,7 +22,6 @@
 const Log = require('./log.js').Log;
 
 const QUERY_TIMEOUT_SECONDS = 5;
-const API_ADDRESS = 'skx/controller/bb';
 
 var container;
 var conn;
@@ -31,9 +30,10 @@ var replyTo;
 var apiSender;
 var mgmtSender;
 var nextCid  = 1;
+var nextMessageId = 1;
 var inFlight = {};        // { cid : handler }
 
-var receiverReady    = false;
+var receiverReady   = false;
 var mgmtSenderReady = false;
 var apiSenderReady  = false;
 
@@ -236,12 +236,35 @@ exports.NotifyApiReady = function(cb) {
     notify_api_waiters();
 }
 
-exports.Start = async function(rhea) {
+exports.ApiSend = function(message) {
+    const messageId = nextMessageId;
+    nextMessageId++;
+    apiSender.send({message_id: messageId, body: message});
+}
+
+exports.ApiRequest = function(request, onResponse, onFail, timeout) {
+    const messageId = nextMessageId;
+    const cid = nextCid;
+    nextMessageId++;
+    nextCid++;
+    let timer = setTimeout(() => {
+        delete inFlight[cid];
+        onFail('timeout');
+    }, timeout * 1000);
+    inFlight[cid] = (response) => {
+        clearTimeout(timer);
+        onResponse(response.body)
+    };
+
+    apiSender.send({message_id: messageId, reply_to: replyTo, correlation_id: cid, body: request});
+}
+
+exports.Start = async function(rhea, apiAddress) {
     Log('[Router module started]')
     container = rhea;
     rhea_handlers();
     conn = container.connect();
     replyReceiver = conn.open_receiver({source:{dynamic:true}});
-    apiSender     = conn.open_sender(API_ADDRESS);
+    apiSender     = conn.open_sender(apiAddress);
     mgmtSender    = conn.open_sender('$management');
 }

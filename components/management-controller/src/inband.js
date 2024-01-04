@@ -44,6 +44,9 @@ const rheaHandlers = function() {
     });
 
     container.on('message', function (context) {
+        let message = context.message;
+        Log(`Message-Id: ${message.message_id}`);
+        Log(message.body);
     });
 }
 

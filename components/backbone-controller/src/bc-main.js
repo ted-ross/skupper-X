@@ -26,6 +26,7 @@ const fsp         = require('fs/promises');
 const rhea        = require('rhea');
 const kube        = require('./common/kube.js');
 const apiserver   = require('./bc-apiserver.js');
+const apiclient   = require('./apiclient.js');
 const router      = require('./common/router.js');
 const links       = require('./common/links.js');
 const ingress     = require('./ingress.js');
@@ -34,6 +35,8 @@ const Flush       = require('./common/log.js').Flush;
 
 const VERSION     = '0.1.1';
 const STANDALONE  = (process.env.SKX_STANDALONE || 'NO') == 'YES';
+
+const API_ADDRESS = 'skx/controller/bb';
 
 Log(`Skupper-X Backbone site controller version ${VERSION}`);
 Log(`Standalone : ${STANDALONE}`);
@@ -44,10 +47,11 @@ Log(`Standalone : ${STANDALONE}`);
 exports.Main = async function() {
     try {
         await kube.Start(k8s, fs, yaml, !STANDALONE);
-        await router.Start(rhea);
+        await router.Start(rhea, API_ADDRESS);
         await links.Start(fsp);
         await ingress.Start();
         await apiserver.Start();
+        await apiclient.Start();
         Log("[Backbone site controller initialization completed successfully]");
     } catch (reason) {
         Log(`Backbone site controller initialization failed: ${reason.stack}`)
