@@ -28,6 +28,7 @@ const backbone   = require('./backbone.js');
 const kube       = require('./common/kube.js');
 const { isObject } = require('util');
 const Log        = require('./common/log.js').Log;
+const siteConfig = require('./bb-site-config.js');
 
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8085;
@@ -489,6 +490,17 @@ exports.Start = async function() {
     api.get(API_PREFIX + 'backbonesite/:bsid/links/outgoing/kube', (req, res) => {
         Log(`Request for outgoing backbone links (Kubernetes): ${req.params.bsid}`);
         fetchBackboneLinksOutgoingKube(req.params.bsid, res);
+    });
+
+    api.get(API_PREFIX + 'backbonesite/:bsid/hash', async (req, res) => {
+        try {
+            const text = await siteConfig.ComputeConfigHash(req.params.bsid);
+            res.send(text);
+            res.status(200).end();
+        } catch (err) {
+            res.send(err.message);
+            res.status(400).end();
+        }
     });
 
     api.post(API_PREFIX + 'backbonesite/:bsid/ingress', (req, res) => {

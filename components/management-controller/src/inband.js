@@ -19,9 +19,10 @@
 
 "use strict";
 
-const kube = require('./common/kube.js');
-const Log  = require('./common/log.js').Log;
-const db   = require('./db.js');
+const kube       = require('./common/kube.js');
+const Log        = require('./common/log.js').Log;
+const db         = require('./db.js');
+const siteConfig = require('./bb-site-config.js');
 
 var controller_name;
 var container;
@@ -30,8 +31,8 @@ var tls_cert;
 var tls_key;
 var bb_connections = {};
 
-const onBackboneHeartbeat = async function(body) {
-    const site = body.site;
+const onBackboneHeartbeat = async function(message) {
+    const site = message.body.site;
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
@@ -55,6 +56,65 @@ const onBackboneHeartbeat = async function(body) {
     }
 }
 
+const BackboneForSite = async function(site) {
+
+}
+
+const onBackboneHashRequest = async function(message) {
+    const site    = message.body.site;
+    const replyTo = message.replyTo;
+    const client  = await db.ClientFromPool();
+    var found = false;
+    var bbid;
+
+    //
+    // Start out by recording the replyTo in the InteriorSite record.
+    //
+    try {
+        await client.query('BEGIN');
+        const result = await client.query("SELECT InbandAddress, Backbone FROM InteriorSites WHERE Id = $1", [site]);
+        if (result.rowCount == 1) {
+            found = true;
+            const row = result.rows[0];
+            bbid = row.backbone; // Needed below to find the outgoing sender.
+            if (row.inbandaddress != replyTo) {
+                await client.query("UPDATE InteriorSites SET InbandAddress = $1 WHERE Id = $2", [replyTo, site]);
+            }
+        } else {
+            Log(`Received BB_QUERY_HASH from unknown site: ${site}`);
+        }
+        await client.query('COMMIT');
+    } catch (err) {
+        Log(`Rolling back onBackboneHashRequest transaction: ${err.stack}`);
+        await client.query('ROLLBACK');
+        found = false;
+    } finally {
+        client.release();
+    }
+
+    //
+    // If the site exists, compute the configuration hash and send it in a reply.
+    //
+    if (found) {
+        const hash = await siteConfig.ComputeConfigHash(site);
+        const response = {
+            op: 'BB_QUERY_HASH',
+            site: site,
+            configHash: hash,
+        };
+        if (bb_connections[bbid]) {
+            bb_connections[bbid].anonSender.send({
+                to: replyTo,
+                correlation_id : message.correlation_id,
+                body: response,
+            });
+        }
+    }
+}
+
+const onBackboneGetConfig = async function(message) {
+}
+
 const rheaHandlers = function() {
     container.options.enable_sasl_external = true;
 
@@ -69,12 +129,14 @@ const rheaHandlers = function() {
     });
 
     container.on('message', function (context) {
-        let message = context.message;
+        const message = context.message;
         const body = message.body;
         if (body.op && body.site) {
             //Log(`Inband message '${body.op}' from site '${body.site}'`);
             switch (body.op) {
-                case 'BB_HEARTBEAT': onBackboneHeartbeat(body); break;
+                case 'BB_HEARTBEAT'  : onBackboneHeartbeat(message);    break;
+                case 'BB_QUERY_HASH' : onBackboneHashRequest(message);  break;
+                case 'BB_GET_CONFIG' : onBackboneGetConfig(message);    break;
             }
         }
     });
@@ -98,7 +160,8 @@ const createConnection = function(bbid, row) {
         cert: tls_cert,
     });
 
-    bb_connections[bbid].receiver = bb_connections[bbid].conn.open_receiver('skx/controller/bb');
+    bb_connections[bbid].receiver   = bb_connections[bbid].conn.open_receiver('skx/controller/bb');
+    bb_connections[bbid].anonSender = bb_connections[bbid].conn.open_sender();
     bb_connections[bbid].receiver.bbid = bbid;
 }
 

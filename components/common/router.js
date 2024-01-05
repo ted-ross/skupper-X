@@ -236,27 +236,30 @@ exports.NotifyApiReady = function(cb) {
     notify_api_waiters();
 }
 
-exports.ApiSend = function(message) {
+exports.ApiSend = async function(message) {
     const messageId = nextMessageId;
     nextMessageId++;
     apiSender.send({message_id: messageId, body: message});
 }
 
-exports.ApiRequest = function(request, onResponse, onFail, timeout) {
-    const messageId = nextMessageId;
-    const cid = nextCid;
-    nextMessageId++;
-    nextCid++;
-    let timer = setTimeout(() => {
-        delete inFlight[cid];
-        onFail('timeout');
-    }, timeout * 1000);
-    inFlight[cid] = (response) => {
-        clearTimeout(timer);
-        onResponse(response.body)
-    };
-
-    apiSender.send({message_id: messageId, reply_to: replyTo, correlation_id: cid, body: request});
+exports.ApiRequest = function(request, timeout) {
+    return new Promise((resolve, reject) => {
+        let timer   = setTimeout(() => reject('ApiRequest protocol timeout'), timeout * 1000);
+        const cid   = nextCid;
+        const msgId = nextMessageId;
+        nextMessageId++;
+        nextCid++;
+        inFlight[cid] = (response) => {
+            clearTimeout(timer);
+            resolve(response.body);
+        };
+        apiSender.send({
+            message_id     : msgId,
+            reply_to       : replyTo,
+            correlation_id : cid,
+            body           : request,
+        });
+    });
 }
 
 exports.Start = async function(rhea, apiAddress) {

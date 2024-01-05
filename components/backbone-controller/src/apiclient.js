@@ -22,23 +22,51 @@
 const Log    = require('./common/log.js').Log;
 const router = require('./common/router.js');
 
-const REQUEST_TIMEOUT_SECONDS = 3;
-const HEARTBEAT_PERIOD_SECONDS = 15;
-const site_id = process.env.SKUPPERX_SITE_ID || 'unknown';
+const REQUEST_TIMEOUT_SECONDS   = 10;
+const HEARTBEAT_PERIOD_SECONDS  = 15;
+const HASH_QUERY_PERIOD_SECONDS = 600;
 
-const heartbeat = function() {
+const site_id = process.env.SKUPPERX_SITE_ID || 'unknown';
+var   configurationHash = "";
+
+const manageHeartbeat = function() {
     router.ApiSend({
         op: 'BB_HEARTBEAT',
         site: site_id,
     });
-    setTimeout(heartbeat, HEARTBEAT_PERIOD_SECONDS * 1000);
+    setTimeout(manageHeartbeat, HEARTBEAT_PERIOD_SECONDS * 1000);
+}
+
+const syncConfiguration = async function() {
+}
+
+const doHashQuery = async function() {
+    const request = {
+        op: 'BB_QUERY_HASH',
+        site: site_id,
+    };
+    try {
+        let response = await router.ApiRequest(request, REQUEST_TIMEOUT_SECONDS);
+        if (response.hash != configurationHash) {
+            configurationHash = response.hash;
+            await syncConfiguration();
+        }
+    } catch(error) {
+        Log(`Exception in processing of configuration hash request/response: ${error.stack}`);
+    }
+}
+
+const manageHashPoll = function() {
+    doHashQuery();
+    setTimeout(manageHashPoll, HASH_QUERY_PERIOD_SECONDS);
 }
 
 exports.Start = async function () {
     Log('[API-Client module started]');
     router.NotifyApiReady(() => {
         try {
-            heartbeat();
+            manageHeartbeat();
+            manageHashPoll();
         } catch(err) {
             Log(`Exception in heartbeat processing: ${err.message} ${err.stack}`);
         }

@@ -182,6 +182,7 @@ CREATE TABLE InteriorSites (
 
     FirstActiveTime timestamptz,
     LastHeartbeat timestamptz,
+    InbandAddress text,
     Backbone UUID REFERENCES Backbones,
     ClaimAccess UUID REFERENCES BackboneAccessPoints,
     PeerAccess UUID REFERENCES BackboneAccessPoints,
