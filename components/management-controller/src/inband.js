@@ -30,6 +30,31 @@ var tls_cert;
 var tls_key;
 var bb_connections = {};
 
+const onBackboneHeartbeat = async function(body) {
+    const site = body.site;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query('BEGIN');
+        const result = await client.query("SELECT Lifecycle, Name FROM InteriorSites WHERE Id = $1", [site]);
+        if (result.rowCount == 1) {
+            const row = result.rows[0];
+            if (row.lifecycle == 'ready') {
+                await client.query("UPDATE InteriorSites SET Lifecycle = 'active', FirstActiveTime = now() WHERE Id = $1", [site]);
+                Log(`Backbone site became active: ${site} (${row.name})`);
+            }
+            await client.query("UPDATE InteriorSites SET LastHeartbeat = now() WHERE Id = $1", [site]);
+        } else {
+            Log(`Received BB_HEARTBEAT from unknown site: ${site}`);
+        }
+        await client.query('COMMIT');
+    } catch (err) {
+        Log(`Rolling back onBackboneHeartbeat transaction: ${err.stack}`);
+        await client.query('ROLLBACK');
+    } finally {
+        client.release();
+    }
+}
+
 const rheaHandlers = function() {
     container.options.enable_sasl_external = true;
 
@@ -45,8 +70,13 @@ const rheaHandlers = function() {
 
     container.on('message', function (context) {
         let message = context.message;
-        Log(`Message-Id: ${message.message_id}`);
-        Log(message.body);
+        const body = message.body;
+        if (body.op && body.site) {
+            //Log(`Inband message '${body.op}' from site '${body.site}'`);
+            switch (body.op) {
+                case 'BB_HEARTBEAT': onBackboneHeartbeat(body); break;
+            }
+        }
     });
 }
 

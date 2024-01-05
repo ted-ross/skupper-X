@@ -180,6 +180,8 @@ CREATE TABLE InteriorSites (
     Failure text,
     Certificate UUID REFERENCES TlsCertificates,
 
+    FirstActiveTime timestamptz,
+    LastHeartbeat timestamptz,
     Backbone UUID REFERENCES Backbones,
     ClaimAccess UUID REFERENCES BackboneAccessPoints,
     PeerAccess UUID REFERENCES BackboneAccessPoints,

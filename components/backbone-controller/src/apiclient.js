@@ -23,12 +23,12 @@ const Log    = require('./common/log.js').Log;
 const router = require('./common/router.js');
 
 const REQUEST_TIMEOUT_SECONDS = 3;
-const HEARTBEAT_PERIOD_SECONDS = 10;
+const HEARTBEAT_PERIOD_SECONDS = 15;
 const site_id = process.env.SKUPPERX_SITE_ID || 'unknown';
 
 const heartbeat = function() {
     router.ApiSend({
-        op: 'HEARTBEAT',
+        op: 'BB_HEARTBEAT',
         site: site_id,
     });
     setTimeout(heartbeat, HEARTBEAT_PERIOD_SECONDS * 1000);
@@ -36,7 +36,7 @@ const heartbeat = function() {
 
 exports.Start = async function () {
     Log('[API-Client module started]');
-    router.NotifyMgmtReady(() => {
+    router.NotifyApiReady(() => {
         try {
             heartbeat();
         } catch(err) {
