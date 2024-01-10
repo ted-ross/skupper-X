@@ -112,6 +112,7 @@ const sync_listeners = async function(router_listeners, config_listeners_json) {
                     cost:              cl.cost,
                     sslProfile:        cl.profile,
                     saslMechanisms:    'EXTERNAL',
+                    stripAnnotations:  'no',
                     authenticatePeer:  true,
                     requireEncryption: true,
                     requireSsl:        true,
@@ -152,13 +153,14 @@ const sync_connectors = async function(router_connectors, config_connectors_json
             } else {
                 Log(`Creating router connector connector_${cname}`);
                 await router.CreateConnector('connector_' + cname, {
-                    host:           cc.host,
-                    port:           cc.port,
-                    role:           cc.role,
-                    cost:           cc.cost,
-                    sslProfile:     cc.profile,
-                    saslMechanisms: 'EXTERNAL',
-                    verifyHostname: true,
+                    host:             cc.host,
+                    port:             cc.port,
+                    role:             cc.role,
+                    cost:             cc.cost,
+                    sslProfile:       cc.profile,
+                    saslMechanisms:   'EXTERNAL',
+                    stripAnnotations: 'no',
+                    verifyHostname:   true,
                 });
             }
         }

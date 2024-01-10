@@ -19,12 +19,13 @@
 
 "use strict";
 
-const Log    = require('./common/log.js').Log;
-const router = require('./common/router.js');
+const Log     = require('./common/log.js').Log;
+const router  = require('./common/router.js');
+const ingress = require('./ingress.js');
 
 const REQUEST_TIMEOUT_SECONDS   = 10;
 const HEARTBEAT_PERIOD_SECONDS  = 15;
-const HASH_QUERY_PERIOD_SECONDS = 600;
+const HASH_QUERY_PERIOD_SECONDS = 19;
 
 const site_id = process.env.SKUPPERX_SITE_ID || 'unknown';
 var   configurationHash = "";
@@ -38,6 +39,7 @@ const manageHeartbeat = function() {
 }
 
 const syncConfiguration = async function() {
+    Log('Configuration hash has changed, synchronizing the site');
 }
 
 const doHashQuery = async function() {
@@ -52,13 +54,36 @@ const doHashQuery = async function() {
             await syncConfiguration();
         }
     } catch(error) {
-        Log(`Exception in processing of configuration hash request/response: ${error.stack}`);
+        Log(`Exception in processing of configuration hash request/response: ${error.message}`);
     }
 }
 
 const manageHashPoll = function() {
     doHashQuery();
-    setTimeout(manageHashPoll, HASH_QUERY_PERIOD_SECONDS);
+    setTimeout(manageHashPoll, HASH_QUERY_PERIOD_SECONDS * 1000);
+}
+
+const doIngressBundle = async function () {
+    const bundle = ingress.GetIngressBundle();
+    if (bundle.ready) {
+        const request = {
+            op:     'BB_POST_INGRESS',
+            site:   site_id,
+            bundle: bundle,
+        };
+        try {
+            await router.ApiRequest(request, REQUEST_TIMEOUT_SECONDS);
+        } catch (err) {
+            Log(`Exception in sending of ingress-bundle ${err.message}`);
+            setTimeout(doIngressBundle, 10000);
+        }
+    } else {
+        setTimeout(doIngressBundle, 2000);
+    }
+}
+
+const manageIngressBundle = function() {
+    doIngressBundle();
 }
 
 exports.Start = async function () {
@@ -67,6 +92,7 @@ exports.Start = async function () {
         try {
             manageHeartbeat();
             manageHashPoll();
+            manageIngressBundle();
         } catch(err) {
             Log(`Exception in heartbeat processing: ${err.message} ${err.stack}`);
         }

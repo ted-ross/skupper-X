@@ -23,6 +23,7 @@ const kube       = require('./common/kube.js');
 const Log        = require('./common/log.js').Log;
 const db         = require('./db.js');
 const siteConfig = require('./bb-site-config.js');
+const api        = require('./mc-apiserver.js');
 
 var controller_name;
 var container;
@@ -62,7 +63,7 @@ const BackboneForSite = async function(site) {
 
 const onBackboneHashRequest = async function(message) {
     const site    = message.body.site;
-    const replyTo = message.replyTo;
+    const replyTo = message.reply_to;
     const client  = await db.ClientFromPool();
     var found = false;
     var bbid;
@@ -112,6 +113,18 @@ const onBackboneHashRequest = async function(message) {
     }
 }
 
+const onBackbonePostIngress = async function(message) {
+    Log(message.body);
+    const bundle = message.body.bundle;
+    const bsid   = message.body.site;
+    let count = 0;
+    if (typeof bundle.ingresses == 'object') {
+        for (const [key, obj] of Object.entries(bundle.ingresses)) {
+            count += await api.AddHostToAccessPoint(bsid, key, obj.host, obj.port);
+        }
+    }
+}
+
 const onBackboneGetConfig = async function(message) {
 }
 
@@ -132,11 +145,16 @@ const rheaHandlers = function() {
         const message = context.message;
         const body = message.body;
         if (body.op && body.site) {
-            //Log(`Inband message '${body.op}' from site '${body.site}'`);
-            switch (body.op) {
-                case 'BB_HEARTBEAT'  : onBackboneHeartbeat(message);    break;
-                case 'BB_QUERY_HASH' : onBackboneHashRequest(message);  break;
-                case 'BB_GET_CONFIG' : onBackboneGetConfig(message);    break;
+            try {
+                Log(`Inband message '${body.op}' from site '${body.site}'`);
+                switch (body.op) {
+                    case 'BB_HEARTBEAT'    : onBackboneHeartbeat(message);    break;
+                    case 'BB_QUERY_HASH'   : onBackboneHashRequest(message);  break;
+                    case 'BB_POST_INGRESS' : onBackbonePostIngress(message);  break;
+                    case 'BB_GET_CONFIG'   : onBackboneGetConfig(message);    break;
+                }
+            } catch (err) {
+                Log(`Exception in message handling for op ${body.op}: ${err.message}`);
             }
         }
     });

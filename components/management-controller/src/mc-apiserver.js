@@ -326,6 +326,7 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
             const worklist = [
                 {ap_ref: site.peeraccess,       profile: 'peer_access',   port: '55671', role: 'inter-router'},
                 {ap_ref: site.memberaccess,     profile: 'member_access', port: '45671', role: 'edge'},
+                {ap_ref: site.claimaccess,      profile: 'member_claim',  port: '45669', role: 'normal'},
                 {ap_ref: site.managementaccess, profile: 'manage_access', port: '45670', role: 'normal'},
             ]
 
@@ -401,7 +402,7 @@ const fetchBackboneLinksOutgoingKube = async function (bsid, res) {
     }
 }
 
-const addHostToAccessPoint = async function(bsid, key, hostname, port) {
+exports.AddHostToAccessPoint = async function(bsid, key, hostname, port) {
     let retval = 1;
     const client = await db.ClientFromPool();
     try {
@@ -410,6 +411,7 @@ const addHostToAccessPoint = async function(bsid, key, hostname, port) {
         switch (key) {
             case 'skx-manage' : ref = 'ManagementAccess';  break;
             case 'skx-member' : ref = 'MemberAccess';      break;
+            case 'skx-claim'  : ref = 'ClaimAccess';       break;
             case 'skx-peer'   : ref = 'PeerAccess';        break;
             default: throw Error(`Invalid ingress key: ${key}`);
         }
@@ -448,7 +450,7 @@ const postBackboneIngress = async function (bsid, req, res) {
         let count = 0;
         if (typeof fields.ingresses == 'object') {
             for (const [key, obj] of Object.entries(fields.ingresses)) {
-                count += await addHostToAccessPoint(bsid, key, obj.host, obj.port);
+                count += await exports.AddHostToAccessPoint(bsid, key, obj.host, obj.port);
             }
         }
 

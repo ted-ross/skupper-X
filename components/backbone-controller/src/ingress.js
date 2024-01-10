@@ -56,6 +56,12 @@ const backbone_service = function() {
                     targetPort: 45671,
                 },
                 {
+                    name:       'claim',
+                    port:       45669,
+                    protocol:   'TCP',
+                    targetPort: 45669,
+                },
+                {
                     name:       'manage',
                     port:       45670,
                     protocol:   'TCP',
@@ -134,7 +140,7 @@ const resolve_ingress = async function() {
     let routes = await kube.GetRoutes();
 
     for (const route of routes) {
-        for (const name of ['skx-peer', 'skx-member', 'skx-manage']) {
+        for (const name of ['skx-peer', 'skx-member', 'skx-claim', 'skx-manage']) {
             if (route.metadata.name == name && route.spec.host) {
                 ingress_bundle.ingresses[name] = {
                     host: route.spec.host,
@@ -144,7 +150,7 @@ const resolve_ingress = async function() {
         }
     }
 
-    if (Object.keys(ingress_bundle.ingresses).length == 3) {
+    if (Object.keys(ingress_bundle.ingresses).length == 4) {
         ingress_bundle.ready = true;
         Log('Hosts for the ingress are resolved');
     } else {
@@ -156,6 +162,7 @@ const sync_ingress = async function() {
     await sync_kube_service();
     await sync_route('skx-peer',   'peer');
     await sync_route('skx-member', 'member');
+    await sync_route('skx-claim',  'claim');
     await sync_route('skx-manage', 'manage');
     setTimeout(resolve_ingress, 1000);
 }

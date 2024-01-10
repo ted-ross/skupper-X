@@ -73,12 +73,16 @@ const rhea_handlers = function() {
 
     container.on('sendable', function(context) {
         if (context.sender == apiSender) {
-            Log('Management controller is reachable');
-            apiSenderReady = true;
-            notify_api_waiters();
+            if (!apiSenderReady) {
+                Log('Management controller has become reachable');
+                apiSenderReady = true;
+                notify_api_waiters();
+            }
         } else if (context.sender == mgmtSender) {
-            mgmtSenderReady = true;
-            notify_mgmt_waiters();
+            if (!mgmtSenderReady) {
+                mgmtSenderReady = true;
+                notify_mgmt_waiters();
+            }
         }
     });
 
