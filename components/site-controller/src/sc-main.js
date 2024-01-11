@@ -25,7 +25,8 @@ const fs          = require('fs');
 const fsp         = require('fs/promises');
 const rhea        = require('rhea');
 const kube        = require('./common/kube.js');
-const apiserver   = require('./bc-apiserver.js');
+const amqp        = require('./common/amqp.js');
+const apiserver   = require('./sc-apiserver.js');
 const apiclient   = require('./apiclient.js');
 const router      = require('./common/router.js');
 const links       = require('./common/links.js');
@@ -36,9 +37,9 @@ const Flush       = require('./common/log.js').Flush;
 const VERSION     = '0.1.1';
 const STANDALONE  = (process.env.SKX_STANDALONE || 'NO') == 'YES';
 
-const API_ADDRESS = 'skx/controller/bb';
+const API_ADDRESS = 'skx/controller/site';
 
-Log(`Skupper-X Backbone site controller version ${VERSION}`);
+Log(`Skupper-X Site controller version ${VERSION}`);
 Log(`Standalone : ${STANDALONE}`);
 
 //
@@ -47,14 +48,16 @@ Log(`Standalone : ${STANDALONE}`);
 exports.Main = async function() {
     try {
         await kube.Start(k8s, fs, yaml, !STANDALONE);
-        await router.Start(rhea, API_ADDRESS);
+        await amqp.Start(rhea);
+        let conn = amqp.OpenConnection('LocalRouter');
+        await router.Start(conn);
         await links.Start(fsp);
         await ingress.Start();
         await apiserver.Start();
-        await apiclient.Start();
-        Log("[Backbone site controller initialization completed successfully]");
+        await apiclient.Start(conn);
+        Log("[Site controller initialization completed successfully]");
     } catch (reason) {
-        Log(`Backbone site controller initialization failed: ${reason.stack}`)
+        Log(`Site controller initialization failed: ${reason.stack}`)
         Flush();
         process.exit(1);
     };

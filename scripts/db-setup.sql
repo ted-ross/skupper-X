@@ -183,6 +183,7 @@ CREATE TABLE InteriorSites (
     FirstActiveTime timestamptz,
     LastHeartbeat timestamptz,
     InbandAddress text,
+
     Backbone UUID REFERENCES Backbones,
     ClaimAccess UUID REFERENCES BackboneAccessPoints,
     PeerAccess UUID REFERENCES BackboneAccessPoints,
@@ -275,6 +276,10 @@ CREATE TABLE MemberSites (
     Lifecycle LifecycleType DEFAULT 'new',
     Failure text,
     Certificate UUID REFERENCES TlsCertificates,
+
+    FirstActiveTime timestamptz,
+    LastHeartbeat timestamptz,
+    InbandAddress text,
 
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
     Invitation UUID REFERENCES MemberInvitations ON DELETE CASCADE,

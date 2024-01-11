@@ -1,7 +1,7 @@
 {
-  "name": "skupperx-backbone-controller",
+  "name": "skupperx-site-controller",
   "version": "0.1.1",
-  "description": "Skupper-X Backbone Site Controller",
+  "description": "Skupper-X Site Controller",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

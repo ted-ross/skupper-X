@@ -19,6 +19,6 @@
 
 "use strict";
 
-const main = require('./src/bc-main.js');
+const main = require('./src/sc-main.js');
 
 main.Main();

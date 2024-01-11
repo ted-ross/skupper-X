@@ -19,86 +19,15 @@
 
 "use strict";
 
-const Log = require('./log.js').Log;
+const { on } = require('events');
+const amqp = require('./amqp.js');
+const Log  = require('./log.js').Log;
+
+var mgmtSender;
+var ready   = false;
+var waiters = [];
 
 const QUERY_TIMEOUT_SECONDS = 5;
-
-var container;
-var conn;
-var replyReceiver;
-var replyTo;
-var apiSender;
-var mgmtSender;
-var nextCid  = 1;
-var nextMessageId = 1;
-var inFlight = {};        // { cid : handler }
-
-var receiverReady   = false;
-var mgmtSenderReady = false;
-var apiSenderReady  = false;
-
-var mgmtWaiting = [];
-var apiWaiting  = [];
-
-const notify_mgmt_waiters = function() {
-    if (receiverReady && mgmtSenderReady) {
-        mgmtWaiting.forEach(cb => cb());
-        mgmtWaiting = [];
-    }
-}
-
-const notify_api_waiters = function() {
-    if (receiverReady && apiSenderReady) {
-        apiWaiting.forEach(cb => cb());
-        apiWaiting = [];
-    }
-}
-
-const rhea_handlers = function() {
-    container.options.enable_sasl_external = true;
-
-    container.on('connection_open', function(context) {
-        Log('Connection to the local access point is open');
-    });
-
-    container.on('receiver_open', function(context) {
-        replyTo = context.receiver.source.address;
-        if (!receiverReady) {
-            receiverReady = true;
-            notify_mgmt_waiters();
-            notify_api_waiters();
-        }
-        Log(`AMQP dynamic reply address: ${replyTo}`);
-    });
-
-    container.on('sendable', function(context) {
-        if (context.sender == apiSender) {
-            if (!apiSenderReady) {
-                Log('Management controller has become reachable');
-                apiSenderReady = true;
-                notify_api_waiters();
-            }
-        } else if (context.sender == mgmtSender) {
-            if (!mgmtSenderReady) {
-                mgmtSenderReady = true;
-                notify_mgmt_waiters();
-            }
-        }
-    });
-
-    container.on('message', function (context) {
-        let response = context.message;
-        let cid      = response.correlation_id;
-        var handler;
-        if (cid) {
-            handler = inFlight[cid];
-            if (handler) {
-                delete inFlight[cid];
-                handler(response);
-            }
-        }
-    });
-}
 
 const convertBodyToItems = function(body) {
     let keys  = body.attributeNames;
@@ -113,85 +42,57 @@ const convertBodyToItems = function(body) {
     return items;
 }
 
-exports.ListManagementEntity = function(entityType, timeout, attributes=[]) {
-    return new Promise((resolve, reject) => {
-        let timer = setTimeout(() => reject('ListManagementEntity timeout'), timeout * 1000);
-        let cid   = nextCid;
-        nextCid++;
-        inFlight[cid] = (response) => {
-            clearTimeout(timer);
-            if (response.application_properties.statusCode == 200) {
-                let items = convertBodyToItems(response.body);
-                resolve(items);
-            } else {
-                reject(response.application_properties.statusDescription);
-            }
-        };
-        mgmtSender.send({
-            reply_to       : replyTo,
-            correlation_id : cid,
-            application_properties : {
-                operation  : 'QUERY',
-                type       : 'org.amqp.management',
-                entityType : entityType,
-                name       : 'self',
-            },
-            body : {
-                attributeNames : attributes,
-            }
-        });
-    });
+exports.ListManagementEntity = async function(entityType, timeout, attributes=[]) {
+    let requestAp = {
+        operation  : 'QUERY',
+        type       : 'org.amqp.management',
+        entityType : entityType,
+        name       : 'self',
+    };
+    let requestBody = {
+        attributeNames : attributes,
+    };
+
+    const [replyAp, replyBody] = await amqp.Request(mgmtSender, requestBody, requestAp, timeout);
+
+    if (replyAp.statusCode == 200) {
+        let items = convertBodyToItems(replyBody);
+        return items;
+    }
+
+    throw(Error(replyAp.statusDescription));
 }
 
-exports.CreateManagementEntity = function(entityType, name, data, timeout) {
-    return new Promise((resolve, reject) => {
-        let timer = setTimeout(() => reject('CreateManagementEntity timeout'), timeout * 1000);
-        let cid   = nextCid;
-        nextCid++;
-        inFlight[cid] = (response) => {
-            clearTimeout(timer);
-            if (response.application_properties.statusCode == 201) {
-                resolve(response.body);
-            } else {
-                reject(response.application_properties.statusDescription);
-            }
-        };
-        mgmtSender.send({
-            reply_to       : replyTo,
-            correlation_id : cid,
-            application_properties : {
-                operation : 'CREATE',
-                type      : entityType,
-                name      : name,
-            },
-            body : data,
-        });
-    });
+exports.CreateManagementEntity = async function(entityType, name, data, timeout) {
+    let requestAp = {
+        operation : 'CREATE',
+        type      : entityType,
+        name      : name,
+    };
+
+    const [replyAp, replyBody] = await amqp.Request(mgmtSender, data, requestAp, timeout);
+
+    if (replyAp.statusCode == 201) {
+        return (replyBody);
+    }
+
+    throw(Error(replyAp.statusDescription));
 }
 
-exports.DeleteManagementEntity = function(entityType, name, timeout) {
-    return new Promise((resolve, reject) => {
-        let timer = setTimeout(() => reject('DeleteManagementEntity timeout'), timeout * 1000);
-        let cid   = nextCid;
-        nextCid++;
-        inFlight[cid] = (response) => {
-            clearTimeout(timer);
-            if (response.application_properties.statusCode == 204) {
-                resolve(response.body);
-            } else {
-                reject(response.application_properties.statusDescription);
-            }
-        };
-        mgmtSender.send({
-            reply_to       : replyTo,
-            correlation_id : cid,
-            application_properties : {
-                operation : 'DELETE',
-                type      : entityType,
-                name      : name,
-            },
-        });
-    });
+exports.DeleteManagementEntity = async function(entityType, name, timeout) {
+    let requestAp = {
+        operation : 'DELETE',
+        type      : entityType,
+        name      : name,
+    };
+
+    const [replyAp, replyBody] = await amqp.Request(mgmtSender, undefined, requestAp, timeout);
+
+    if (replyAp.statusCode == 201) {
+        return (replyBody);
+    }
+
+    throw(Error(replyAp.statusDescription));
 }
 
 exports.ListSslProfiles = async function(attributes = []) {
@@ -230,48 +131,23 @@ exports.DeleteListener = async function(name) {
     await exports.DeleteManagementEntity('io.skupper.router.listener', name, QUERY_TIMEOUT_SECONDS);
 }
 
-exports.NotifyMgmtReady = function(cb) {
-    mgmtWaiting.push(cb);
-    notify_mgmt_waiters();
+exports.NotifyApiReady = function(onApiReady) {
+    if (ready) {
+        onApiReady();
+    } else {
+        waiters.push(onApiReady);
+    }
 }
 
-exports.NotifyApiReady = function(cb) {
-    apiWaiting.push(cb);
-    notify_api_waiters();
+const onSendable = function(unused) {
+    if (!ready) {
+        ready = true;
+        waiters.forEach(waiter => waiter());
+        waiters = [];
+    }
 }
 
-exports.ApiSend = async function(message) {
-    const messageId = nextMessageId;
-    nextMessageId++;
-    apiSender.send({message_id: messageId, body: message});
-}
-
-exports.ApiRequest = function(request, timeout) {
-    return new Promise((resolve, reject) => {
-        let timer   = setTimeout(() => reject('ApiRequest protocol timeout'), timeout * 1000);
-        const cid   = nextCid;
-        const msgId = nextMessageId;
-        nextMessageId++;
-        nextCid++;
-        inFlight[cid] = (response) => {
-            clearTimeout(timer);
-            resolve(response.body);
-        };
-        apiSender.send({
-            message_id     : msgId,
-            reply_to       : replyTo,
-            correlation_id : cid,
-            body           : request,
-        });
-    });
-}
-
-exports.Start = async function(rhea, apiAddress) {
-    Log('[Router module started]')
-    container = rhea;
-    rhea_handlers();
-    conn = container.connect();
-    replyReceiver = conn.open_receiver({source:{dynamic:true}});
-    apiSender     = conn.open_sender(apiAddress);
-    mgmtSender    = conn.open_sender('$management');
+exports.Start = async function(connection) {
+    Log('[Router-management module started]')
+    mgmtSender = amqp.OpenSender('Management', connection, '$management', onSendable);
 }
