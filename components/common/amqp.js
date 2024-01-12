@@ -71,19 +71,31 @@ const rhea_handlers = function() {
     });
 
     container.on('message', function (context) {
+        let conn    = context.connection.amqpConnection;
         let message = context.message;
         let cid     = message.correlation_id;
         var handler;
-        if (cid) {
-            handler = inFlight[cid];
-            if (handler) {
-                delete inFlight[cid];
-                handler(message);
+        if (context.receiver == conn.replyReceiver) {
+            if (cid) {
+                handler = inFlight[cid];
+                if (handler) {
+                    delete inFlight[cid];
+                    handler(message);
+                }
+            } else {
+                Log('Received message on reply receiver with no correlation ID');
             }
         } else {
-            const receiver = contest.receiver.amqpReceiver;
+            const receiver = context.receiver.amqpReceiver;
             if (receiver) {
-                receiver.onMessage(receiver.context, message.application_properties, message.body);
+                receiver.onMessage(receiver.context, message.application_properties, message.body, (replyAp, replyBody) => {
+                    conn.anonSender.send({
+                        to                     : message.reply_to,
+                        correlation_id         : message.correlation_id,
+                        application_properties : replyAp,
+                        body                   : replyBody,
+                    });
+                });
             }
         }
     });
@@ -107,6 +119,7 @@ exports.OpenConnection = function(logName, host='localhost', port='5672', transp
 
     conn.replyTo = undefined;
     conn.replyReceiver = conn.amqpConnection.open_receiver({source:{dynamic:true}});
+    conn.anonSender    = conn.amqpConnection.open_sender();
     conn.amqpConnection.skxConn = conn;
 
     return conn;

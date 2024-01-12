@@ -27,19 +27,21 @@ const rhea        = require('rhea');
 const kube        = require('./common/kube.js');
 const amqp        = require('./common/amqp.js');
 const apiserver   = require('./sc-apiserver.js');
-const apiclient   = require('./apiclient.js');
+const siteSync    = require('./site-sync.js');
 const router      = require('./common/router.js');
 const links       = require('./common/links.js');
 const ingress     = require('./ingress.js');
 const Log         = require('./common/log.js').Log;
 const Flush       = require('./common/log.js').Flush;
 
-const VERSION     = '0.1.1';
-const STANDALONE  = (process.env.SKX_STANDALONE || 'NO') == 'YES';
-
-const API_ADDRESS = 'skx/controller/site';
+const VERSION       = '0.1.1';
+const STANDALONE    = (process.env.SKX_STANDALONE || 'NO') == 'YES';
+const BACKBONE_MODE = (process.env.SKX_BACKBONE || 'NO') == 'YES';
+const SITE_ID       = process.env.SKUPPERX_SITE_ID || 'unknown';
 
 Log(`Skupper-X Site controller version ${VERSION}`);
+Log(`Site-Id    : ${SITE_ID}`);
+Log(`Backbone   : ${BACKBONE_MODE}`);
 Log(`Standalone : ${STANDALONE}`);
 
 //
@@ -54,7 +56,7 @@ exports.Main = async function() {
         await links.Start(fsp);
         await ingress.Start();
         await apiserver.Start();
-        await apiclient.Start(conn);
+        await siteSync.Start(BACKBONE_MODE, SITE_ID, conn);
         Log("[Site controller initialization completed successfully]");
     } catch (reason) {
         Log(`Site controller initialization failed: ${reason.stack}`)

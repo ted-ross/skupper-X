@@ -62,3 +62,13 @@ exports.GetObjectReponseFailure = function(code, description) {
         statusDescription : description,
     };
 }
+
+exports.DispatchMessage = function(body, onHeartbeat, onSolicit, onGet) {
+    switch (body.op) {
+    case OP_HEARTBEAT         : onHeartbeat(body.site, body.hashset);  break;
+    case OP_SOLICIT_HEARTBEAT : onSolicit(body.site);                  break;
+    case OP_GET               : onGet(body.site, body.objectname);     break;
+    default:
+        throw Error(`Unknown op-code ${body.op}`);
+    }
+}

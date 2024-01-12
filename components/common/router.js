@@ -131,7 +131,7 @@ exports.DeleteListener = async function(name) {
     await exports.DeleteManagementEntity('io.skupper.router.listener', name, QUERY_TIMEOUT_SECONDS);
 }
 
-exports.NotifyApiReady = function(onApiReady) {
+exports.NotifyApiReady = async function(onApiReady) {
     if (ready) {
         onApiReady();
     } else {

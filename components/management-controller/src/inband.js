@@ -178,7 +178,7 @@ const createConnection = function(bbid, row) {
         cert: tls_cert,
     });
 
-    bb_connections[bbid].receiver   = bb_connections[bbid].conn.open_receiver('skx/controller/site');
+    bb_connections[bbid].receiver   = bb_connections[bbid].conn.open_receiver('skx/sync/mgmtcontroller');
     bb_connections[bbid].anonSender = bb_connections[bbid].conn.open_sender();
     bb_connections[bbid].receiver.bbid = bbid;
 }

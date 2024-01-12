@@ -22,6 +22,7 @@
 const kube   = require('./common/kube.js');
 const Log    = require('./common/log.js').Log;
 const router = require('./common/router.js');
+const sync   = require('./site-sync.js');
 
 const SERVICE_NAME = 'skx-router';
 const ROUTER_LABEL = 'skx-router';
