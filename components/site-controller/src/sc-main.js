@@ -22,14 +22,13 @@
 const k8s         = require('@kubernetes/client-node');
 const yaml        = require('yaml');
 const fs          = require('fs');
-const fsp         = require('fs/promises');
 const rhea        = require('rhea');
 const kube        = require('./common/kube.js');
 const amqp        = require('./common/amqp.js');
 const apiserver   = require('./sc-apiserver.js');
 const siteSync    = require('./site-sync.js');
 const router      = require('./common/router.js');
-const links       = require('./common/links.js');
+const links       = require('./links.js');
 const ingress     = require('./ingress.js');
 const Log         = require('./common/log.js').Log;
 const Flush       = require('./common/log.js').Flush;
@@ -53,7 +52,7 @@ exports.Main = async function() {
         await amqp.Start(rhea);
         let conn = amqp.OpenConnection('LocalRouter');
         await router.Start(conn);
-        await links.Start(fsp);
+        await links.Start();
         await ingress.Start();
         await apiserver.Start();
         await siteSync.Start(BACKBONE_MODE, SITE_ID, conn);

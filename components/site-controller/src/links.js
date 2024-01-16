@@ -23,10 +23,15 @@
  * This module is responsible for synchronizing secrets to router ssl-profiles and the 'skupperx-[incom,outgo]ing' config maps to connectors and listeners.
  */
 
-const Log    = require('./log.js').Log;
-const kube   = require('./kube.js');
-const router = require('./router.js');
-var   fs;   // require('fs/promises);
+const Log    = require('./common/log.js').Log;
+const kube   = require('./common/kube.js');
+const router = require('./common/router.js');
+var   fs     = require('fs/promises');
+
+const MANAGE_PORT = 45670;  // TODO - centralize these
+const PEER_PORT   = 55671;
+const CLAIM_PORT  = 45669;
+const MEMBER_PORT = 45671;
 
 const CERT_DIRECTORY = process.env.SKX_CERT_PATH || '/etc/skupper-router-certs/';
 
@@ -79,7 +84,7 @@ const sync_secrets = async function() {
     };
 }
 
-const sync_listeners = async function(router_listeners, config_listeners_json) {
+const sync_listeners = async function(router_listeners, config_listeners_in) {
     try {
         //
         // Build a map of the synchronizable listeners.  Exclude the builtin listeners.
@@ -94,23 +99,58 @@ const sync_listeners = async function(router_listeners, config_listeners_json) {
         //
         // Decode the JSON-strings in the config
         //
-        var config_listeners = {};
-        for (const [key, value] of Object.entries(config_listeners_json)) {
-            config_listeners[key] = JSON.parse(value);
+        var config_listeners = [];
+        for (const [key, value] of Object.entries(config_listeners_in)) {
+            if (value == 'true') {
+                config_listeners.push(key);
+            }
         }
 
-        for (const [_lname, cl] of Object.entries(config_listeners)) {
-            const lname = 'listener_' + _lname;
+        for (const key of config_listeners) {
+            const lname = 'listener_' + key;
             if (lname in listener_map) {
                 delete listener_map[lname];
             } else {
                 Log(`Creating router listener ${lname}`);
+                var host = '::';
+                var port;
+                var role;
+                var profile;
+                switch (key) {
+                case 'manage':
+                    port    = MANAGE_PORT;
+                    role    = 'normal';
+                    profile = 'manage-server';
+                    break;
+
+                case 'peer':
+                    port    = PEER_PORT;
+                    role    = 'inter-router';
+                    profile = 'peer-server';
+                    break;
+
+                case 'claim':
+                    port    = CLAIM_PORT;
+                    role    = 'normal';
+                    profile = 'claim-server';
+                    break;
+
+                case 'member':
+                    port    = MEMBER_PORT;
+                    role    = 'edge';
+                    profile = 'member-server';
+                    break;
+
+                default:
+                    throw(Error(`Unknown listener type ${_lnam}`));
+                }
+
                 await router.CreateListener(lname, {
-                    host:              cl.host,
-                    port:              cl.port,
-                    role:              cl.role,
-                    cost:              cl.cost,
-                    sslProfile:        cl.profile,
+                    host:              host,
+                    port:              port,
+                    role:              role,
+                    cost:              1,
+                    sslProfile:        profile,
                     saslMechanisms:    'EXTERNAL',
                     stripAnnotations:  'no',
                     authenticatePeer:  true,
@@ -128,7 +168,7 @@ const sync_listeners = async function(router_listeners, config_listeners_json) {
             await router.DeleteListener(lname);
         }
     } catch (err) {
-        Log(`Exception in sync_listeners: ${err.message}`);
+        Log(`Exception in sync_listeners: ${err.stack}`);
     }
 }
 
@@ -178,12 +218,12 @@ const sync_connectors = async function(router_connectors, config_connectors_json
 }
 
 const sync_config_map_incoming = async function() {
+    Log('sync_config_map_incoming');
     var configmap;
     try {
         configmap = await kube.LoadConfigmap('skupperx-incoming');
-    } catch(err) {
-        Log(`Failed to load skupperx-incoming config-map, no links created`);
-        return;
+    } catch (error) {
+        configmap = {data: {}};
     }
 
     let actual_listeners  = await router.ListListeners();
@@ -230,10 +270,9 @@ const start_sync_loop = async function () {
     kube.WatchConfigMaps(on_configmap_watch);
 }
 
-exports.Start = async function (_fs) {
+exports.Start = async function () {
     Log('[Links module started]');
-    fs = _fs;
-    router.NotifyMgmtReady(() => {
+    router.NotifyApiReady(() => {
         try {
             start_sync_loop();
         } catch(err) {

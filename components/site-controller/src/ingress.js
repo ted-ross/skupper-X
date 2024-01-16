@@ -23,9 +23,18 @@ const kube   = require('./common/kube.js');
 const Log    = require('./common/log.js').Log;
 const router = require('./common/router.js');
 const sync   = require('./site-sync.js');
+const crypto = require('crypto');
 
 const SERVICE_NAME = 'skx-router';
 const ROUTER_LABEL = 'skx-router';
+
+const INCOMING_CONFIG_MAP_NAME = 'skupperx-incoming';
+const OUTGOING_CONFIG_MAP_NAME = 'skupperx-outgoing';
+
+const MANAGE_PORT = 45670;
+const PEER_PORT   = 55671;
+const CLAIM_PORT  = 45669;
+const MEMBER_PORT = 45671;
 
 var ingress_bundle = {
     ready:     false,
@@ -46,27 +55,27 @@ const backbone_service = function() {
             ports: [
                 {
                     name:       'peer',
-                    port:       55671,
+                    port:       PEER_PORT,
                     protocol:   'TCP',
-                    targetPort: 55671,
+                    targetPort: PEER_PORT,
                 },
                 {
                     name:       'member',
-                    port:       45671,
+                    port:       MEMBER_PORT,
                     protocol:   'TCP',
-                    targetPort: 45671,
+                    targetPort: MEMBER_PORT,
                 },
                 {
                     name:       'claim',
-                    port:       45669,
+                    port:       CLAIM_PORT,
                     protocol:   'TCP',
-                    targetPort: 45669,
+                    targetPort: CLAIM_PORT,
                 },
                 {
                     name:       'manage',
-                    port:       45670,
+                    port:       MANAGE_PORT,
                     protocol:   'TCP',
-                    targetPort: 45670,
+                    targetPort: MANAGE_PORT,
                 },
             ],
             selector: {
@@ -104,6 +113,7 @@ const backbone_route = function(name, socket) {
 const sync_kube_service = async function() {
     let services = await kube.GetServices();
     let found    = false;
+    let desired  = true;
     services.forEach(service => {
         if (service.metadata.name == SERVICE_NAME) {
             if (!service.metadata.annotations || service.metadata.annotations['skupper.io/skx-controlled'] != 'true') {
@@ -113,15 +123,26 @@ const sync_kube_service = async function() {
         }
     });
 
-    if (!found) {
+    try {
+        const unused = await kube.LoadConfigmap(INCOMING_CONFIG_MAP_NAME);
+    } catch (error) {
+        desired = false;
+    }
+
+    if (desired && !found) {
         let service = backbone_service();
         await kube.ApplyObject(service);
+    }
+
+    if (!desired && found) {
+        await kube.DeleteService(SERVICE_NAME);
     }
 }
 
 const sync_route = async function(name, socket) {
-    let routes = await kube.GetRoutes();
-    let found  = false;
+    let routes  = await kube.GetRoutes();
+    let found   = false;
+    let desired = true;
     routes.forEach(route => {
         if (route.metadata.name == name) {
             if (!route.metadata.annotations || route.metadata.annotations['skupper.io/skx-controlled'] != 'true') {
@@ -131,9 +152,22 @@ const sync_route = async function(name, socket) {
         }
     });
 
-    if (!found) {
+    try {
+        const incoming = await kube.LoadConfigmap(INCOMING_CONFIG_MAP_NAME);
+        if (!incoming.data[socket]) {
+            desired = false;
+        }
+    } catch (error) {
+        desired = false;
+    }
+
+    if (desired && !found) {
         let route = backbone_route(name, socket);
         await kube.ApplyObject(route);
+    }
+
+    if (!desired && found) {
+        await kube.DeleteRoute(name);
     }
 }
 
@@ -165,14 +199,49 @@ const sync_ingress = async function() {
     await sync_route('skx-member', 'member');
     await sync_route('skx-claim',  'claim');
     await sync_route('skx-manage', 'manage');
-    setTimeout(resolve_ingress, 1000);
+    //setTimeout(resolve_ingress, 1000);
 }
 
-exports.GetIngressBundle = function() {
-    return ingress_bundle;
+const ingressHash = function(data) {
+    if (data == {}) {
+        return null;
+    }
+
+    let text = data.host + data.port.toString();
+    return crypto.createHash('sha1').update(text).digest('hex');
+}
+
+exports.GetInitialConfig = async function() {
+    let result = {
+        manage : {hash: null, data: {}},
+        peer   : {hash: null, data: {}},
+        claim  : {hash: null, data: {}},
+        member : {hash: null, data: {}},
+    };
+    const routeList = await kube.GetRoutes();
+    for (const route of routeList) {
+        for (const [key, value] of Object.entries(result)) {
+            if (route.metadata.name == 'skx-' + key) {
+                result[key].data = {host: route.spec.host, port: 443};
+                result[key].hash = ingressHash(result[key].data);
+            }
+        }
+    }
+    return result;
+}
+
+const onConfigMapWatch = function(type, apiObj) {
+    if (apiObj.metadata.name == INCOMING_CONFIG_MAP_NAME) {
+        sync_ingress();
+    }
+}
+
+const onSecretWatch = function(type, apiObj) {
 }
 
 exports.Start = async function() {
     Log('[Ingress module started]');
-    await sync_ingress();
+    kube.WatchConfigMaps(onConfigMapWatch);
+    kube.WatchSecrets(onSecretWatch);
+    //await sync_ingress();
 }

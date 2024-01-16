@@ -360,7 +360,7 @@ exports.SecretYaml = function(certificate, profile_name) {
         kind: 'Secret',
         type: 'kubernetes.io/tls',
         metadata: {
-            name: 'skupperx-' + profile_name.replaceAll('_', '-'),
+            name: 'skupperx-' + profile_name,
             annotations: {
                 'skupper.io/skx-inject' : profile_name,
             },

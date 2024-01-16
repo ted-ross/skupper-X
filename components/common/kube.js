@@ -175,6 +175,16 @@ exports.GetServices = async function() {
     return list.body.items;
 }
 
+exports.LoadService = async function(name) {
+    let service = await v1Api.readNamespacedService(name, namespace);
+    return service.body;
+}
+
+exports.DeleteService = async function(name) {
+    Log(`Kube - Deleting service ${name}`);
+    await v1Api.deleteNamespacedService(name, namespace);
+}
+
 exports.GetRoutes = async function() {
     let list = await customApi.listNamespacedCustomObject(
         'route.openshift.io',
@@ -183,6 +193,17 @@ exports.GetRoutes = async function() {
         'routes'
     );
     return list.body.items;
+}
+
+exports.DeleteRoute = async function(name) {
+    Log(`Kube - Deleting route ${name}`);
+    await customApi.deleteNamespacedCustomObject(
+        'route.openshift.io',
+        'v1',
+        namespace,
+        'routes',
+        name
+    );
 }
 
 exports.LoadDeployment = async function(name) {

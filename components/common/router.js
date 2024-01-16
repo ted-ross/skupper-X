@@ -88,7 +88,7 @@ exports.DeleteManagementEntity = async function(entityType, name, timeout) {
 
     const [replyAp, replyBody] = await amqp.Request(mgmtSender, undefined, requestAp, timeout);
 
-    if (replyAp.statusCode == 201) {
+    if (replyAp.statusCode == 204) {
         return (replyBody);
     }
 

@@ -293,7 +293,7 @@ const fetchBackboneSiteKube = async function (bsid, res) {
             text += backbone.RoleBindingYaml();
             text += backbone.ConfigMapYaml();
             text += backbone.DeploymentYaml(bsid);
-            text += backbone.SecretYaml(secret, 'backbone-client');
+            text += backbone.SecretYaml(secret, 'site-client');
 
             const outgoing = await getBackboneConnectors_TX(client, bsid);
             text += "---\n" + link_config_map_yaml('skupperx-outgoing', outgoing);
@@ -324,10 +324,10 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
             let text = '';
             let incoming = {};
             const worklist = [
-                {ap_ref: site.peeraccess,       profile: 'peer_access',   port: '55671', role: 'inter-router'},
-                {ap_ref: site.memberaccess,     profile: 'member_access', port: '45671', role: 'edge'},
-                {ap_ref: site.claimaccess,      profile: 'member_claim',  port: '45669', role: 'normal'},
-                {ap_ref: site.managementaccess, profile: 'manage_access', port: '45670', role: 'normal'},
+                {ap_ref: site.peeraccess,       profile: 'peer-server',   port: '55671', role: 'inter-router'},
+                {ap_ref: site.memberaccess,     profile: 'member-server', port: '45671', role: 'edge'},
+                {ap_ref: site.claimaccess,      profile: 'claim-server',  port: '45669', role: 'normal'},
+                {ap_ref: site.managementaccess, profile: 'manage-server', port: '45670', role: 'normal'},
             ]
 
             for (const work of worklist) {
@@ -379,7 +379,7 @@ const getBackboneConnectors_TX = async function (client, bsid) {
             port: connection.port,
             role: 'inter-router',
             cost: connection.cost.toString(),
-            profile: 'backbone-client',
+            profile: 'site-client',
         });
     }
     return outgoing;

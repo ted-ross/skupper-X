@@ -20,7 +20,7 @@
 "use strict";
 
 const Log      = require('./common/log.js').Log;
-const amqp     = require('./common/ampq.js');
+const amqp     = require('./common/amqp.js');
 const kube     = require('./common/kube.js');
 const ingress  = require('./ingress.js');
 const protocol = require('./common/protocol.js');
@@ -38,23 +38,28 @@ var apiReceiver;
 var heartbeatTimer;
 
 var localData = {
-    'ingressurl/mgmt'   : {hash : null, data: {}},
-    'ingressurl/peer'   : {hash : null, data: {}},
-    'ingressurl/claim'  : {hash : null, data: {}},
-    'ingressurl/member' : {hash : null, data: {}},
+    'ingress/manage' : {hash: null, data: {}},
+    'ingress/peer'   : {hash: null, data: {}},
+    'ingress/claim'  : {hash: null, data: {}},
+    'ingress/member' : {hash: null, data: {}},
 };
 
 var backboneHashSet = {
-    'tls/site-client'   : {hash: null, kind: 'secret',    objname: 'skupperx-site-client'},
-    'tls/mgmt-server'   : {hash: null, kind: 'secret',    objname: 'skupperx-mgmt-server'},
-    'tls/peer-server'   : {hash: null, kind: 'secret',    objname: 'skupperx-peer-server'},
-    'tls/claim-server'  : {hash: null, kind: 'secret',    objname: 'skupperx-claim-server'},
-    'tls/member-server' : {hash: null, kind: 'secret',    objname: 'skupperx-member-server'},
-    'ingress/mgmt'      : {hash: null, kind: 'configmap', objname: 'skupperx-ingress-mgmt'},
-    'ingress/peer'      : {hash: null, kind: 'configmap', objname: 'skupperx-ingress-peer'},
-    'ingress/claim'     : {hash: null, kind: 'configmap', objname: 'skupperx-ingress-claim'},
-    'ingress/member'    : {hash: null, kind: 'configmap', objname: 'skupperx-ingress-member'},
-    'links/outgoing'    : {hash: null, kind: 'configmap', objname: 'skupperx-links-outgoing'},
+    'tls/site-client'   : {hash: null, kind: 'Secret',    objname: 'skupperx-site-client'},
+    'tls/manage-server' : {hash: null, kind: 'Secret',    objname: 'skupperx-manage-server'},
+    'tls/peer-server'   : {hash: null, kind: 'Secret',    objname: 'skupperx-peer-server'},
+    'tls/claim-server'  : {hash: null, kind: 'Secret',    objname: 'skupperx-claim-server'},
+    'tls/member-server' : {hash: null, kind: 'Secret',    objname: 'skupperx-member-server'},
+    'links/incoming'    : {hash: null, kind: 'ConfigMap', objname: 'skupperx-links-incoming'},
+    'links/outgoing'    : {hash: null, kind: 'ConfigMap', objname: 'skupperx-links-outgoing'},
+};
+
+const sslProfileNames = {
+    'tls/site-client'   : 'site-client',
+    'tls/manage-server' : 'manage-server',
+    'tls/peer-server'   : 'peer-server',
+    'tls/claim-server'  : 'claim-server',
+    'tls/member-server' : 'member-server',
 };
 
 
@@ -70,19 +75,39 @@ const sendHeartbeat = function() {
 const deleteObject = async function(key) {
     const record = backboneHashSet[key];
     switch (record.kind) {
-    case 'secret'    : await kube.DeleteSecret(record.objname);     break;
-    case 'configmap' : await kube.DeleteConfigmap(record.objname);  break;
+    case 'Secret'    : await kube.DeleteSecret(record.objname);     break;
+    case 'ConfigMap' : await kube.DeleteConfigmap(record.objname);  break;
     }
 }
 
-const updateObject = async function(objectname, data) {
+const updateObject = async function(key, data) {
+    try {
+        let obj = {
+            apiVersion : 'v1',
+            kind       : backboneHashSet[key].kind,
+            metadata   : data.metadata,
+            data       : data.data,
+        };
+
+        if (obj.kind == 'Secret') {
+            obj.type = 'kubernetes.io/tls';
+            if (!obj.metadata.annotations) {
+                obj.metadata.annotations = {};
+            }
+            obj.metadata.annotations['skupper.io/skx-inject'] = sslProfileNames[key];
+        }
+
+        await kube.ApplyObject(obj);
+    } catch (error) {
+        Log(`Exception in updateObject: ${error.message}`);
+    }
 }
 
 const checkControllerHashset = async function(hashSet) {
     let updateKeys = [];
     let deleteKeys = [];
     for (const [key, value] of Object.entries(hashSet)) {
-        if (value.hash != backboneHashSet[key]) {
+        if (value.hash != backboneHashSet[key].hash) {
             if (value.hash == null) {
                 deleteKeys.push(key);
             } else {
@@ -144,6 +169,36 @@ const onMessage = async function(unused, application_properties, body, onReply) 
         });
 }
 
+const initializeHashState = async function() {
+    //
+    // Scan the local versions of the backbone state to pre-populate the hash structure.
+    //
+    for (const [key, value] of Object.entries(backboneHashSet)) {
+        try {
+            if (value.kind == 'Secret') {
+                const secret = await kube.LoadSecret(value.objname);
+                backboneHashSet[key].hash = secret.metadata.annotations['skx-hash'];
+            } else if (value.kind == 'ConfigMap') {
+                const configmap = await kube.LoadConfigmap(valud.objname);
+                backboneHashSet[key].hash = configmap.metadata.annotations['skx-hash'];
+            }
+        } catch (error) {
+            // Ignore exception
+            Log(`No local state found for: ${key}`);
+        }
+    }
+}
+
+const initializeLocalData = async function() {
+    //
+    // Call on the ingress module to provide the local hash and data for our existing ingresses.
+    //
+    const initialConfig = await ingress.GetInitialConfig();
+    for (const [key, value] of Object.entries(initialConfig)) {
+        localData['ingress/' + key] = value;
+    }
+}
+
 exports.UpdateIngress = function(key, _hash, _data) {
     localData[key].hash = _hash;
     localData[key].data = _data;
@@ -155,6 +210,8 @@ exports.Start = async function (mode, id, connection) {
     Log('[Site-Sync module started]');
     backboneMode = mode;
     siteId       = id;
+    await initializeHashState();
+    await initializeLocalData();
     apiSender    = amqp.OpenSender('Site-Sync', connection, API_CONTROLLER_ADDRESS, onSendable);
     apiReceiver  = amqp.OpenReceiver(connection, API_MY_ADDRESS_PREFIX + siteId, onMessage);
 }

@@ -32,12 +32,12 @@ const rhea_handlers = function() {
     container.options.enable_sasl_external = true;
 
     container.on('connection_open', function(context) {
-        const conn = context.connection.amqpConnection;
+        const conn = context.connection.skxConn;
         Log(`AMQP Connection '${conn.logName}' is open`);
     });
 
     container.on('receiver_open', function(context) {
-        let conn = context.connection.amqpConnection;
+        let conn = context.connection.skxConn;
         if (context.receiver == conn.replyReceiver) {
             const firstTime = conn.replyTo == undefined;
             conn.replyTo = context.receiver.source.address;
@@ -55,7 +55,7 @@ const rhea_handlers = function() {
     });
 
     container.on('sendable', function(context) {
-        let conn = context.connection.amqpConnection;
+        let conn = context.connection.skxConn;
         conn.senders.forEach(sender => {
             if (sender.amqpSender == context.sender) {
                 if (!sender.notified) {
@@ -71,7 +71,7 @@ const rhea_handlers = function() {
     });
 
     container.on('message', function (context) {
-        let conn    = context.connection.amqpConnection;
+        let conn    = context.connection.skxConn;
         let message = context.message;
         let cid     = message.correlation_id;
         var handler;
@@ -86,7 +86,7 @@ const rhea_handlers = function() {
                 Log('Received message on reply receiver with no correlation ID');
             }
         } else {
-            const receiver = context.receiver.amqpReceiver;
+            const receiver = context.receiver.skxReceiver;
             if (receiver) {
                 receiver.onMessage(receiver.context, message.application_properties, message.body, (replyAp, replyBody) => {
                     conn.anonSender.send({
@@ -102,7 +102,7 @@ const rhea_handlers = function() {
 }
 
 exports.OpenConnection = function(logName, host='localhost', port='5672', transport=undefined, ca=undefined, cert=undefined, key=undefined) {
-    conn = {
+    let conn = {
         amqpConnection : container.connect({
             host      : host,
             hostname  : host,
@@ -130,7 +130,8 @@ exports.CloseConnection = function(conn) {
 }
 
 exports.OpenSender = function(logName, conn, address, onSendable, context=undefined) {
-    sender = {
+    let sender = {
+        conn       : conn,
         amqpSender : conn.amqpConnection.open_sender(address),
         onSendable : onSendable,
         context    : context,
@@ -146,13 +147,13 @@ exports.OpenSender = function(logName, conn, address, onSendable, context=undefi
 }
 
 exports.OpenReceiver = function(conn, address, onMessage, context=undefined) {
-    receiver = {
+    let receiver = {
         amqpReceiver : conn.amqpConnection.open_receiver(address),
         onMessage    : onMessage,
         context      : context,
     };
 
-    receiver.amqpReceiver = receiver;
+    receiver.skxReceiver = receiver;
     conn.receivers.push(receiver);
 
     return receiver;
@@ -177,7 +178,7 @@ exports.Request = function(sender, messageBody, ap={}, timeoutSeconds=DEFAULT_TI
         };
         sender.amqpSender.send({
             message_id             : msgId,
-            reply_to               : replyTo,
+            reply_to               : sender.conn.replyTo,
             correlation_id         : cid,
             application_properties : ap,
             body                   : messageBody,

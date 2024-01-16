@@ -8,6 +8,7 @@
  - ~~Define the backbone-router-to-management-controller protocol and APIs~~
  - Implement the link APIs inband to the management controller
  - Demonstrate automatic backbone site bootstrap
+ - On initial creation for backbone sites, only include manage and peer incoming links
  - Review the inband APIs to allow for full link updates at run time (add/remove links, rotate certificates)
  - Review the API for coherence in the URL paths
  - Review the module structure
