@@ -159,13 +159,17 @@ exports.OpenReceiver = function(conn, address, onMessage, context=undefined) {
     return receiver;
 }
 
-exports.SendMessage = function(sender, messageBody, ap={}) {
+exports.SendMessage = function(sender, messageBody, ap={}, destination=null) {
     const messageId = nextMessageId;
     nextMessageId++;
-    sender.amqpSender.send({message_id: messageId, body: messageBody, application_properties: ap});
+    let message = {message_id: messageId, body: messageBody, application_properties: ap};
+    if (destination) {
+        message.to = destination;        
+    }
+    sender.amqpSender.send(message);
 }
 
-exports.Request = function(sender, messageBody, ap={}, timeoutSeconds=DEFAULT_TIMEOUT_SECONDS) {
+exports.Request = function(sender, messageBody, ap={}, timeoutSeconds=DEFAULT_TIMEOUT_SECONDS, destination=null) {
     return new Promise((resolve, reject) => {
         let timer   = setTimeout(() => reject('AMQP request/response timeout'), timeoutSeconds * 1000);
         const cid   = nextCid;
@@ -176,13 +180,17 @@ exports.Request = function(sender, messageBody, ap={}, timeoutSeconds=DEFAULT_TI
             clearTimeout(timer);
             resolve([response.application_properties, response.body]);
         };
-        sender.amqpSender.send({
+        let message = {
             message_id             : msgId,
             reply_to               : sender.conn.replyTo,
             correlation_id         : cid,
             application_properties : ap,
             body                   : messageBody,
-        });
+        };
+        if (destination) {
+            message.to = destination;
+        }
+        sender.amqpSender.send(message);
     });
 }
 

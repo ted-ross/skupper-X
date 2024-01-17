@@ -19,6 +19,10 @@
 
 "use strict";
 
+//
+// The responsibility of this module is to maintain an AMQP connection to each backbone network.
+//
+
 const kube       = require('./common/kube.js');
 const Log        = require('./common/log.js').Log;
 const db         = require('./db.js');
@@ -26,7 +30,6 @@ const siteConfig = require('./bb-site-config.js');
 const api        = require('./mc-apiserver.js');
 
 var controller_name;
-var container;
 var tls_ca;
 var tls_cert;
 var tls_key;
@@ -123,41 +126,6 @@ const onBackbonePostIngress = async function(message) {
             count += await api.AddHostToAccessPoint(bsid, key, obj.host, obj.port);
         }
     }
-}
-
-const onBackboneGetConfig = async function(message) {
-}
-
-const rheaHandlers = function() {
-    container.options.enable_sasl_external = true;
-
-    container.on('connection_open', function(context) {
-        Log('Connection to the management access point is open');
-    });
-
-    container.on('receiver_open', function(context) {
-    });
-
-    container.on('sendable', function(context) {
-    });
-
-    container.on('message', function (context) {
-        const message = context.message;
-        const body = message.body;
-        if (body.op && body.site) {
-            try {
-                Log(`Inband message '${body.op}' from site '${body.site}'`);
-                switch (body.op) {
-                    case 'BB_HEARTBEAT'    : onBackboneHeartbeat(message);    break;
-                    case 'BB_QUERY_HASH'   : onBackboneHashRequest(message);  break;
-                    case 'BB_POST_INGRESS' : onBackbonePostIngress(message);  break;
-                    case 'BB_GET_CONFIG'   : onBackboneGetConfig(message);    break;
-                }
-            } catch (err) {
-                Log(`Exception in message handling for op ${body.op}: ${err.message}`);
-            }
-        }
-    });
 }
 
 const createConnection = function(bbid, row) {
@@ -304,10 +272,8 @@ const resolveControllerRecord = async function() {
     }
 }
 
-exports.Start = async function(name, rhea) {
+exports.Start = async function(name) {
     Log(`[In-band communication starting for controller: ${name}]`);
     controller_name = name;
-    container       = rhea;
-    rheaHandlers();
     await resolveControllerRecord();
 }

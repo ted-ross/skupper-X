@@ -52,7 +52,7 @@ exports.Main = async function() {
         await amqp.Start(rhea);
         let conn = amqp.OpenConnection('LocalRouter');
         await router.Start(conn);
-        await links.Start();
+        await links.Start(BACKBONE_MODE);
         await ingress.Start();
         await apiserver.Start();
         await siteSync.Start(BACKBONE_MODE, SITE_ID, conn);

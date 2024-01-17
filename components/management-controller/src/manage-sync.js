@@ -31,12 +31,6 @@ const API_MY_ADDRESS_PREFIX  = 'skx/sync/site/';
 const REQUEST_TIMEOUT_SECONDS   = 10;
 const HEARTBEAT_PERIOD_SECONDS  = 60;
 
-var backboneMode;
-var siteId;
-var apiSender;
-var apiReceiver;
-var heartbeatTimer;
-
 var localData = {
     'ingress/manage' : {hash: null, data: {}},
     'ingress/peer'   : {hash: null, data: {}},
@@ -150,8 +144,7 @@ const getObject = async function(objectname) {
 }
 
 const onSendable = function(unused) {
-    Log('Beginning site-sync reconciliation');
-    sendHeartbeat();
+    // This function intentionally left blank
 }
 
 const onMessage = async function(unused, application_properties, body, onReply) {
@@ -169,51 +162,8 @@ const onMessage = async function(unused, application_properties, body, onReply) 
         });
 }
 
-const initializeHashState = async function() {
-    //
-    // Scan the local versions of the backbone state to pre-populate the hash structure.
-    //
-    for (const [key, value] of Object.entries(backboneHashSet)) {
-        try {
-            if (value.kind == 'Secret') {
-                const secret = await kube.LoadSecret(value.objname);
-                backboneHashSet[key].hash = secret.metadata.annotations['skx-hash'];
-            } else if (value.kind == 'ConfigMap') {
-                const configmap = await kube.LoadConfigmap(valud.objname);
-                backboneHashSet[key].hash = configmap.metadata.annotations['skx-hash'];
-            }
-        } catch (error) {
-            // Ignore exception
-            Log(`No local state found for: ${key}`);
-        }
-    }
-}
-
-const initializeLocalData = async function() {
-    //
-    // Call on the ingress module to provide the local hash and data for our existing ingresses.
-    //
-    const initialConfig = await ingress.GetInitialConfig();
-    for (const [key, value] of Object.entries(initialConfig)) {
-        localData['ingress/' + key] = value;
-    }
-}
-
-exports.UpdateIngress = function(key, _hash, _data) {
-    if (_hash != localData[key].hash) {
-        localData[key].hash = _hash;
-        localData[key].data = _data;
-        clearTimeout(heartbeatTimer);
-        sendHeartbeat();
-    }
-}
-
-exports.Start = async function (mode, id, connection) {
-    Log('[Site-Sync module started]');
-    backboneMode = mode;
-    siteId       = id;
-    await initializeHashState();
-    await initializeLocalData();
-    apiSender    = amqp.OpenSender('Site-Sync', connection, API_CONTROLLER_ADDRESS, onSendable);
-    apiReceiver  = amqp.OpenReceiver(connection, API_MY_ADDRESS_PREFIX + siteId, onMessage);
+exports.Start = async function (connection) {
+    Log('[Manage-Sync module started]');
+    apiSender    = amqp.OpenSender('AnonymousSender', connection, undefined, onSendable);
+    apiReceiver  = amqp.OpenReceiver(connection, API_CONTROLLER_ADDRESS, onMessage);
 }

@@ -32,6 +32,7 @@ var customApi;
 var secretWatch;
 var certificateWatch;
 var configMapWatch;
+var routeWatch;
 var namespace = 'default';
 
 exports.Namespace = function() {
@@ -58,6 +59,7 @@ exports.Start = async function (k8s_mod, fs_mod, yaml_mod, in_cluster) {
     secretWatch      = new k8s.Watch(kc);
     certificateWatch = new k8s.Watch(kc);
     configMapWatch   = new k8s.Watch(kc);
+    routeWatch       = new k8s.Watch(kc);
 
     try {
         if (in_cluster) {
@@ -220,52 +222,113 @@ exports.GetPods = async function() {
     return pods.body.items;
 }
 
-exports.WatchSecrets = function(callback) {
+var secretWatches = [];
+
+const startWatchSecrets = function() {
     secretWatch.watch(
         `/api/v1/namespaces/${namespace}/secrets`,
         {},
         (type, apiObj, watchObj) => {
-            callback(type, apiObj);
+            for (const callback of secretWatches) {
+                callback(type, apiObj);
+            }
         },
         (err) => {
             if (err) {
                 Log(`Secret Watch error: ${err}`);
             }
-            exports.WatchSecrets(callback);
+            startWatchSecrets();
         }
     )
 }
 
-exports.WatchConfigMaps = function(callback) {
+exports.WatchSecrets = function(callback) {
+    secretWatches.push(callback);
+    if (secretWatches.length == 1) {
+        startWatchSecrets();
+    }
+}
+
+
+var configMapWatches = [];
+
+const startWatchConfigMaps = function() {
     configMapWatch.watch(
         `/api/v1/namespaces/${namespace}/configmaps`,
         {},
         (type, apiObj, watchObj) => {
-            callback(type, apiObj);
+            for (const callback of configMapWatches) {
+                callback(type, apiObj);
+            }
         },
         (err) => {
             if (err) {
                 Log(`Configmap Watch error: ${err}`);
             }
-            exports.WatchConfigMaps(callback);
+            exports.WatchConfigMaps();
         }
     )
 }
 
-exports.WatchCertificates = function(callback) {
+exports.WatchConfigMaps = function(callback) {
+    configMapWatches.push(callback);
+    if (configMapWatches.length == 1) {
+        startWatchConfigMaps();
+    }
+}
+
+var certificateWatches = [];
+
+const startWatchCertificates = function() {
     certificateWatch.watch(
         `/apis/cert-manager.io/v1/namespaces/${namespace}/certificates`,
         {},
         (type, apiObj, watchObj) => {
-            callback(type, apiObj);
+            for (const callback of certificateWatches) {
+                callback(type, apiObj);
+            }
         },
         (err) => {
             if (err) {
                 Log(`Certificate Watch error: ${err}`);
             }
-            exports.WatchCertificates(callback);
+            exports.WatchCertificates();
         }
     )
+}
+
+exports.WatchCertificates = function(callback) {
+    certificateWatches.push(callback);
+    if (certificateWatches.length == 1) {
+        startWatchCertificates();
+    }
+}
+
+var routeWatches = [];
+
+const startWatchRoutes = function() {
+    routeWatch.watch(
+        `/apis/route.openshift.io/v1/namespaces/${namespace}/routes`,
+        {},
+        (type, apiObj, watchObj) => {
+            for (callback of routeWatches) {
+                callback(type, apiObj);
+            }
+        },
+        (err) => {
+            if (err) {
+                Log(`Route Watch error: ${err}`);
+            }
+            exports.WatchRoutes();
+        }
+    )
+}
+
+exports.WatchRoutes = function(callback) {
+    routeWatches.push(callback);
+    if (routeWatches.length == 1) {
+        startWatchRoutes();
+    }
 }
 
 exports.ApplyObject = function(obj) {

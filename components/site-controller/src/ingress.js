@@ -21,7 +21,6 @@
 
 const kube   = require('./common/kube.js');
 const Log    = require('./common/log.js').Log;
-const router = require('./common/router.js');
 const sync   = require('./site-sync.js');
 const crypto = require('crypto');
 
@@ -36,10 +35,11 @@ const PEER_PORT   = 55671;
 const CLAIM_PORT  = 45669;
 const MEMBER_PORT = 45671;
 
-var ingress_bundle = {
-    ready:     false,
-    siteId:    process.env.SKUPPERX_SITE_ID,
-    ingresses: {},
+var ingressState = {
+    manage : {hash: null, data: {}},
+    peer   : {hash: null, data: {}},
+    claim  : {hash: null, data: {}},
+    member : {hash: null, data: {}},
 };
 
 const backbone_service = function() {
@@ -171,35 +171,12 @@ const sync_route = async function(name, socket) {
     }
 }
 
-const resolve_ingress = async function() {
-    let routes = await kube.GetRoutes();
-
-    for (const route of routes) {
-        for (const name of ['skx-peer', 'skx-member', 'skx-claim', 'skx-manage']) {
-            if (route.metadata.name == name && route.spec.host) {
-                ingress_bundle.ingresses[name] = {
-                    host: route.spec.host,
-                    port: 443,
-                };
-            }
-        }
-    }
-
-    if (Object.keys(ingress_bundle.ingresses).length == 4) {
-        ingress_bundle.ready = true;
-        Log('Hosts for the ingress are resolved');
-    } else {
-        setTimeout(resolve_ingress, 1000);
-    }
-}
-
 const sync_ingress = async function() {
     await sync_kube_service();
     await sync_route('skx-peer',   'peer');
     await sync_route('skx-member', 'member');
     await sync_route('skx-claim',  'claim');
     await sync_route('skx-manage', 'manage');
-    //setTimeout(resolve_ingress, 1000);
 }
 
 const ingressHash = function(data) {
@@ -212,22 +189,17 @@ const ingressHash = function(data) {
 }
 
 exports.GetInitialConfig = async function() {
-    let result = {
-        manage : {hash: null, data: {}},
-        peer   : {hash: null, data: {}},
-        claim  : {hash: null, data: {}},
-        member : {hash: null, data: {}},
-    };
     const routeList = await kube.GetRoutes();
     for (const route of routeList) {
-        for (const [key, value] of Object.entries(result)) {
-            if (route.metadata.name == 'skx-' + key) {
-                result[key].data = {host: route.spec.host, port: 443};
-                result[key].hash = ingressHash(result[key].data);
+        for (const [key, unused] of Object.entries(ingressState)) {
+            if (route.metadata.name == 'skx-' + key && route.spec.host) {
+                ingressState[key].data = {host: route.spec.host, port: 443};
+                ingressState[key].hash = ingressHash(ingressState[key].data);
             }
         }
     }
-    return result;
+
+    return ingressState;
 }
 
 const onConfigMapWatch = function(type, apiObj) {
@@ -236,12 +208,35 @@ const onConfigMapWatch = function(type, apiObj) {
     }
 }
 
-const onSecretWatch = function(type, apiObj) {
+const onRouteWatch = async function(type, apiObj) {
+    let routes = await kube.GetRoutes();
+
+    for (const route of routes) {
+        for (const key of ['peer', 'member', 'claim', 'manage']) {
+            if (route.metadata.name == 'skx-' + key && route.spec.host) {
+                const data = {host: route.spec.host, port: 443};
+                const hash = ingressHash(data);
+
+                if (hash != ingressState[key].hash) {
+                    ingressState[key].hash = hash;
+                    ingressState[key].data = data;
+                    sync.UpdateIngress(key, hash, data);
+                }
+            }
+        }
+    }
+
+    if (Object.keys(ingressState.ingresses).length == 4) {
+        ingressState.ready = true;
+        Log('Hosts for the ingress are resolved');
+    } else {
+        setTimeout(resolve_ingress, 1000);
+    }
 }
 
 exports.Start = async function() {
     Log('[Ingress module started]');
     kube.WatchConfigMaps(onConfigMapWatch);
-    kube.WatchSecrets(onSecretWatch);
-    //await sync_ingress();
+    kube.WatchRoutes(onRouteWatch);
+    await sync_ingress();
 }

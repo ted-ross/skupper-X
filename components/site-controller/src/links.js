@@ -35,6 +35,8 @@ const MEMBER_PORT = 45671;
 
 const CERT_DIRECTORY = process.env.SKX_CERT_PATH || '/etc/skupper-router-certs/';
 
+var backboneMode;
+
 const inject_profile = async function(name, secret) {
     let path = CERT_DIRECTORY + name + '/';
     let profile = {
@@ -195,9 +197,9 @@ const sync_connectors = async function(router_connectors, config_connectors_json
                 await router.CreateConnector('connector_' + cname, {
                     host:             cc.host,
                     port:             cc.port,
-                    role:             cc.role,
+                    role:             backboneMode ? 'inter-router' : 'edge',
                     cost:             cc.cost,
-                    sslProfile:       cc.profile,
+                    sslProfile:       'site-client',
                     saslMechanisms:   'EXTERNAL',
                     stripAnnotations: 'no',
                     verifyHostname:   true,
@@ -210,7 +212,7 @@ const sync_connectors = async function(router_connectors, config_connectors_json
         //
         for (const cname of Object.keys(connector_map)) {
             Log(`Deleting router connector ${cname}`);
-            await router.DeleteListener(cname);
+            await router.DeleteConnector(cname);
         }
     } catch (err) {
         Log(`Exception in sync_connectors: ${err.message}`);
@@ -218,7 +220,6 @@ const sync_connectors = async function(router_connectors, config_connectors_json
 }
 
 const sync_config_map_incoming = async function() {
-    Log('sync_config_map_incoming');
     var configmap;
     try {
         configmap = await kube.LoadConfigmap('skupperx-incoming');
@@ -270,8 +271,9 @@ const start_sync_loop = async function () {
     kube.WatchConfigMaps(on_configmap_watch);
 }
 
-exports.Start = async function () {
+exports.Start = async function (mode) {
     Log('[Links module started]');
+    backboneMode = mode;
     router.NotifyApiReady(() => {
         try {
             start_sync_loop();
