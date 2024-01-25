@@ -20,7 +20,7 @@
 "use strict";
 
 /*
- * This module is responsible for synchronizing secrets to router ssl-profiles and the 'skupperx-[incom,outgo]ing' config maps to connectors and listeners.
+ * This module is responsible for synchronizing secrets to router ssl-profiles and the 'skupperx-links-[incom,outgo]ing' config maps to connectors and listeners.
  */
 
 const Log    = require('./common/log.js').Log;
@@ -175,6 +175,9 @@ const sync_listeners = async function(router_listeners, config_listeners_in) {
 }
 
 const sync_connectors = async function(router_connectors, config_connectors_json) {
+    if (!config_connectors_json) {
+        config_connectors_json = {};
+    }
     try {
         //
         // Build a map of the connectors.
@@ -222,7 +225,7 @@ const sync_connectors = async function(router_connectors, config_connectors_json
 const sync_config_map_incoming = async function() {
     var configmap;
     try {
-        configmap = await kube.LoadConfigmap('skupperx-incoming');
+        configmap = await kube.LoadConfigmap('skupperx-links-incoming');
     } catch (error) {
         configmap = {data: {}};
     }
@@ -236,9 +239,9 @@ const sync_config_map_incoming = async function() {
 const sync_config_map_outgoing = async function() {
     var configmap;
     try {
-        configmap = await kube.LoadConfigmap('skupperx-outgoing');
+        configmap = await kube.LoadConfigmap('skupperx-links-outgoing');
     } catch(err) {
-        Log(`Failed to load skupperx-outgoing config-map, no links created`);
+        Log(`Failed to load skupperx-links-outgoing config-map, no links created`);
         return;
     }
 
@@ -255,9 +258,9 @@ const on_secret_watch = async function(kind, obj) {
 }
 
 const on_configmap_watch = async function(kind, obj) {
-    if (obj.metadata.name == 'skupperx-incoming') {
+    if (obj.metadata.name == 'skupperx-links-incoming') {
         await sync_config_map_incoming();
-    } else if (obj.metadata.name == 'skupperx-outgoing') {
+    } else if (obj.metadata.name == 'skupperx-links-outgoing') {
         await sync_config_map_outgoing();
     }
 }

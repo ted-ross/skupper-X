@@ -27,8 +27,10 @@ const crypto = require('crypto');
 const SERVICE_NAME = 'skx-router';
 const ROUTER_LABEL = 'skx-router';
 
-const INCOMING_CONFIG_MAP_NAME = 'skupperx-incoming';
-const OUTGOING_CONFIG_MAP_NAME = 'skupperx-outgoing';
+const INCOMING_CONFIG_MAP_NAME = 'skupperx-links-incoming';
+const OUTGOING_CONFIG_MAP_NAME = 'skupperx-links-outgoing';
+
+var SITE_ID;
 
 const MANAGE_PORT = 45670;
 const PEER_PORT   = 55671;
@@ -36,10 +38,10 @@ const CLAIM_PORT  = 45669;
 const MEMBER_PORT = 45671;
 
 var ingressState = {
-    manage : {hash: null, data: {}},
-    peer   : {hash: null, data: {}},
-    claim  : {hash: null, data: {}},
-    member : {hash: null, data: {}},
+    manage : {hash: null, data: {}, toDelete: false},
+    peer   : {hash: null, data: {}, toDelete: false},
+    claim  : {hash: null, data: {}, toDelete: false},
+    member : {hash: null, data: {}, toDelete: false},
 };
 
 const backbone_service = function() {
@@ -202,6 +204,24 @@ exports.GetInitialConfig = async function() {
     return ingressState;
 }
 
+exports.GetIngressBundle = function() {
+    let bundle = {
+        siteId    : SITE_ID,
+        ingresses : {},
+    };
+
+    for (const [key, value] of Object.entries(ingressState)) {
+        if (value.hash) {
+            bundle.ingresses['ingress/' + key] = {
+                host : value.data.host,
+                port : value.data.port,
+            }
+        }
+    }
+
+    return bundle;
+}
+
 const onConfigMapWatch = function(type, apiObj) {
     if (apiObj.metadata.name == INCOMING_CONFIG_MAP_NAME) {
         sync_ingress();
@@ -211,11 +231,18 @@ const onConfigMapWatch = function(type, apiObj) {
 const onRouteWatch = async function(type, apiObj) {
     let routes = await kube.GetRoutes();
 
+    for (const [key, value] of Object.entries(ingressState)) {
+        if (value.hash != null) {
+            ingressState[key].toDelete = true;
+        }
+    }
+
     for (const route of routes) {
         for (const key of ['peer', 'member', 'claim', 'manage']) {
             if (route.metadata.name == 'skx-' + key && route.spec.host) {
                 const data = {host: route.spec.host, port: 443};
                 const hash = ingressHash(data);
+                ingressState[key].toDelete = false;
 
                 if (hash != ingressState[key].hash) {
                     ingressState[key].hash = hash;
@@ -226,16 +253,19 @@ const onRouteWatch = async function(type, apiObj) {
         }
     }
 
-    if (Object.keys(ingressState.ingresses).length == 4) {
-        ingressState.ready = true;
-        Log('Hosts for the ingress are resolved');
-    } else {
-        setTimeout(resolve_ingress, 1000);
+    for (const [key, value] of Object.entries(ingressState)) {
+        if (value.toDelete) {
+            ingressState[key].hash = null;
+            ingressState[key].data = {};
+            ingressState[key].toDelete = false;
+            sync.UpdateIngress(key, null, {});
+        }
     }
 }
 
-exports.Start = async function() {
+exports.Start = async function(siteId) {
     Log('[Ingress module started]');
+    SITE_ID = siteId;
     kube.WatchConfigMaps(onConfigMapWatch);
     kube.WatchRoutes(onRouteWatch);
     await sync_ingress();

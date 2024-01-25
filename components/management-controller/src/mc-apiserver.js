@@ -28,7 +28,7 @@ const backbone   = require('./backbone.js');
 const kube       = require('./common/kube.js');
 const { isObject } = require('util');
 const Log        = require('./common/log.js').Log;
-const siteConfig = require('./bb-site-config.js');
+const sync       = require('./manage-sync.js');
 
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8085;
@@ -295,8 +295,11 @@ const fetchBackboneSiteKube = async function (bsid, res) {
             text += backbone.DeploymentYaml(bsid);
             text += backbone.SecretYaml(secret, 'site-client');
 
-            const outgoing = await getBackboneConnectors_TX(client, bsid);
-            text += "---\n" + link_config_map_yaml('skupperx-outgoing', outgoing);
+            const outgoing = await sync.GetBackboneConnectors_TX(client, bsid);
+            text += "---\n" + link_config_map_yaml('skupperx-links-outgoing', outgoing);
+
+            const incoming = await sync.GetBackboneIngresses_TX(client, bsid);
+            text += "---\n" + link_config_map_yaml('skupperx-links-incoming', incoming)
 
             res.send(text);
             res.status(200).end();
@@ -324,10 +327,10 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
             let text = '';
             let incoming = {};
             const worklist = [
-                {ap_ref: site.peeraccess,       profile: 'peer-server',   port: '55671', role: 'inter-router'},
-                {ap_ref: site.memberaccess,     profile: 'member-server', port: '45671', role: 'edge'},
-                {ap_ref: site.claimaccess,      profile: 'claim-server',  port: '45669', role: 'normal'},
-                {ap_ref: site.managementaccess, profile: 'manage-server', port: '45670', role: 'normal'},
+                {ap_ref: site.managementaccess, profile: 'manage'},
+                {ap_ref: site.peeraccess,       profile: 'peer'},
+                {ap_ref: site.memberaccess,     profile: 'member'},
+                {ap_ref: site.claimaccess,      profile: 'claim'},
             ]
 
             for (const work of worklist) {
@@ -338,13 +341,7 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
                         let secret = await kube.LoadSecret(ap.objectname);
                         text += backbone.SecretYaml(secret, work.profile);
 
-                        incoming[work.profile] = JSON.stringify({
-                            host: '',
-                            port: work.port,
-                            role: work.role,
-                            cost: '1',
-                            profile: work.profile,
-                        });
+                        incoming[work.profile] = 'true';
                     }
                 }
             }
@@ -366,30 +363,11 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
     }
 }
 
-const getBackboneConnectors_TX = async function (client, bsid) {
-    const result = await client.query(
-        'SELECT *, BackboneAccessPoints.Hostname, BackboneAccessPoints.Port FROM InterRouterLinks ' +
-        'JOIN InteriorSites ON InteriorSites.Id = ListeningInteriorSite ' +
-        'JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = InteriorSites.PeerAccess ' +
-        'WHERE ConnectingInteriorSite = $1', [bsid]);
-    let outgoing = {};
-    for (const connection of result.rows) {
-        outgoing[connection.listeninginteriorsite] = JSON.stringify({
-            host: connection.hostname,
-            port: connection.port,
-            role: 'inter-router',
-            cost: connection.cost.toString(),
-            profile: 'site-client',
-        });
-    }
-    return outgoing;
-}
-
 const fetchBackboneLinksOutgoingKube = async function (bsid, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
-        const outgoing = await getBackboneConnectors_TX(client, bsid);
+        const outgoing = await sync.GetBackboneConnectors_TX(client, bsid);
         res.send(link_config_map_yaml('skupperx-outgoing', outgoing));
         res.status(200).end();
         await client.query('COMMIT');
@@ -409,22 +387,24 @@ exports.AddHostToAccessPoint = async function(bsid, key, hostname, port) {
         await client.query('BEGIN');
         var ref;
         switch (key) {
-            case 'skx-manage' : ref = 'ManagementAccess';  break;
-            case 'skx-member' : ref = 'MemberAccess';      break;
-            case 'skx-claim'  : ref = 'ClaimAccess';       break;
-            case 'skx-peer'   : ref = 'PeerAccess';        break;
+            case 'ingress/manage' : ref = 'ManagementAccess';  break;
+            case 'ingress/member' : ref = 'MemberAccess';      break;
+            case 'ingress/claim'  : ref = 'ClaimAccess';       break;
+            case 'ingress/peer'   : ref = 'PeerAccess';        break;
             default: throw Error(`Invalid ingress key: ${key}`);
         }
         const result = await client.query(`SELECT ${ref} as access_ref, BackboneAccessPoints.* FROM InteriorSites JOIN BackboneAccessPoints ON ${ref} = BackboneAccessPoints.Id WHERE InteriorSites.Id = $1`, [bsid]);
         if (result.rowCount == 1) {
             let access = result.rows[0];
-            if (access.hostname) {
-                throw Error(`Referenced access (${access.access_ref}) already has a hostname`);
+            if (access.hostname != hostname || access.port != port) {
+                if (access.hostname) {
+                    throw Error(`Referenced access (${access.access_ref}) already has a hostname`);
+                }
+                if (access.lifecycle != 'partial') {
+                    throw Error(`Referenced access (${access.access_ref}) has lifecycle ${access.lifecycle}, expected partial`);
+                }
+                await client.query("UPDATE BackboneAccessPoints SET Hostname = $1, Port=$2, Lifecycle='new' WHERE Id = $3", [hostname, port, access.access_ref]);
             }
-            if (access.lifecycle != 'partial') {
-                throw Error(`Referenced access (${access.access_ref}) has lifecycle ${access.lifecycle}, expected partial`);
-            }
-            await client.query("UPDATE BackboneAccessPoints SET Hostname = $1, Port=$2, Lifecycle='new' WHERE Id = $3", [hostname, port, access.access_ref]);
             await client.query("COMMIT");
         } else {
             throw Error(`Access point not found for site ${bsid} (${ref})`);
@@ -492,17 +472,6 @@ exports.Start = async function() {
     api.get(API_PREFIX + 'backbonesite/:bsid/links/outgoing/kube', (req, res) => {
         Log(`Request for outgoing backbone links (Kubernetes): ${req.params.bsid}`);
         fetchBackboneLinksOutgoingKube(req.params.bsid, res);
-    });
-
-    api.get(API_PREFIX + 'backbonesite/:bsid/hash', async (req, res) => {
-        try {
-            const text = await siteConfig.ComputeConfigHash(req.params.bsid);
-            res.send(text);
-            res.status(200).end();
-        } catch (err) {
-            res.send(err.message);
-            res.status(400).end();
-        }
     });
 
     api.post(API_PREFIX + 'backbonesite/:bsid/ingress', (req, res) => {

@@ -214,6 +214,6 @@ exports.Start = async function (mode, id, connection) {
     siteId       = id;
     await initializeHashState();
     await initializeLocalData();
-    apiSender    = amqp.OpenSender('Site-Sync', connection, API_CONTROLLER_ADDRESS, onSendable);
-    apiReceiver  = amqp.OpenReceiver(connection, API_MY_ADDRESS_PREFIX + siteId, onMessage);
+    apiSender   = amqp.OpenSender('Site-Sync', connection, API_CONTROLLER_ADDRESS, onSendable);
+    apiReceiver = amqp.OpenReceiver(connection, API_MY_ADDRESS_PREFIX + siteId, onMessage);
 }

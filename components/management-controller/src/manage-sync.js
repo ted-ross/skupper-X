@@ -19,89 +19,99 @@
 
 "use strict";
 
-const Log      = require('./common/log.js').Log;
-const amqp     = require('./common/amqp.js');
-const kube     = require('./common/kube.js');
-const ingress  = require('./ingress.js');
-const protocol = require('./common/protocol.js');
+const Log       = require('./common/log.js').Log;
+const amqp      = require('./common/amqp.js');
+const db        = require('./db.js');
+const kube      = require('./common/kube.js');
+const protocol  = require('./common/protocol.js');
+const api       = require('./mc-apiserver.js');
+const siteLinks = require('./site-links.js');
+const crypto    = require('crypto');
 
 const API_CONTROLLER_ADDRESS = 'skx/sync/mgmtcontroller';
 const API_MY_ADDRESS_PREFIX  = 'skx/sync/site/';
 
 const REQUEST_TIMEOUT_SECONDS   = 10;
 const HEARTBEAT_PERIOD_SECONDS  = 60;
+const HEARTBEAT_INITIAL_SECONDS = 2;
 
-var localData = {
-    'ingress/manage' : {hash: null, data: {}},
-    'ingress/peer'   : {hash: null, data: {}},
-    'ingress/claim'  : {hash: null, data: {}},
-    'ingress/member' : {hash: null, data: {}},
+const siteIngressKeys = {
+    'ingress/manage' : 0,
+    'ingress/peer'   : 1,
+    'ingress/claim'  : 2,
+    'ingress/member' : 3,
 };
 
-var backboneHashSet = {
-    'tls/site-client'   : {hash: null, kind: 'Secret',    objname: 'skupperx-site-client'},
-    'tls/manage-server' : {hash: null, kind: 'Secret',    objname: 'skupperx-manage-server'},
-    'tls/peer-server'   : {hash: null, kind: 'Secret',    objname: 'skupperx-peer-server'},
-    'tls/claim-server'  : {hash: null, kind: 'Secret',    objname: 'skupperx-claim-server'},
-    'tls/member-server' : {hash: null, kind: 'Secret',    objname: 'skupperx-member-server'},
-    'links/incoming'    : {hash: null, kind: 'ConfigMap', objname: 'skupperx-links-incoming'},
-    'links/outgoing'    : {hash: null, kind: 'ConfigMap', objname: 'skupperx-links-outgoing'},
+const backboneHashKeys = {
+    'tls/site-client'   : 0,
+    'tls/manage-server' : 1,
+    'tls/peer-server'   : 2,
+    'tls/claim-server'  : 3,
+    'tls/member-server' : 4,
+    'links/incoming'    : 5,
+    'links/outgoing'    : 6,
 };
 
-const sslProfileNames = {
-    'tls/site-client'   : 'site-client',
-    'tls/manage-server' : 'manage-server',
-    'tls/peer-server'   : 'peer-server',
-    'tls/claim-server'  : 'claim-server',
-    'tls/member-server' : 'member-server',
-};
+var activeBackbones = {};   // { siteId: {heartbeatTimer: <>, lastPingTime, bbHashSet: [], siteHashSet: []}}
+var openLinks = {};
 
-
-const sendHeartbeat = function() {
-    let localHashSet = {};
-    for (const [key, value] of Object.entries(localData)) {
-        localHashSet[key] = value.hash;
-    }
-    amqp.SendMessage(apiSender, protocol.Heartbeat(siteId, localHashSet));
-    heartbeatTimer = setTimeout(sendHeartbeat, HEARTBEAT_PERIOD_SECONDS * 1000);
-}
-
-const deleteObject = async function(key) {
-    const record = backboneHashSet[key];
-    switch (record.kind) {
-    case 'Secret'    : await kube.DeleteSecret(record.objname);     break;
-    case 'ConfigMap' : await kube.DeleteConfigmap(record.objname);  break;
-    }
-}
-
-const updateObject = async function(key, data) {
+const sendHeartbeat = function(siteId) {
+    let backbone = activeBackbones[siteId];
     try {
-        let obj = {
-            apiVersion : 'v1',
-            kind       : backboneHashSet[key].kind,
-            metadata   : data.metadata,
-            data       : data.data,
-        };
+        let hashSet = {};
 
-        if (obj.kind == 'Secret') {
-            obj.type = 'kubernetes.io/tls';
-            if (!obj.metadata.annotations) {
-                obj.metadata.annotations = {};
-            }
-            obj.metadata.annotations['skupper.io/skx-inject'] = sslProfileNames[key];
+        for (const [key, index] of Object.entries(backboneHashKeys)) {
+            hashSet[key] = backbone.bbHashSet[index];
         }
 
-        await kube.ApplyObject(obj);
+        amqp.SendMessage(apiSender, protocol.Heartbeat('manage', hashSet), destination=API_MY_ADDRESS_PREFIX + siteId);
+        backbone.heartbeatTimer = setTimeout(() => {
+            sendHeartbeat(siteId);
+        }, HEARTBEAT_PERIOD_SECONDS * 1000);
     } catch (error) {
-        Log(`Exception in updateObject: ${error.message}`);
+        Log(`Exception during heartbeat send: ${error.message}`);
     }
 }
 
-const checkControllerHashset = async function(hashSet) {
+const activateBackbone = async function(siteId) {
+    //
+    // If this is the first heartbeat we've received from a site, create a new active-backbone object.
+    //
+    if (!activeBackbones[siteId]) {
+        Log(`New active backbone site: ${siteId}`);
+        activeBackbones[siteId] = {
+            heartbeatTimer : null,
+            lastPingTime   : null,
+            bbHashSet      : [null, null, null, null, null, null, null],
+            siteHashSet    : [null, null, null, null],
+        };
+
+        //
+        // The backbone hash-set for this site needs to be initialized before heartbeats are sent.
+        //
+        for (const [key, index] of Object.entries(backboneHashKeys)) {
+            var hash;
+            var unused;
+            [hash, unused] = await getObject(siteId, key);
+            activeBackbones[siteId].bbHashSet[index] = hash;
+        }
+
+        //
+        // Schedule the initial heartbeat
+        //
+        activeBackbones[siteId].heartbeatTimer = setTimeout(() => { sendHeartbeat(siteId); }, HEARTBEAT_INITIAL_SECONDS * 1000)
+    }
+}
+
+const checkSiteHashset = async function(siteId, hashSet) {
+    await activateBackbone(siteId);
+    let backbone = activeBackbones[siteId];
+    backbone.lastPingTime = Date.now();
     let updateKeys = [];
     let deleteKeys = [];
     for (const [key, value] of Object.entries(hashSet)) {
-        if (value.hash != backboneHashSet[key].hash) {
+        let index = siteIngressKeys[key];
+        if (value.hash != backbone.siteHashSet[index]) {
             if (value.hash == null) {
                 deleteKeys.push(key);
             } else {
@@ -111,17 +121,17 @@ const checkControllerHashset = async function(hashSet) {
     }
 
     for (const key of deleteKeys) {
-        await deleteObject(key);
-        backboneHashSet[key].hash = null;
+        // TODO - figure this out
     }
 
     for (const key of updateKeys) {
         try {
-            const [responseAp, responseBody] = await amqp.Request(apiSender, protocol.GetObject(siteId, key), {}, REQUEST_TIMEOUT_SECONDS);
+            let index = siteIngressKeys[key];
+            const [responseAp, responseBody] = await amqp.Request(apiSender, protocol.GetObject('manage', key), {}, REQUEST_TIMEOUT_SECONDS, API_MY_ADDRESS_PREFIX + siteId);
             if (responseBody.statusCode == 200) {
                 if (responseBody.objectName == key) {
-                    await updateObject(key, responseBody.data);
-                    backboneHashSet[key].hash = responseBody.hash;
+                    await api.AddHostToAccessPoint(bsid, key, responseBody.data.host, responseBody.data.port);
+                    backbone.siteHashSet[index] = responseBody.hash;
                 } else {
                     Log(`Get response object name mismatch: Got ${responseBody.objectName}, expected ${key}`);
                 }
@@ -134,13 +144,213 @@ const checkControllerHashset = async function(hashSet) {
     }
 }
 
-const getObject = async function(objectname) {
-    try {
-        return [localData[objectname].hash, localData[objectname].data];
-    } catch (error) {
-        Log(`Exception in getObject: ${error.message}`);
+const hashOfSecret = function(secret) {
+    let text = '';
+    for (const [key, value] of Object.entries(secret.data)) {
+        text += key + value;
     }
-    return [null, {}];
+    return crypto.createHash('sha1').update(text).digest('hex');
+}
+
+const dataOfSecret = function(secret, hash) {
+    let data = {};
+    data.metadata = secret.metadata;
+    data.data     = secret.data;
+    if (!data.metadata.annotations) {
+        data.metadata.annotations = {};
+    }
+    data.metadata.annotations['skupperx/skx-hash'] = hash;
+    return data;
+}
+
+const hashOfConfigMap = function(cm) {
+    let text = '';
+    for (const [key, value] of Object.entries(cm.data)) {
+        text += key + value;
+    }
+    return crypto.createHash('sha1').update(text).digest('hex');
+}
+
+const getSiteClient = async function(siteId) {
+    //
+    // Return the client secret for the site
+    //
+    var data = {};
+    var hash = null;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query('BEGIN');
+        const result = await client.query(
+            'SELECT InteriorSites.Certificate, TlsCertificates.ObjectName as secret_name FROM InteriorSites ' +
+            'JOIN TlsCertificates ON InteriorSites.Certificate = TlsCertificates.Id WHERE Interiorsites.Id = $1', [siteId]);
+        if (result.rowCount == 1) {
+            let secret = await kube.LoadSecret(result.rows[0].secret_name);
+            hash = hashOfSecret(secret);
+            data = dataOfSecret(secret, hash);
+        }
+        await client.query('COMMIT');
+    } catch (error) {
+        Log(`Exception in getSiteClient: ${error.message}`);
+        await client.query('ROLLBACK');
+    } finally {
+        client.release();
+    }
+
+    return [hash, data];
+}
+
+const getAccessCert = async function(siteId, kind) {
+    var data = {};
+    var hash = null;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query('BEGIN');
+        const result = await client.query(
+            'SELECT * FROM InteriorSites WHERE Id = $1', [siteId]);
+        if (result.rowCount == 1) {
+            let site = result.rows[0];
+            let apRef = null;
+            switch (kind) {
+            case 'manage' : apRef = site.managementaccess; break;
+            case 'peer'   : apRef = site.peeraccess;       break;
+            case 'member' : apRef = site.memberaccess;     break;
+            case 'claim'  : apRef = site.claimaccess;      break;
+            default:
+                throw(Error(`getAccessCert: unknown kind ${kind}`));
+            }
+
+            if (apRef) {
+                const apResult = await client.query('SELECT *, TlsCertificates.ObjectName FROM BackboneAccessPoints JOIN TlsCertificates ON TlsCertificates.Id = Certificate WHERE BackboneAccessPoints.Id = $1', [apRef]);
+                if (apResult.rowCount == 1) {
+                    let ap = apResult.rows[0];
+                    let secret = await kube.LoadSecret(ap.objectname);
+                    hash = hashOfSecret(secret);
+                    data = dataOfSecret(secret, hash);
+                }
+            }
+        } else {
+            throw Error('Site not found');
+        }
+        await client.query('COMMIT');
+    } catch (error) {
+        Log(`Exception in getAccessCert: ${error.message}`);
+        await client.query('ROLLBACK');
+    } finally {
+        client.release();
+    }
+
+    return [hash, data];
+}
+
+exports.GetBackboneIngresses_TX = async function(client, siteId) {
+    let data = {};
+    const result = await client.query(
+        'SELECT * FROM InteriorSites WHERE Id = $1', [siteId]);
+    if (result.rowCount == 1) {
+        const site = result.rows[0];
+        const apRefs = {
+            manage : site.managementaccess,
+            peer   : site.peeraccess,
+            member : site.memberaccess,
+            claim  : site.claimaccess,
+        };
+
+        for (const [profile, apRef] of Object.entries(apRefs)) {
+            data[profile] = 'false';
+            if (apRef) {
+                const apResult = await client.query('SELECT Lifecycle FROM BackboneAccessPoints WHERE BackboneAccessPoints.Id = $1', [apRef]);
+                if (apResult.rowCount == 1) {
+                    data[profile] = 'true';
+                }
+            }
+        }
+    } else {
+        throw (Error(`Unknown site: ${siteId}`));
+    }
+    return data;
+}
+
+const getLinksIncoming = async function(siteId) {
+    var data = {
+        metadata : {
+            annotations: {},
+        },
+        data : {},
+    };
+    var hash = null;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query('BEGIN');
+        data.data = await exports.GetBackboneIngresses_TX(client, siteId);
+        hash = hashOfConfigMap(data);
+        data.metadata.annotations['skupperx/skx-hash'] = hash;
+        await client.query('COMMIT');
+    } catch (error) {
+        Log(`Exception in getLinksIncoming: ${error.message}`);
+        await client.query('ROLLBACK');
+    } finally {
+        client.release();
+    }
+
+    return [hash, data];
+}
+
+exports.GetBackboneConnectors_TX = async function (client, siteId) {
+    const result = await client.query(
+        'SELECT *, BackboneAccessPoints.Hostname, BackboneAccessPoints.Port FROM InterRouterLinks ' +
+        'JOIN InteriorSites ON InteriorSites.Id = ListeningInteriorSite ' +
+        'JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = InteriorSites.PeerAccess ' +
+        'WHERE ConnectingInteriorSite = $1', [siteId]);
+    let outgoing = {};
+    for (const connection of result.rows) {
+        outgoing[connection.listeninginteriorsite] = JSON.stringify({
+            host: connection.hostname,
+            port: connection.port,
+            cost: connection.cost.toString(),
+        });
+    }
+    return outgoing;
+}
+
+const getLinksOutgoing = async function(siteId) {
+    let data = {
+        metadata : {
+            annotations: {},
+        },
+        data : {},
+    };
+    let hash = null;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query('BEGIN');
+        data.data = await exports.GetBackboneConnectors_TX(client, siteId);
+        hash = hashOfConfigMap(data);
+        data.metadata.annotations['skupperx/skx-hash'] = hash;
+        await client.query('COMMIT');
+    } catch (err) {
+        await client.query('ROLLBACK');
+    } finally {
+        client.release();
+    }
+
+    return [hash, data];
+}
+
+const getObject = async function(siteId, objectname) {
+    //
+    // Return [hash, data] where 'data' is a kube-style object with metadata and [data,spec]
+    //
+    switch (objectname) {
+    case 'tls/site-client'   : return await getSiteClient(siteId);
+    case 'tls/manage-server' : return await getAccessCert(siteId, 'manage');
+    case 'tls/peer-server'   : return await getAccessCert(siteId, 'peer');
+    case 'tls/claim-server'  : return await getAccessCert(siteId, 'claim');
+    case 'tls/member-server' : return await getAccessCert(siteId, 'member');
+    case 'links/incoming'    : return await getLinksIncoming(siteId);
+    case 'links/outgoing'    : return await getLinksOutgoing(siteId);
+    default:
+        throw (Error(`getObject: Unknown object name ${objectname}`));
+    } 
 }
 
 const onSendable = function(unused) {
@@ -148,22 +358,40 @@ const onSendable = function(unused) {
 }
 
 const onMessage = async function(unused, application_properties, body, onReply) {
-    protocol.DispatchMessage(body,
-        async (site, hashset) => {     // onHeartbeat
-            await checkControllerHashset(hashset);
-        },
-        (site) => {              // onSolicit
-            clearTimeout(heartbeatTimer);
-            sendHeartbeat();
-        },
-        async (site, objectname) => {  // onGet
-            let [hash, data] = await getObject(objectname);
-            onReply({}, protocol.GetObjectResponseSuccess(objectname, hash, data));
-        });
+    try {
+        protocol.DispatchMessage(body,
+            async (site, hashset) => {     // onHeartbeat
+                await checkSiteHashset(site, hashset);
+            },
+            (site) => {                    // onSolicit
+                let backbone = activeBackbones[site];
+                clearTimeout(backbone.heartbeatTimer);
+                sendHeartbeat(site);
+            },
+            async (site, objectname) => {  // onGet
+                let [hash, data] = await getObject(site, objectname);
+                onReply({}, protocol.GetObjectResponseSuccess(objectname, hash, data));
+                activeBackbones[site].bbHashSet[objectname] = hash;
+            });
+    } catch (error) {
+        Log(`Exception in onMessage: ${error.message}`);
+    }
 }
 
-exports.Start = async function (connection) {
+const onLinkAdded = async function(backboneId, conn) {
+    let link = {
+        conn        : conn,
+        apiSender   : amqp.OpenSender('AnonymousSender', conn, undefined, onSendable),
+        apiReceiver : amqp.OpenReceiver(connection, API_CONTROLLER_ADDRESS, onMessage),
+    };
+    openLinks[backboneId] = link;
+}
+
+const onLinkDeleted = async function(backboneId) {
+    delete openLinks[backboneId];
+}
+
+exports.Start = async function () {
     Log('[Manage-Sync module started]');
-    apiSender    = amqp.OpenSender('AnonymousSender', connection, undefined, onSendable);
-    apiReceiver  = amqp.OpenReceiver(connection, API_CONTROLLER_ADDRESS, onMessage);
+    await siteLinks.RegisterHandler(onLinkAdded, onLinkDeleted);
 }

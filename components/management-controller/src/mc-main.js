@@ -22,7 +22,8 @@
 const k8s         = require('@kubernetes/client-node');
 const yaml        = require('yaml');
 const fs          = require('fs');
-const inband      = require('./inband.js');
+const rhea        = require('rhea');
+const siteLinks   = require('./site-links.js');
 const certs       = require('./certs.js');
 const prune       = require('./prune.js');
 const db          = require('./db.js');
@@ -30,6 +31,7 @@ const kube        = require('./common/kube.js');
 const config      = require('./config.js');
 const apiserver   = require('./mc-apiserver.js');
 const sync        = require('./manage-sync.js');
+const amqp        = require('./common/amqp.js');
 const Log         = require('./common/log.js').Log;
 const Flush       = require('./common/log.js').Flush;
 
@@ -50,8 +52,9 @@ exports.Main = async function() {
         await config.Start();
         await prune.Start();
         await certs.Start();
+        await amqp.Start(rhea);
         await apiserver.Start();
-        await inband.Start(CONTROLLER);
+        await siteLinks.Start(CONTROLLER);
         await sync.Start();
         Log("[Management controller initialization completed successfully]");
     } catch (reason) {

@@ -314,6 +314,8 @@ spec:
         env:
         - name: SKUPPERX_SITE_ID
           value: ${bsid}
+        - name: SKX_BACKBONE
+          value: "YES"
         ports:
         - containerPort: 8086
           name: http
