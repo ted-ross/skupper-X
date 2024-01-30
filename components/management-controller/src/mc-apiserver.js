@@ -29,6 +29,7 @@ const kube       = require('./common/kube.js');
 const { isObject } = require('util');
 const Log        = require('./common/log.js').Log;
 const sync       = require('./manage-sync.js');
+const admin      = require('./api-admin.js');
 
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8085;
@@ -442,18 +443,6 @@ exports.Start = async function() {
     Log('[API Server module started]');
     api = express();
 
-    api.get(API_PREFIX + 'invitations', (req, res) => {
-        listInvitations(res);
-    });
-
-    api.get(API_PREFIX + 'backbones', (req, res) => {
-        listBackbones(res);
-    });
-
-    api.get(API_PREFIX + 'backbone/:bid/sites', (req, res) => {
-        listBackboneSites(req.params.bid, res);
-    });
-
     api.get(API_PREFIX + 'invitation/:iid/kube', (req, res) => {
         Log(`Request for invitation (Kubernetes): ${req.params.iid}`);
         fetchInvitationKube(req.params.iid, res);
@@ -478,6 +467,8 @@ exports.Start = async function() {
         Log(`POST - backbone site ingress data for site ${req.params.bsid}`);
         postBackboneIngress(req.params.bsid, req, res);
     });
+
+    admin.Initialize(api);
 
     let server = api.listen(API_PORT, () => {
         let host = server.address().address;
