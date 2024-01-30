@@ -286,7 +286,10 @@ spec:
           name: member
           protocol: TCP
         - containerPort: 45670
-          name: control
+          name: manage
+          protocol: TCP
+        - containerPort: 45669
+          name: claim
           protocol: TCP
         readinessProbe:
           failureThreshold: 3

@@ -265,7 +265,7 @@ const startWatchConfigMaps = function() {
             if (err) {
                 Log(`Configmap Watch error: ${err}`);
             }
-            exports.WatchConfigMaps();
+            startWatchConfigMaps();
         }
     )
 }
@@ -292,7 +292,7 @@ const startWatchCertificates = function() {
             if (err) {
                 Log(`Certificate Watch error: ${err}`);
             }
-            exports.WatchCertificates();
+            startWatchCertificates();
         }
     )
 }
@@ -307,11 +307,12 @@ exports.WatchCertificates = function(callback) {
 var routeWatches = [];
 
 const startWatchRoutes = function() {
+    Log('startWatchRoutes');
     routeWatch.watch(
         `/apis/route.openshift.io/v1/namespaces/${namespace}/routes`,
         {},
         (type, apiObj, watchObj) => {
-            for (callback of routeWatches) {
+            for (const callback of routeWatches) {
                 callback(type, apiObj);
             }
         },
@@ -319,7 +320,7 @@ const startWatchRoutes = function() {
             if (err) {
                 Log(`Route Watch error: ${err}`);
             }
-            exports.WatchRoutes();
+            startWatchRoutes();
         }
     )
 }
@@ -331,18 +332,22 @@ exports.WatchRoutes = function(callback) {
     }
 }
 
-exports.ApplyObject = function(obj) {
-    if (obj.metadata.annotations == undefined) {
-        obj.metadata.annotations = {};
+exports.ApplyObject = async function(obj) {
+    try {
+        if (obj.metadata.annotations == undefined) {
+            obj.metadata.annotations = {};
+        }
+        obj.metadata.annotations["skupper.io/skx-controlled"] = "true";
+        obj.metadata.namespace = namespace;
+        Log(`Creating resource: ${obj.kind} ${obj.metadata.name}`);
+        Log(obj);
+        return await client.create(obj);
+    } catch (error) {
+        Log(`Exception in kube.ApplyObject: ${error.message}`);
     }
-    obj.metadata.annotations["skupper.io/skx-controlled"] = "true";
-    obj.metadata.namespace = namespace;
-    Log(`Creating resource: ${obj.kind} ${obj.metadata.name}`);
-    Log(obj);
-    return client.create(obj);
 }
 
-exports.ApplyYaml = function(yaml) {
+exports.ApplyYaml = async function(yaml) {
     let obj = YAML.parse(yaml);
-    return ApplyObject(obj);
+    return await ApplyObject(obj);
 }

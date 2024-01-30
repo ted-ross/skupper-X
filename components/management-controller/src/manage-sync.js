@@ -25,7 +25,7 @@ const db        = require('./db.js');
 const kube      = require('./common/kube.js');
 const protocol  = require('./common/protocol.js');
 const api       = require('./mc-apiserver.js');
-const siteLinks = require('./site-links.js');
+const bbLinks   = require('./backbone-links.js');
 const crypto    = require('crypto');
 
 const API_CONTROLLER_ADDRESS = 'skx/sync/mgmtcontroller';
@@ -52,20 +52,24 @@ const backboneHashKeys = {
     'links/outgoing'    : 6,
 };
 
-var activeBackbones = {};   // { siteId: {heartbeatTimer: <>, lastPingTime, bbHashSet: [], siteHashSet: []}}
-var openLinks = {};
+var activeBackboneSites = {};   // { siteId: { heartbeatTimer: <>, lastPingTime, bbHashSet: [], siteHashSet: [] } }
+var openLinks = {};             // { backboneId: { conn, apiSender, apiReceiver } }
 
 const sendHeartbeat = function(siteId) {
-    let backbone = activeBackbones[siteId];
+    let site = activeBackboneSites[siteId];
+    let link = openLinks[site.backboneId];
     try {
-        let hashSet = {};
+        if (link) {
+            let hashSet = {};
 
-        for (const [key, index] of Object.entries(backboneHashKeys)) {
-            hashSet[key] = backbone.bbHashSet[index];
+            for (const [key, index] of Object.entries(backboneHashKeys)) {
+                hashSet[key] = site.bbHashSet[index];
+            }
+
+            amqp.SendMessage(link.apiSender, protocol.Heartbeat('manage', hashSet), {}, API_MY_ADDRESS_PREFIX + siteId);
         }
 
-        amqp.SendMessage(apiSender, protocol.Heartbeat('manage', hashSet), destination=API_MY_ADDRESS_PREFIX + siteId);
-        backbone.heartbeatTimer = setTimeout(() => {
+        site.heartbeatTimer = setTimeout(() => {
             sendHeartbeat(siteId);
         }, HEARTBEAT_PERIOD_SECONDS * 1000);
     } catch (error) {
@@ -73,13 +77,14 @@ const sendHeartbeat = function(siteId) {
     }
 }
 
-const activateBackbone = async function(siteId) {
+const activateBackboneSite = async function(backboneId, siteId) {
     //
     // If this is the first heartbeat we've received from a site, create a new active-backbone object.
     //
-    if (!activeBackbones[siteId]) {
+    if (!activeBackboneSites[siteId]) {
         Log(`New active backbone site: ${siteId}`);
-        activeBackbones[siteId] = {
+        activeBackboneSites[siteId] = {
+            backboneId     : backboneId,
             heartbeatTimer : null,
             lastPingTime   : null,
             bbHashSet      : [null, null, null, null, null, null, null],
@@ -93,26 +98,26 @@ const activateBackbone = async function(siteId) {
             var hash;
             var unused;
             [hash, unused] = await getObject(siteId, key);
-            activeBackbones[siteId].bbHashSet[index] = hash;
+            activeBackboneSites[siteId].bbHashSet[index] = hash;
         }
 
         //
         // Schedule the initial heartbeat
         //
-        activeBackbones[siteId].heartbeatTimer = setTimeout(() => { sendHeartbeat(siteId); }, HEARTBEAT_INITIAL_SECONDS * 1000)
+        activeBackboneSites[siteId].heartbeatTimer = setTimeout(() => { sendHeartbeat(siteId); }, HEARTBEAT_INITIAL_SECONDS * 1000)
     }
 }
 
-const checkSiteHashset = async function(siteId, hashSet) {
-    await activateBackbone(siteId);
-    let backbone = activeBackbones[siteId];
+const checkSiteHashset = async function(backboneId, siteId, hashSet) {
+    await activateBackboneSite(backboneId, siteId);
+    let backbone = activeBackboneSites[siteId];
     backbone.lastPingTime = Date.now();
     let updateKeys = [];
     let deleteKeys = [];
-    for (const [key, value] of Object.entries(hashSet)) {
+    for (const [key, hash] of Object.entries(hashSet)) {
         let index = siteIngressKeys[key];
-        if (value.hash != backbone.siteHashSet[index]) {
-            if (value.hash == null) {
+        if (hash != backbone.siteHashSet[index]) {
+            if (hash == null) {
                 deleteKeys.push(key);
             } else {
                 updateKeys.push(key);
@@ -124,13 +129,18 @@ const checkSiteHashset = async function(siteId, hashSet) {
         // TODO - figure this out
     }
 
+    Log('checkSiteHashset');
     for (const key of updateKeys) {
+        Log(`    key: ${key}`);
         try {
             let index = siteIngressKeys[key];
+            let apiSender = openLinks[backboneId].apiSender;
+            Log('    sending request...');
             const [responseAp, responseBody] = await amqp.Request(apiSender, protocol.GetObject('manage', key), {}, REQUEST_TIMEOUT_SECONDS, API_MY_ADDRESS_PREFIX + siteId);
+            Log(`    response code ${responseBody.statusCode}`);
             if (responseBody.statusCode == 200) {
                 if (responseBody.objectName == key) {
-                    await api.AddHostToAccessPoint(bsid, key, responseBody.data.host, responseBody.data.port);
+                    await api.AddHostToAccessPoint(siteId, key, responseBody.data.host, responseBody.data.port);
                     backbone.siteHashSet[index] = responseBody.hash;
                 } else {
                     Log(`Get response object name mismatch: Got ${responseBody.objectName}, expected ${key}`);
@@ -139,7 +149,7 @@ const checkSiteHashset = async function(siteId, hashSet) {
                 Log(`Get request failure for ${key}: ${responseBody.statusDescription}`);
             }
         } catch (error) {
-            Log(`Exception during sync-update process for object ${key}: ${error.message}`);
+            Log(`Exception in checkSiteHashset processing for object ${key}: ${error.message}`);
         }
     }
 }
@@ -357,21 +367,21 @@ const onSendable = function(unused) {
     // This function intentionally left blank
 }
 
-const onMessage = async function(unused, application_properties, body, onReply) {
+const onMessage = async function(backboneId, application_properties, body, onReply) {
     try {
         protocol.DispatchMessage(body,
             async (site, hashset) => {     // onHeartbeat
-                await checkSiteHashset(site, hashset);
+                await checkSiteHashset(backboneId, site, hashset);
             },
             (site) => {                    // onSolicit
-                let backbone = activeBackbones[site];
+                let backbone = activeBackboneSites[site];
                 clearTimeout(backbone.heartbeatTimer);
                 sendHeartbeat(site);
             },
             async (site, objectname) => {  // onGet
                 let [hash, data] = await getObject(site, objectname);
                 onReply({}, protocol.GetObjectResponseSuccess(objectname, hash, data));
-                activeBackbones[site].bbHashSet[objectname] = hash;
+                activeBackboneSites[site].bbHashSet[objectname] = hash;
             });
     } catch (error) {
         Log(`Exception in onMessage: ${error.message}`);
@@ -382,8 +392,9 @@ const onLinkAdded = async function(backboneId, conn) {
     let link = {
         conn        : conn,
         apiSender   : amqp.OpenSender('AnonymousSender', conn, undefined, onSendable),
-        apiReceiver : amqp.OpenReceiver(connection, API_CONTROLLER_ADDRESS, onMessage),
+        apiReceiver : amqp.OpenReceiver(conn, API_CONTROLLER_ADDRESS, onMessage, backboneId),
     };
+    link.apiReceiver.backboneId = backboneId;
     openLinks[backboneId] = link;
 }
 
@@ -393,5 +404,5 @@ const onLinkDeleted = async function(backboneId) {
 
 exports.Start = async function () {
     Log('[Manage-Sync module started]');
-    await siteLinks.RegisterHandler(onLinkAdded, onLinkDeleted);
+    await bbLinks.RegisterHandler(onLinkAdded, onLinkDeleted);
 }

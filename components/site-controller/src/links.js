@@ -99,11 +99,20 @@ const sync_listeners = async function(router_listeners, config_listeners_in) {
         }
 
         //
+        // Get a list of the injected SslProfiles so we can avoid creating listeners that reference a nonexistent profile.
+        //
+        let sslProfiles = [];
+        const profileList = await router.ListSslProfiles();
+        for (const profile of profileList) {
+            sslProfiles.push(profile.name);
+        }
+
+        //
         // Decode the JSON-strings in the config
         //
         var config_listeners = [];
         for (const [key, value] of Object.entries(config_listeners_in)) {
-            if (value == 'true') {
+            if (value == 'true' && sslProfiles.indexOf(`${key}-server`) >= 0) {
                 config_listeners.push(key);
             }
         }
@@ -114,10 +123,11 @@ const sync_listeners = async function(router_listeners, config_listeners_in) {
                 delete listener_map[lname];
             } else {
                 Log(`Creating router listener ${lname}`);
-                var host = '::';
+                var host = '';  // Any address v4 or v6
                 var port;
                 var role;
                 var profile;
+                var strip = 'both';
                 switch (key) {
                 case 'manage':
                     port    = MANAGE_PORT;
@@ -129,6 +139,7 @@ const sync_listeners = async function(router_listeners, config_listeners_in) {
                     port    = PEER_PORT;
                     role    = 'inter-router';
                     profile = 'peer-server';
+                    strip   = 'no';
                     break;
 
                 case 'claim':
@@ -141,6 +152,7 @@ const sync_listeners = async function(router_listeners, config_listeners_in) {
                     port    = MEMBER_PORT;
                     role    = 'edge';
                     profile = 'member-server';
+                    strip   = 'no';
                     break;
 
                 default:
@@ -154,7 +166,7 @@ const sync_listeners = async function(router_listeners, config_listeners_in) {
                     cost:              1,
                     sslProfile:        profile,
                     saslMechanisms:    'EXTERNAL',
-                    stripAnnotations:  'no',
+                    stripAnnotations:  strip,
                     authenticatePeer:  true,
                     requireEncryption: true,
                     requireSsl:        true,
@@ -254,6 +266,8 @@ const sync_config_map_outgoing = async function() {
 const on_secret_watch = async function(kind, obj) {
     if (obj.metadata.annotations && obj.metadata.annotations['skupper.io/skx-inject']) {
         await sync_secrets();
+        await sync_config_map_incoming();
+        await sync_config_map_outgoing();
     }
 }
 

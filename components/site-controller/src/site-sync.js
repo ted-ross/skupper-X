@@ -68,7 +68,9 @@ const sendHeartbeat = function() {
     for (const [key, value] of Object.entries(localData)) {
         localHashSet[key] = value.hash;
     }
-    amqp.SendMessage(apiSender, protocol.Heartbeat(siteId, localHashSet));
+    if (apiSender) {
+        amqp.SendMessage(apiSender, protocol.Heartbeat(siteId, localHashSet));
+    }
     heartbeatTimer = setTimeout(sendHeartbeat, HEARTBEAT_PERIOD_SECONDS * 1000);
 }
 
@@ -89,6 +91,8 @@ const updateObject = async function(key, data) {
             data       : data.data,
         };
 
+        obj.metadata.name = backboneHashSet[key].objname;
+
         if (obj.kind == 'Secret') {
             obj.type = 'kubernetes.io/tls';
             if (!obj.metadata.annotations) {
@@ -106,9 +110,11 @@ const updateObject = async function(key, data) {
 const checkControllerHashset = async function(hashSet) {
     let updateKeys = [];
     let deleteKeys = [];
-    for (const [key, value] of Object.entries(hashSet)) {
-        if (value.hash != backboneHashSet[key].hash) {
-            if (value.hash == null) {
+    Log('checkControllerHashset');
+    Log(hashSet);
+    for (const [key, hash] of Object.entries(hashSet)) {
+        if (hash != backboneHashSet[key].hash) {
+            if (hash == null) {
                 deleteKeys.push(key);
             } else {
                 updateKeys.push(key);
@@ -135,7 +141,7 @@ const checkControllerHashset = async function(hashSet) {
                 Log(`Get request failure for ${key}: ${responseBody.statusDescription}`);
             }
         } catch (error) {
-            Log(`Exception during sync-update process for object ${key}: ${error.message}`);
+            Log(`Exception in checkControllerHashset processing for object ${key}: ${error.message}`);
         }
     }
 }
@@ -200,6 +206,7 @@ const initializeLocalData = async function() {
 }
 
 exports.UpdateIngress = function(key, _hash, _data) {
+    key = 'ingress/' + key;
     if (_hash != localData[key].hash) {
         localData[key].hash = _hash;
         localData[key].data = _data;

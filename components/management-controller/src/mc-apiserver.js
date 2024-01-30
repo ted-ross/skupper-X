@@ -339,7 +339,7 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
                     if (ap_result.rowCount == 1) {
                         let ap = ap_result.rows[0];
                         let secret = await kube.LoadSecret(ap.objectname);
-                        text += backbone.SecretYaml(secret, work.profile);
+                        text += backbone.SecretYaml(secret, `${work.profile}-server`);
 
                         incoming[work.profile] = 'true';
                     }

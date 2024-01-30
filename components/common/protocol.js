@@ -19,6 +19,8 @@
 
 "use strict";
 
+const Log = require('./log.js').Log;
+
 const OP_HEARTBEAT         = 'HB';
 const OP_SOLICIT_HEARTBEAT = 'SH';
 const OP_GET               = 'GET';
@@ -64,6 +66,7 @@ exports.GetObjectReponseFailure = function(code, description) {
 }
 
 exports.DispatchMessage = function(body, onHeartbeat, onSolicit, onGet) {
+    Log(`Dispatch message: ${body.op}`);
     switch (body.op) {
     case OP_HEARTBEAT         : onHeartbeat(body.site, body.hashset);  break;
     case OP_SOLICIT_HEARTBEAT : onSolicit(body.site);                  break;

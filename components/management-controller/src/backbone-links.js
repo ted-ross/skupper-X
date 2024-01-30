@@ -55,9 +55,6 @@ const createConnection = async function(bbid, row) {
     for (const reg of registrations) {
         await reg.onLinkAdded(bbid, bbConnections[bbid].conn);
     }
-    //bbConnections[bbid].receiver   = bbConnections[bbid].conn.open_receiver('skx/sync/mgmtcontroller');
-    //bbConnections[bbid].anonSender = bbConnections[bbid].conn.open_sender();
-    //bbConnections[bbid].receiver.bbid = bbid;
 }
 
 const deleteConnection = async function(bbid) {
@@ -196,7 +193,7 @@ exports.RegisterHandler = async function(onAdded, onDeleted) {
 }
 
 exports.Start = async function(name) {
-    Log(`[Site-links module starting for controller: ${name}]`);
+    Log(`[Backbone-links module starting for controller: ${name}]`);
     controller_name = name;
     await resolveControllerRecord();
 }

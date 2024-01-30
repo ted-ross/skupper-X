@@ -153,7 +153,7 @@ exports.OpenReceiver = function(conn, address, onMessage, context=undefined) {
         context      : context,
     };
 
-    receiver.skxReceiver = receiver;
+    receiver.amqpReceiver.skxReceiver = receiver;
     conn.receivers.push(receiver);
 
     return receiver;
@@ -171,7 +171,7 @@ exports.SendMessage = function(sender, messageBody, ap={}, destination=null) {
 
 exports.Request = function(sender, messageBody, ap={}, timeoutSeconds=DEFAULT_TIMEOUT_SECONDS, destination=null) {
     return new Promise((resolve, reject) => {
-        let timer   = setTimeout(() => reject('AMQP request/response timeout'), timeoutSeconds * 1000);
+        let timer   = setTimeout(() => reject(Error('AMQP request/response timeout')), timeoutSeconds * 1000);
         const cid   = nextCid;
         const msgId = nextMessageId;
         nextMessageId++;

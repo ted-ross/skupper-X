@@ -23,7 +23,7 @@ const k8s         = require('@kubernetes/client-node');
 const yaml        = require('yaml');
 const fs          = require('fs');
 const rhea        = require('rhea');
-const siteLinks   = require('./site-links.js');
+const bbLinks     = require('./backbone-links.js');
 const certs       = require('./certs.js');
 const prune       = require('./prune.js');
 const db          = require('./db.js');
@@ -54,7 +54,7 @@ exports.Main = async function() {
         await certs.Start();
         await amqp.Start(rhea);
         await apiserver.Start();
-        await siteLinks.Start(CONTROLLER);
+        await bbLinks.Start(CONTROLLER);
         await sync.Start();
         Log("[Management controller initialization completed successfully]");
     } catch (reason) {
