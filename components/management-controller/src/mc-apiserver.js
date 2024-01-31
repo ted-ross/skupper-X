@@ -328,10 +328,10 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
             let text = '';
             let incoming = {};
             const worklist = [
-                {ap_ref: site.managementaccess, profile: 'manage'},
-                {ap_ref: site.peeraccess,       profile: 'peer'},
-                {ap_ref: site.memberaccess,     profile: 'member'},
-                {ap_ref: site.claimaccess,      profile: 'claim'},
+                {ap_ref: site.manageaccess, profile: 'manage'},
+                {ap_ref: site.peeraccess,   profile: 'peer'},
+                {ap_ref: site.memberaccess, profile: 'member'},
+                {ap_ref: site.claimaccess,  profile: 'claim'},
             ]
 
             for (const work of worklist) {
@@ -388,10 +388,10 @@ exports.AddHostToAccessPoint = async function(bsid, key, hostname, port) {
         await client.query('BEGIN');
         var ref;
         switch (key) {
-            case 'ingress/manage' : ref = 'ManagementAccess';  break;
-            case 'ingress/member' : ref = 'MemberAccess';      break;
-            case 'ingress/claim'  : ref = 'ClaimAccess';       break;
-            case 'ingress/peer'   : ref = 'PeerAccess';        break;
+            case 'ingress/manage' : ref = 'ManageAccess';  break;
+            case 'ingress/member' : ref = 'MemberAccess';  break;
+            case 'ingress/claim'  : ref = 'ClaimAccess';   break;
+            case 'ingress/peer'   : ref = 'PeerAccess';    break;
             default: throw Error(`Invalid ingress key: ${key}`);
         }
         const result = await client.query(`SELECT ${ref} as access_ref, BackboneAccessPoints.* FROM InteriorSites JOIN BackboneAccessPoints ON ${ref} = BackboneAccessPoints.Id WHERE InteriorSites.Id = $1`, [bsid]);

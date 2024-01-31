@@ -164,7 +164,8 @@ CREATE TABLE BackboneAccessPoints (
     Port text,
 
     Kind AccessPointType,
-    Backbone UUID REFERENCES Backbones
+    Backbone UUID REFERENCES Backbones,
+    GlobalAccess UUID REFERENCES BackboneAccessPoints
 );
 
 --
@@ -185,16 +186,17 @@ CREATE TABLE InteriorSites (
     InbandAddress text,
 
     Backbone UUID REFERENCES Backbones,
-    ClaimAccess UUID REFERENCES BackboneAccessPoints,
-    PeerAccess UUID REFERENCES BackboneAccessPoints,
-    MemberAccess UUID REFERENCES BackboneAccessPoints,
-    ManagementAccess UUID REFERENCES BackboneAccessPoints
+    ClaimAccess UUID REFERENCES BackboneAccessPoints ON DELETE SET NULL,
+    PeerAccess UUID REFERENCES BackboneAccessPoints ON DELETE SET NULL,
+    MemberAccess UUID REFERENCES BackboneAccessPoints ON DELETE SET NULL,
+    ManageAccess UUID REFERENCES BackboneAccessPoints ON DELETE SET NULL
 );
 
 --
 -- Links that interconnect the interior transit backbone routers
 --
 CREATE TABLE InterRouterLinks (
+    Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     ListeningInteriorSite UUID REFERENCES InteriorSites ON DELETE CASCADE,
     ConnectingInteriorSite UUID REFERENCES InteriorSites ON DELETE CASCADE,
     Cost integer DEFAULT 1

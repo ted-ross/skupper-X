@@ -221,10 +221,10 @@ const getAccessCert = async function(siteId, kind) {
             let site = result.rows[0];
             let apRef = null;
             switch (kind) {
-            case 'manage' : apRef = site.managementaccess; break;
-            case 'peer'   : apRef = site.peeraccess;       break;
-            case 'member' : apRef = site.memberaccess;     break;
-            case 'claim'  : apRef = site.claimaccess;      break;
+            case 'manage' : apRef = site.manageaccess; break;
+            case 'peer'   : apRef = site.peeraccess;   break;
+            case 'member' : apRef = site.memberaccess; break;
+            case 'claim'  : apRef = site.claimaccess;  break;
             default:
                 throw(Error(`getAccessCert: unknown kind ${kind}`));
             }
@@ -259,7 +259,7 @@ exports.GetBackboneIngresses_TX = async function(client, siteId) {
     if (result.rowCount == 1) {
         const site = result.rows[0];
         const apRefs = {
-            manage : site.managementaccess,
+            manage : site.manageaccess,
             peer   : site.peeraccess,
             member : site.memberaccess,
             claim  : site.claimaccess,
