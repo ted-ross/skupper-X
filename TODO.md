@@ -1,5 +1,6 @@
 ## Bugs
  - Fix repeated/failed creation of connectors on the router
+ - Figure out the issue with incorrect return values from API functions
 
 ## Backbone Feature Tasks
  - ~~In initial setup, specify which ingresses are needed on the site based on configured access points (skupperx-incoming configmap?)~~

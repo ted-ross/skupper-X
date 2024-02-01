@@ -75,12 +75,13 @@ const validateAndNormalizeFields = function(fields, table) { // Return [ problem
 }
 
 const createBackbone = async function(req, res) {
+    var returnStatus;
     const form = new formidable.IncomingForm();
     form.parse(req, async function(err, fields, files) {
         if (err != null) {
             Log(err)
             res.status(400).json({ message: err.message });
-            return;
+            return 400;
         }
 
         const [problem, norm] = validateAndNormalizeFields(fields, {
@@ -89,7 +90,8 @@ const createBackbone = async function(req, res) {
         });
 
         if (problem) {
-            res.status(400).json({ message: problem });
+            returnStatus = 400;
+            res.status(returnStatus).json({ message: problem });
         } else {
             const client = await db.ClientFromPool();
             try {
@@ -97,24 +99,29 @@ const createBackbone = async function(req, res) {
                 const result = await client.query("INSERT INTO Backbones(Name, LifeCycle, MultiTenant) VALUES ($1, 'partial', $2) RETURNING Id", [norm.name, norm.multitenant]);
                 await client.query("COMMIT");
 
-                res.status(201).json({id: result.rows[0].id});
+                returnStatus = 201;
+                res.status(returnStatus).json({id: result.rows[0].id});
             } catch (error) {
                 await client.query("ROLLBACK");
-                res.status(500).send(error.message);
+                returnStatus = 500;
+                res.status(returnStatus).send(error.message);
             } finally {
                 client.release();
             }
         }
     });
+
+    return returnStatus;
 }
 
 const createBackboneSite = async function(bid, req, res) {
+    var returnStatus;
     const form = new formidable.IncomingForm();
     form.parse(req, async function(err, fields, files) {
         if (err != null) {
             Log(err)
             res.status(400).json({ message: err.message });
-            return;
+            return 400;
         }
 
         const [problem, norm] = validateAndNormalizeFields(fields, {
@@ -126,7 +133,8 @@ const createBackboneSite = async function(bid, req, res) {
         });
 
         if (problem) {
-            res.status(400).json({ message: problem });
+            returnStatus = 400;
+            res.status(returnStatus).json({ message: problem });
         } else {
             const client = await db.ClientFromPool();
             try {
@@ -155,24 +163,109 @@ const createBackboneSite = async function(bid, req, res) {
                 const siteId = result.rows[0].id;
                 await client.query("COMMIT");
 
-                res.status(201).json({id: siteId});
+                returnStatus = 201;
+                res.status(returnStatus).json({id: siteId});
             } catch (error) {
                 await client.query("ROLLBACK");
-                res.status(500).send(error.message);
+                returnStatus = 500
+                res.status(returnStatus).send(error.message);
             } finally {
                 client.release();
             }
         }
     });
+
+    return returnStatus;
 }
 
-const createBackboneLink = async function(bid, req, res) {
+const updateBackboneSite = async function(sid, req, res) {
+    var returnStatus = 200;
     const form = new formidable.IncomingForm();
     form.parse(req, async function(err, fields, files) {
         if (err != null) {
             Log(err)
             res.status(400).json({ message: err.message });
-            return;
+            return 400;
+        }
+
+        const [problem, norm] = validateAndNormalizeFields(fields, {
+            'name'   : {type: 'string', optional: true, default: null},
+            'claim'  : {type: 'bool',   optional: true, default: null},
+            'peer'   : {type: 'bool',   optional: true, default: null},
+            'member' : {type: 'bool',   optional: true, default: null},
+            'manage' : {type: 'bool',   optional: true, default: null},
+        });
+
+        if (problem) {
+            returnStatus = 400;
+            res.status(returnStatus).json({ message: problem });
+        } else {
+            const client = await db.ClientFromPool();
+            try {
+                await client.query("BEGIN");
+                let nameChanged = false;
+                const siteResult = await client.query("SELECT * FROM InteriorSites WHERE Id = $1", [sid]);
+                if (siteResult.rowCount == 1) {
+                    const site = siteResult.rows[0];
+                    var   siteName = site.name;
+
+                    //
+                    // If the name has been changed, update the site record in the database
+                    //
+                    if (norm.name != null && norm.name != site.name) {
+                        nameChanged = true;
+                        await client.query("UPDATE InteriorSites SET Name = $1 WHERE Id = $2", [norm.name, sid]);
+                        siteName = norm.name;
+                    }
+
+                    //
+                    // Check the site's access points to see if they need to be added/deleted or have their names changed
+                    //
+                    for (const ingress of INGRESS_LIST) {
+                        if (norm[ingress] === true && !site[`${ingress}access`]) {
+                            //
+                            // Update asked to add this ingress and there isn't one currently in place
+                            //
+                            const apResult = await client.query("INSERT INTO BackboneAccessPoints(Name, Kind, Backbone) VALUES ($1, $2, $3) RETURNING Id", [`${siteName}-${ingress}`, ingress, site.backbone]);
+                            await client.query(`UPDATE InteriorSites SET ${ingress}Access = $1 WHERE Id = $2`, [apResult.rows[0].id, sid]);
+                        } else if (norm[ingress] === false && site[`${ingress}access`]) {
+                            //
+                            // Update asked to remove this ingress and there is one currently in place
+                            //
+                            await client.query("DELETE FROM BackboneAccessPoints WHERE Id = $1", [site[`${ingress}access`]]);
+                            await client.query(`UPDATE InteriorSites SET ${ingress}Access = NULL WHERE Id = $1`, [sid]);
+                        } else if ((norm[ingress] === true || norm[ingress] === null) && site[`${ingress}access`] && nameChanged) {
+                            //
+                            // There exists an ingress, it will stay in place, and the site name has changed
+                            //
+                            await client.query("UPDATE BackboneAccessPoints SET Name = $1 WHERE Id = $2", [`${siteName}-${ingress}`, site[`${ingress}access`]]);
+                        }
+                    }
+                }
+                await client.query("COMMIT");
+
+                res.status(returnStatus).end();
+            } catch (error) {
+                await client.query("ROLLBACK");
+                returnStatus = 500;
+                res.status(returnStatus).send(error.message);
+            } finally {
+                client.release();
+            }
+        }
+    });
+
+    return returnStatus;
+}
+
+const createBackboneLink = async function(bid, req, res) {
+    var returnStatus;
+    const form = new formidable.IncomingForm();
+    form.parse(req, async function(err, fields, files) {
+        if (err != null) {
+            Log(err)
+            res.status(400).json({ message: err.message });
+            return 400;
         }
 
         const [problem, norm] = validateAndNormalizeFields(fields, {
@@ -182,7 +275,8 @@ const createBackboneLink = async function(bid, req, res) {
         });
 
         if (problem) {
-            res.status(400).json({ message: problem });
+            returnStatus = 400;
+            res.status(returnStatus).json({ message: problem });
         } else {
             const client = await db.ClientFromPool();
             try {
@@ -196,37 +290,96 @@ const createBackboneLink = async function(bid, req, res) {
                     const linkResult = await client.query("INSERT INTO InterRouterLinks(ListeningInteriorSite, ConnectingInteriorSite, Cost) VALUES ($1, $2, $3) RETURNING Id", [norm.listeningsite, norm.connectingsite, norm.cost]);
                     const linkId = linkResult.rows[0].id;
                     await client.query("COMMIT");
-                    res.status(201).json({id: linkId});
+                    returnStatus = 201;
+                    res.status(returnStatus).json({id: linkId});
                 } else {
-                    res.status(400).send('Sites not found or are not in the specified backbone');
+                    returnStatus = 400;
+                    res.status(returnStatus).send('Sites not found or are not in the specified backbone');
                     await client.query("ROLLBACK");
                 }
             } catch (error) {
                 await client.query("ROLLBACK");
-                res.status(500).send(error.message);
+                returnStatus = 500;
+                res.status(returnStatus).send(error.message);
             } finally {
                 client.release();
             }
         }
     });
+
+    return returnStatus;
+}
+
+const updateBackboneLink = async function(lid, req, res) {
+    var returnStatus = 204;
+    const form = new formidable.IncomingForm();
+    form.parse(req, async function(err, fields, files) {
+        if (err != null) {
+            Log(err)
+            returnStatus = 400;
+            res.status(returnStatus).json({ message: err.message });
+            return;
+        }
+
+        const [problem, norm] = validateAndNormalizeFields(fields, {
+            'cost' : {type: 'number', optional: true, default: null},
+        });
+
+        if (problem) {
+            returnStatus = 400;
+            res.status(returnStatus).json({ message: problem });
+        } else {
+            const client = await db.ClientFromPool();
+            try {
+                await client.query("BEGIN");
+                const linkResult = await client.query("SELECT * FROM InterRouterLinks WHERE Id = $1", [lid]);
+                if (linkResult.rowCount == 1) {
+                    const link = linkResult.rows[0];
+
+                    //
+                    // If the cost has been changed, update the link record in the database
+                    //
+                    if (norm.cost != null && norm.cost != link.cost) {
+                        await client.query("UPDATE InterRouterLinks SET Cost = $1 WHERE Id = $2", [norm.cost, lid]);
+                        returnStatus = 200;
+                    }
+                }
+                await client.query("COMMIT");
+                res.status(returnStatus).end();
+            } catch (error) {
+                await client.query("ROLLBACK");
+                returnStatus = 500;
+                res.status(returnStatus).send(error.message);
+            } finally {
+                client.release();
+            }
+        }
+    });
+
+    return returnStatus;
 }
 
 const activateBackbone = async function(res, bid) {
+    var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
         await client.query("UPDATE Backbones SET Lifecycle = 'new' WHERE Id = $1 and LifeCycle = 'partial'", [bid]);
         await client.query("COMMIT");
-        res.status(200).end();
+        res.status(returnStatus).end();
     } catch (error) {
         await client.query("ROLLBACK");
-        res.status(400).send(error.message);
+        returnStatus = 400;
+        res.status(returnStatus).send(error.message);
     } finally {
         client.release();
     }
+
+    return returnStatus;
 }
 
 const deleteBackbone = async function(res, bid) {
+    var returnStatus = 204;
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
@@ -241,16 +394,20 @@ const deleteBackbone = async function(res, bid) {
         await client.query("DELETE FROM Backbones WHERE Id = $1", [bid]);
         await client.query("COMMIT");
 
-        res.status(204).end();
+        res.status(returnStatus).end();
     } catch (error) {
         await client.query("ROLLBACK");
-        res.status(400).send(error.message);
+        returnStatus = 400;
+        res.status(returnStatus).send(error.message);
     } finally {
         client.release();
     }
+
+    return returnStatus;
 }
 
 const deleteBackboneSite = async function(res, sid) {
+    var returnStatus = 204;
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
@@ -275,32 +432,40 @@ const deleteBackboneSite = async function(res, sid) {
         }
         await client.query("COMMIT");
 
-        res.status(204).end();
+        res.status(returnStatus).end();
     } catch (error) {
         await client.query("ROLLBACK");
-        res.status(400).send(error.message);
+        returnStatus = 400;
+        res.status(returnStatus).send(error.message);
     } finally {
         client.release();
     }
+
+    return returnStatus;
 }
 
 const deleteBackboneLink = async function(lid, res) {
+    var returnStatus = 204;
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
         await client.query("DELETE FROM InterRouterLinks WHERE Id = $1", [lid]);
         await client.query("COMMIT");
 
-        res.status(204).end();
+        res.status(returnStatus).end();
     } catch (error) {
         await client.query("ROLLBACK");
-        res.status(400).send(error.message);
+        returnStatus = 400;
+        res.status(returnStatus).send(error.message);
     } finally {
         client.release();
     }
+
+    return returnStatus;
 }
 
 const listBackbones = async function(res, bid=null) {
+    var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
         var result;
@@ -314,15 +479,19 @@ const listBackbones = async function(res, bid=null) {
             list.push(row);
         });
         res.json(list);
-        res.status(200).end();
+        res.status(returnStatus).end();
     } catch (error) {
-        res.status(500).send(error.message);
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
     } finally {
         client.release();
     }
+
+    return returnStatus;
 }
 
 const listBackboneSites = async function(id, res, byBackbone) {
+    var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
         const result = await client.query(`SELECT Id, Name, Lifecycle, Failure, FirstActiveTime, LastHeartbeat FROM InteriorSites WHERE ${byBackbone ? 'Backbone' : 'Id'} = $1`, [id]);
@@ -331,15 +500,19 @@ const listBackboneSites = async function(id, res, byBackbone) {
             list.push(row);
         });
         res.json(list);
-        res.status(200).end();
+        res.status(returnStatus).end();
     } catch (error) {
-        res.status(500).send(error.message);
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
     } finally {
         client.release();
     }
+
+    return returnStatus;
 }
 
 const listBackboneLinks = async function(bid, res) {
+    var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
         const result = await client.query("SELECT InterRouterLinks.* FROM InterRouterLinks JOIN InteriorSites ON InterRouterLinks.ListeningInteriorSite = InteriorSites.Id WHERE InteriorSites.Backbone = $1", [bid]);
@@ -348,15 +521,19 @@ const listBackboneLinks = async function(bid, res) {
             list.push(row);
         });
         res.json(list);
-        res.status(200).end();
+        res.status(returnStatus).end();
     } catch (error) {
-        res.status(500).send(error.message);
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
     } finally {
         client.release();
     }
+
+    return returnStatus;
 }
 
 const listSiteIngresses = async function(sid, res) {
+    var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
         const sites = await client.query("SELECT ClaimAccess, PeerAccess, MemberAccess, ManageAccess FROM InteriorSites WHERE Id = $1", [sid]);
@@ -371,15 +548,19 @@ const listSiteIngresses = async function(sid, res) {
             });
         }
         res.json(list);
-        res.status(200).end();
+        res.status(returnStatus).end();
     } catch (error) {
-        res.status(500).send(error.message);
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
     } finally {
         client.release();
     }
+
+    return returnStatus;
 }
 
 const listInvitations = async function(res) {
+    var returnStatus = 200;
     const client = await db.ClientFromPool();
     const result = await client.query("SELECT Id, Name, Lifecycle, Failure FROM MemberInvitations");
     var list = [];
@@ -387,12 +568,14 @@ const listInvitations = async function(res) {
         list.push(row);
     });
     res.send(JSON.stringify(list));
-    res.status(200).end();
+    res.status(returnStatus).end();
     client.release();
+
+    return returnStatus;
 }
 
-const apiLog = function(req) {
-    Log(`AdminAPI: ${req.ip} - ${req.method} ${req.originalUrl}`);
+const apiLog = function(req, status) {
+    Log(`AdminAPI: ${req.ip} - (${status}) ${req.method} ${req.originalUrl}`);
 }
 
 exports.Initialize = async function(api) {
@@ -403,33 +586,28 @@ exports.Initialize = async function(api) {
     //========================================
 
     // CREATE
-    api.post(API_PREFIX + 'backbones', (req, res) => {
-        apiLog(req);
-        createBackbone(req, res);
+    api.post(API_PREFIX + 'backbones', async (req, res) => {
+        apiLog(req, await createBackbone(req, res));
     });
 
     // READ
-    api.get(API_PREFIX + 'backbone/:bid', (req, res) => {
-        apiLog(req);
-        listBackbones(res, req.params.bid);
+    api.get(API_PREFIX + 'backbone/:bid', async (req, res) => {
+        apiLog(req, await listBackbones(res, req.params.bid));
     });
 
     // LIST
-    api.get(API_PREFIX + 'backbones', (req, res) => {
-        apiLog(req);
-        listBackbones(res);
+    api.get(API_PREFIX + 'backbones', async (req, res) => {
+        apiLog(req, await listBackbones(res));
     });
 
     // DELETE
-    api.delete(API_PREFIX + 'backbone/:bid', (req, res) => {
-        apiLog(req);
-        deleteBackbone(res, req.params.bid);
+    api.delete(API_PREFIX + 'backbone/:bid', async (req, res) => {
+        apiLog(req, await deleteBackbone(res, req.params.bid));
     });
 
     // COMMANDS
-    api.put(API_PREFIX + 'backbone/:bid/activate', (req, res) => {
-        apiLog(req);
-        activateBackbone(res, req.params.bid);
+    api.put(API_PREFIX + 'backbone/:bid/activate', async (req, res) => {
+        apiLog(req, await activateBackbone(res, req.params.bid));
     });
 
     //========================================
@@ -437,29 +615,28 @@ exports.Initialize = async function(api) {
     //========================================
 
     // CREATE
-    api.post(API_PREFIX + 'backbone/:bid/sites', (req, res) => {
-        apiLog(req);
-        createBackboneSite(req.params.bid, req, res);
+    api.post(API_PREFIX + 'backbone/:bid/sites', async (req, res) => {
+        apiLog(req, await createBackboneSite(req.params.bid, req, res));
     });
 
     // READ
-    api.get(API_PREFIX + 'backbonesite/:sid', (req, res) => {
-        apiLog(req);
-        listBackboneSites(req.params.sid, res, false);
+    api.get(API_PREFIX + 'backbonesite/:sid', async (req, res) => {
+        apiLog(req, await listBackboneSites(req.params.sid, res, false));
     });
 
     // LIST
-    api.get(API_PREFIX + 'backbone/:bid/sites', (req, res) => {
-        apiLog(req);
-        listBackboneSites(req.params.bid, res, true);
+    api.get(API_PREFIX + 'backbone/:bid/sites', async (req, res) => {
+        apiLog(req, await listBackboneSites(req.params.bid, res, true));
     });
 
     // UPDATE
+    api.put(API_PREFIX + 'backbonesite/:sid', async (req, res) => {
+        apiLog(req, await updateBackboneSite(req.params.sid, req, res));
+    });
 
     // DELETE
-    api.delete(API_PREFIX + 'backbonesite/:sid', (req, res) => {
-        apiLog(req);
-        deleteBackboneSite(res, req.params.sid);
+    api.delete(API_PREFIX + 'backbonesite/:sid', async (req, res) => {
+        apiLog(req, await deleteBackboneSite(res, req.params.sid));
     });
 
     //========================================
@@ -467,33 +644,33 @@ exports.Initialize = async function(api) {
     //========================================
 
     // CREATE
-    api.post(API_PREFIX + 'backbone/:bid/links', (req, res) => {
-        apiLog(req);
-        createBackboneLink(req.params.bid, req, res);
+    api.post(API_PREFIX + 'backbone/:bid/links', async (req, res) => {
+        apiLog(req, await createBackboneLink(req.params.bid, req, res));
     });
 
     // LIST
-    api.get(API_PREFIX + 'backbone/:bid/links', (req, res) => {
-        apiLog(req);
-        listBackboneLinks(req.params.bid, res);
+    api.get(API_PREFIX + 'backbone/:bid/links', async (req, res) => {
+        apiLog(req, await listBackboneLinks(req.params.bid, res));
+    });
+
+    // UPDATE
+    api.put(API_PREFIX + 'backbonelink/:lid', async (req, res) => {
+        apiLog(req, await updateBackboneLink(req.params.lid, req, res));
     });
 
     // DELETE
-    api.delete(API_PREFIX + 'backbonelink/:lid', (req, res) => {
-        apiLog(req);
-        deleteBackboneLink(req.params.lid, res);
+    api.delete(API_PREFIX + 'backbonelink/:lid', async (req, res) => {
+        apiLog(req, await deleteBackboneLink(req.params.lid, res));
     });
 
     //========================================
     // Backbone Access Points
     //========================================
-    api.get(API_PREFIX + 'backbonesite/:sid/ingresses', (req, res) => {
-        apiLog(req);
-        listSiteIngresses(req.params.sid, res);
+    api.get(API_PREFIX + 'backbonesite/:sid/ingresses', async (req, res) => {
+        apiLog(req, await listSiteIngresses(req.params.sid, res));
     });
 
-    api.get(API_PREFIX + 'invitations', (req, res) => {
-        apiLog(req);
-        listInvitations(res);
+    api.get(API_PREFIX + 'invitations', async (req, res) => {
+        apiLog(req, await listInvitations(res));
     });
 }
