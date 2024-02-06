@@ -1,0 +1,103 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: skupperx-management-controller
+  labels:
+    application: skupperx
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: skupperx-management-controller
+  labels:
+    application: skupperx
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - delete
+  - patch
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - issuers
+  - certificates
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - delete
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    application: skupperx
+  name: skupperx-management-controller
+subjects:
+- kind: ServiceAccount
+  name: skupperx-management-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: skupperx-management-controller
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: skupperx-management-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: skupperx-management-controller
+  template:
+    metadata:
+      labels:
+        app: skupperx-management-controller
+    spec:
+      serviceAccount: skupperx-management-controller
+      serviceAccountName: skupperx-management-controller
+      containers:
+        - name: skupperx-management-controller
+          image: quay.io/tedlross/skupperx-management-controller:skx-0.1.1
+          imagePullPolicy: "Always"
+          ports:
+            - containerPort: 8085
+          env:
+            - name: PGHOST
+              value: postgres
+            - name: PGUSER
+              value: access
+            - name: PGPASSWORD
+              value: password
+            - name: PGDATABASE
+              value: studiodb
+            - name: SKX_CONTROLLER_NAME
+              value: main-controller
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: skupperx-admin-api
+spec:
+  type: ClusterIP
+  internalTrafficPolicy: Cluster
+  ports:
+  - name: adminapi
+    port: 8085
+    protocol: TCP
+    targetPort: 8085
+  selector:
+    app: skupperx-management-controller

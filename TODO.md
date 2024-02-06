@@ -1,6 +1,6 @@
 ## Bugs
  - Fix repeated/failed creation of connectors on the router
- - Figure out the issue with incorrect return values from API functions
+ - ~~Figure out the issue with incorrect return values from API functions~~
 
 ## Backbone Feature Tasks
  - ~~In initial setup, specify which ingresses are needed on the site based on configured access points (skupperx-incoming configmap?)~~
@@ -15,7 +15,7 @@
  - Review the module structure
  - ~~Ensure that Kube watches are working as expected~~
  - Disable API for backbone-site config after the site has "checked in" with the management controller
- - Define the APIs for the front-end
+ - ~~Define the APIs for the front-end~~
  - Use PG notifications instead of polling to detect database changes
  - Explore ways to virtualize the Kubernetes content on backbones/member-sites for non-kube environments
  - ~~Change the field validator to a validator/normalizer which returns a copy of the fields with their expected types~~

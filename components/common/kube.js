@@ -20,6 +20,7 @@
 "use strict";
 
 const Log  = require('./log.js').Log;
+const WATCH_ERROR_THRESHOLD = 10;   // Log if threshold is exceeded in a minute's time.
 
 var fs;
 var YAML;
@@ -33,6 +34,8 @@ var secretWatch;
 var certificateWatch;
 var configMapWatch;
 var routeWatch;
+var watchErrorCount = 0;
+var lastWatchError;
 var namespace = 'default';
 
 exports.Namespace = function() {
@@ -235,7 +238,8 @@ const startWatchSecrets = function() {
         },
         (err) => {
             if (err) {
-                Log(`Secret Watch error: ${err}`);
+                watchErrorCount++;
+                lastWatchError = `Secrets: ${err}`;
             }
             startWatchSecrets();
         }
@@ -263,7 +267,8 @@ const startWatchConfigMaps = function() {
         },
         (err) => {
             if (err) {
-                Log(`Configmap Watch error: ${err}`);
+                watchErrorCount++;
+                lastWatchError = `ConfigMaps: ${err}`;
             }
             startWatchConfigMaps();
         }
@@ -290,7 +295,8 @@ const startWatchCertificates = function() {
         },
         (err) => {
             if (err) {
-                Log(`Certificate Watch error: ${err}`);
+                watchErrorCount++;
+                lastWatchError = `Certificates: ${err}`;
             }
             startWatchCertificates();
         }
@@ -318,7 +324,8 @@ const startWatchRoutes = function() {
         },
         (err) => {
             if (err) {
-                Log(`Route Watch error: ${err}`);
+                watchErrorCount++;
+                lastWatchError = `Routes: ${err}`;
             }
             startWatchRoutes();
         }
@@ -347,7 +354,22 @@ exports.ApplyObject = async function(obj) {
     }
 }
 
+//
+// Watchers normally fail (are aborted) after a number of minutes, depending on the configuration of the platform.
+// We do not wish to pollute the log with benign watch-fail indications.  However, there are failure modes like
+// lack of watch permissions that will fail immediately.  We do need to see these in the logs to know that the role
+// rights need to be fixed.  This mechanism will provide legit watch errors every minute.
+//
+const logWatchErrors = function() {
+    if (watchErrorCount > WATCH_ERROR_THRESHOLD) {
+        Log(`Watch error rate exceeded threshold:  ${watchErrorCount} in the last minute - ${lastWatchError}`);
+    }
+    watchErrorCount = 0;
+    setTimeout(logWatchErrors, 60 * 1000);
+}
+
 exports.ApplyYaml = async function(yaml) {
+    setTimeout(logWatchErrors, 60 * 1000);
     let obj = YAML.parse(yaml);
     return await ApplyObject(obj);
 }

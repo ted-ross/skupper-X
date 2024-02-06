@@ -4,10 +4,9 @@ apiVersion: v1
 metadata:
   name: postgres-pv-volume  # Sets PV's name
   labels:
-    type: local  # Sets PV's type to local
     app: postgres
 spec:
-  storageClassName: manual
+  storageClassName: ibmc-vpc-block-10iops-tier
   capacity:
     storage: 5Gi # Sets PV Volume
   accessModes:
@@ -22,7 +21,7 @@ metadata:
   labels:
     app: postgres
 spec:
-  storageClassName: manual
+  storageClassName: ibmc-vpc-block-10iops-tier
   accessModes:
     - ReadWriteMany  # Sets read and write access
   resources:

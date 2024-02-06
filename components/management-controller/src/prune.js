@@ -25,37 +25,41 @@ const db     = require('./db.js');
 
 const reconcileCertificates = async function() {
     const client = await db.ClientFromPool();
-    const result = await client.query("SELECT ObjectName FROM TlsCertificates");
-    var   db_cert_names = [];
-    result.rows.forEach(row => {
-        db_cert_names.push(row.objectname);
-    });
+    try {
+        const result = await client.query("SELECT ObjectName FROM TlsCertificates");
+        var   db_cert_names = [];
+        result.rows.forEach(row => {
+            db_cert_names.push(row.objectname);
+        });
 
-    const issuer_list = await kube.GetIssuers();
-    issuer_list.forEach(issuer => {
-        if (!db_cert_names.includes(issuer.metadata.name) && (issuer.metadata.annotations && issuer.metadata.annotations['skupper.io/skx-controlled'] == 'true')) {
-            kube.DeleteIssuer(issuer.metadata.name);
-            Log(`  Deleted issuer: ${issuer.metadata.name}`);
-        }
-    });
+        const issuer_list = await kube.GetIssuers();
+        issuer_list.forEach(issuer => {
+            if (!db_cert_names.includes(issuer.metadata.name) && (issuer.metadata.annotations && issuer.metadata.annotations['skupper.io/skx-controlled'] == 'true')) {
+                kube.DeleteIssuer(issuer.metadata.name);
+                Log(`  Deleted issuer: ${issuer.metadata.name}`);
+            }
+        });
 
-    const cert_list = await kube.GetCertificates();
-    cert_list.forEach(cert => {
-        if (!db_cert_names.includes(cert.metadata.name) && (cert.metadata.annotations && cert.metadata.annotations['skupper.io/skx-controlled'] == 'true')) {
-            kube.DeleteCertificate(cert.metadata.name);
-            Log(`  Deleted certificate: ${cert.metadata.name}`);
-        }
-    });
+        const cert_list = await kube.GetCertificates();
+        cert_list.forEach(cert => {
+            if (!db_cert_names.includes(cert.metadata.name) && (cert.metadata.annotations && cert.metadata.annotations['skupper.io/skx-controlled'] == 'true')) {
+                kube.DeleteCertificate(cert.metadata.name);
+                Log(`  Deleted certificate: ${cert.metadata.name}`);
+            }
+        });
 
-    const secret_list = await kube.GetSecrets();
-    secret_list.forEach(secret => {
-        if (!db_cert_names.includes(secret.metadata.name) && (secret.metadata.annotations && secret.metadata.annotations['skupper.io/skx-controlled'] == 'true')) {
-            kube.DeleteSecret(secret.metadata.name);
-            Log(`  Deleted secret: ${secret.metadata.name}`);
-        }
-    });
-
-    client.release();
+        const secret_list = await kube.GetSecrets();
+        secret_list.forEach(secret => {
+            if (!db_cert_names.includes(secret.metadata.name) && (secret.metadata.annotations && secret.metadata.annotations['skupper.io/skx-controlled'] == 'true')) {
+                kube.DeleteSecret(secret.metadata.name);
+                Log(`  Deleted secret: ${secret.metadata.name}`);
+            }
+        });
+    } catch (error) {
+        Log(`Exception in reconcileCertificates: ${error.stack}`);
+    } finally {
+        client.release();
+    }
 }
 
 exports.Start = async function() {

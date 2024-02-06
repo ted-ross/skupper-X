@@ -26,7 +26,7 @@ const Log        = require('./common/log.js').Log;
 const API_PREFIX   = '/api/v1alpha1/';
 const INGRESS_LIST = ['claim', 'peer', 'member', 'manage'];
 
-const validateAndNormalizeFields = function(fields, table) { // Return [ problem, normalized-object ]
+const validateAndNormalizeFields = function(fields, table) {
     var optional = {};
     for (const [key, value] of Object.entries(table)) {
         optional[key] = value.optional;
@@ -36,27 +36,27 @@ const validateAndNormalizeFields = function(fields, table) { // Return [ problem
 
     for (const [key, value] of Object.entries(fields)) {
         if (Object.keys(table).indexOf(key) < 0) {
-            return [`Unknown field key ${key}`, {}];
+            throw(Error(`Unknown field key ${key}`));
         }
         delete optional[key];
         switch (table[key].type) {
         case 'string' :
             if (typeof value != 'string') {
-                return [`Expected string value for key ${key}`, {}];
+                throw(Error(`Expected string value for key ${key}`));
             }
             normalized[key] = value;
             break;
 
         case 'bool' :
             if (typeof value != 'string' || (value != 'true' && value != 'false')) {
-                return [`Expected boolean string for key ${key}`, {}];
+                throw(Error(`Expected boolean string for key ${key}`));
             }
             normalized[key] = value == 'true';
             break;
 
         case 'number' :
             if (typeof value != 'string' || isNaN(value)) {
-                return [`Expected numeric string for key ${key}`, {}];
+                throw(Error(`Expected numeric string for key ${key}`));
             }
             normalized[key] = parseInt(value);
             break;
@@ -65,51 +65,44 @@ const validateAndNormalizeFields = function(fields, table) { // Return [ problem
 
     for (const [key, value] of Object.entries(optional)) {
         if (!value) {
-            return [`Mandatory key ${key} not found`, {}];
+            throw(Error(`Mandatory key ${key} not found`));
         } else {
             normalized[key] = table[key].default;
         }
     }
 
-    return [null, normalized];
+    return normalized;
 }
 
 const createBackbone = async function(req, res) {
     var returnStatus;
     const form = new formidable.IncomingForm();
-    form.parse(req, async function(err, fields, files) {
-        if (err != null) {
-            Log(err)
-            res.status(400).json({ message: err.message });
-            return 400;
-        }
-
-        const [problem, norm] = validateAndNormalizeFields(fields, {
+    try {
+        const [fields, files] = await form.parse(req);
+        const norm = validateAndNormalizeFields(fields, {
             'name'        : {type: 'string', optional: false},
             'multitenant' : {type: 'bool',   optional: true, default: true},
         });
 
-        if (problem) {
-            returnStatus = 400;
-            res.status(returnStatus).json({ message: problem });
-        } else {
-            const client = await db.ClientFromPool();
-            try {
-                await client.query("BEGIN");
-                const result = await client.query("INSERT INTO Backbones(Name, LifeCycle, MultiTenant) VALUES ($1, 'partial', $2) RETURNING Id", [norm.name, norm.multitenant]);
-                await client.query("COMMIT");
+        const client = await db.ClientFromPool();
+        try {
+            await client.query("BEGIN");
+            const result = await client.query("INSERT INTO Backbones(Name, LifeCycle, MultiTenant) VALUES ($1, 'partial', $2) RETURNING Id", [norm.name, norm.multitenant]);
+            await client.query("COMMIT");
 
-                returnStatus = 201;
-                res.status(returnStatus).json({id: result.rows[0].id});
-            } catch (error) {
-                await client.query("ROLLBACK");
-                returnStatus = 500;
-                res.status(returnStatus).send(error.message);
-            } finally {
-                client.release();
-            }
+            returnStatus = 201;
+            res.status(returnStatus).json({id: result.rows[0].id});
+        } catch (error) {
+            await client.query("ROLLBACK");
+            returnStatus = 500;
+            res.status(returnStatus).send(error.message);
+        } finally {
+            client.release();
         }
-    });
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).json({ message: error.message });
+    }
 
     return returnStatus;
 }
@@ -117,14 +110,9 @@ const createBackbone = async function(req, res) {
 const createBackboneSite = async function(bid, req, res) {
     var returnStatus;
     const form = new formidable.IncomingForm();
-    form.parse(req, async function(err, fields, files) {
-        if (err != null) {
-            Log(err)
-            res.status(400).json({ message: err.message });
-            return 400;
-        }
-
-        const [problem, norm] = validateAndNormalizeFields(fields, {
+    try {
+        const [fields, files] = await form.parse(req)
+        const norm = validateAndNormalizeFields(fields, {
             'name'   : {type: 'string', optional: false},
             'claim'  : {type: 'bool',   optional: true, default: true},
             'peer'   : {type: 'bool',   optional: true, default: false},
@@ -132,48 +120,46 @@ const createBackboneSite = async function(bid, req, res) {
             'manage' : {type: 'bool',   optional: true, default: false},
         });
 
-        if (problem) {
-            returnStatus = 400;
-            res.status(returnStatus).json({ message: problem });
-        } else {
-            const client = await db.ClientFromPool();
-            try {
-                await client.query("BEGIN");
+        const client = await db.ClientFromPool();
+        try {
+            await client.query("BEGIN");
 
-                //
-                // Create a BackboneAccessPoint object for each called-for ingress on this site.
-                //
-                var accessIds = {};
-                var extraCols = "";
-                var extraVals = "";
-                for (const ingress of INGRESS_LIST) {
-                    if (norm[ingress]) {
-                        const apResult = await client.query("INSERT INTO BackboneAccessPoints(Name, Kind, Backbone) VALUES ($1, $2, $3) RETURNING Id", [`${norm.name}-${ingress}`, ingress, bid]);
-                        const apId = apResult.rows[0].id;
-                        accessIds[ingress] = apId
-                        extraCols += `, ${ingress}Access`;
-                        extraVals += `, '${apId}'`;
-                    }
+            //
+            // Create a BackboneAccessPoint object for each called-for ingress on this site.
+            //
+            var accessIds = {};
+            var extraCols = "";
+            var extraVals = "";
+            for (const ingress of INGRESS_LIST) {
+                if (norm[ingress]) {
+                    const apResult = await client.query("INSERT INTO BackboneAccessPoints(Name, Kind, Backbone) VALUES ($1, $2, $3) RETURNING Id", [`${norm.name}-${ingress}`, ingress, bid]);
+                    const apId = apResult.rows[0].id;
+                    accessIds[ingress] = apId
+                    extraCols += `, ${ingress}Access`;
+                    extraVals += `, '${apId}'`;
                 }
-
-                //
-                // Create the site referencing the above created access points.
-                //
-                const result = await client.query(`INSERT INTO InteriorSites(Name, Backbone${extraCols}) VALUES ($1, $2${extraVals}) RETURNING Id`, [norm.name, bid]);
-                const siteId = result.rows[0].id;
-                await client.query("COMMIT");
-
-                returnStatus = 201;
-                res.status(returnStatus).json({id: siteId});
-            } catch (error) {
-                await client.query("ROLLBACK");
-                returnStatus = 500
-                res.status(returnStatus).send(error.message);
-            } finally {
-                client.release();
             }
+
+            //
+            // Create the site referencing the above created access points.
+            //
+            const result = await client.query(`INSERT INTO InteriorSites(Name, Backbone${extraCols}) VALUES ($1, $2${extraVals}) RETURNING Id`, [norm.name, bid]);
+            const siteId = result.rows[0].id;
+            await client.query("COMMIT");
+
+            returnStatus = 201;
+            res.status(returnStatus).json({id: siteId});
+        } catch (error) {
+            await client.query("ROLLBACK");
+            returnStatus = 500
+            res.status(returnStatus).send(error.message);
+        } finally {
+            client.release();
         }
-    });
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).json({ message: error.message });
+    }
 
     return returnStatus;
 }
@@ -181,79 +167,72 @@ const createBackboneSite = async function(bid, req, res) {
 const updateBackboneSite = async function(sid, req, res) {
     var returnStatus = 200;
     const form = new formidable.IncomingForm();
-    form.parse(req, async function(err, fields, files) {
-        if (err != null) {
-            Log(err)
-            res.status(400).json({ message: err.message });
-            return 400;
-        }
-
-        const [problem, norm] = validateAndNormalizeFields(fields, {
+    try {
+        const [fields, files] = await form.parse(req);
+        const norm = validateAndNormalizeFields(fields, {
             'name'   : {type: 'string', optional: true, default: null},
             'claim'  : {type: 'bool',   optional: true, default: null},
             'peer'   : {type: 'bool',   optional: true, default: null},
             'member' : {type: 'bool',   optional: true, default: null},
             'manage' : {type: 'bool',   optional: true, default: null},
         });
+    
+        const client = await db.ClientFromPool();
+        try {
+            await client.query("BEGIN");
+            let nameChanged = false;
+            const siteResult = await client.query("SELECT * FROM InteriorSites WHERE Id = $1", [sid]);
+            if (siteResult.rowCount == 1) {
+                const site = siteResult.rows[0];
+                var   siteName = site.name;
 
-        if (problem) {
-            returnStatus = 400;
-            res.status(returnStatus).json({ message: problem });
-        } else {
-            const client = await db.ClientFromPool();
-            try {
-                await client.query("BEGIN");
-                let nameChanged = false;
-                const siteResult = await client.query("SELECT * FROM InteriorSites WHERE Id = $1", [sid]);
-                if (siteResult.rowCount == 1) {
-                    const site = siteResult.rows[0];
-                    var   siteName = site.name;
+                //
+                // If the name has been changed, update the site record in the database
+                //
+                if (norm.name != null && norm.name != site.name) {
+                    nameChanged = true;
+                    await client.query("UPDATE InteriorSites SET Name = $1 WHERE Id = $2", [norm.name, sid]);
+                    siteName = norm.name;
+                }
 
-                    //
-                    // If the name has been changed, update the site record in the database
-                    //
-                    if (norm.name != null && norm.name != site.name) {
-                        nameChanged = true;
-                        await client.query("UPDATE InteriorSites SET Name = $1 WHERE Id = $2", [norm.name, sid]);
-                        siteName = norm.name;
-                    }
-
-                    //
-                    // Check the site's access points to see if they need to be added/deleted or have their names changed
-                    //
-                    for (const ingress of INGRESS_LIST) {
-                        if (norm[ingress] === true && !site[`${ingress}access`]) {
-                            //
-                            // Update asked to add this ingress and there isn't one currently in place
-                            //
-                            const apResult = await client.query("INSERT INTO BackboneAccessPoints(Name, Kind, Backbone) VALUES ($1, $2, $3) RETURNING Id", [`${siteName}-${ingress}`, ingress, site.backbone]);
-                            await client.query(`UPDATE InteriorSites SET ${ingress}Access = $1 WHERE Id = $2`, [apResult.rows[0].id, sid]);
-                        } else if (norm[ingress] === false && site[`${ingress}access`]) {
-                            //
-                            // Update asked to remove this ingress and there is one currently in place
-                            //
-                            await client.query("DELETE FROM BackboneAccessPoints WHERE Id = $1", [site[`${ingress}access`]]);
-                            await client.query(`UPDATE InteriorSites SET ${ingress}Access = NULL WHERE Id = $1`, [sid]);
-                        } else if ((norm[ingress] === true || norm[ingress] === null) && site[`${ingress}access`] && nameChanged) {
-                            //
-                            // There exists an ingress, it will stay in place, and the site name has changed
-                            //
-                            await client.query("UPDATE BackboneAccessPoints SET Name = $1 WHERE Id = $2", [`${siteName}-${ingress}`, site[`${ingress}access`]]);
-                        }
+                //
+                // Check the site's access points to see if they need to be added/deleted or have their names changed
+                //
+                for (const ingress of INGRESS_LIST) {
+                    if (norm[ingress] === true && !site[`${ingress}access`]) {
+                        //
+                        // Update asked to add this ingress and there isn't one currently in place
+                        //
+                        const apResult = await client.query("INSERT INTO BackboneAccessPoints(Name, Kind, Backbone) VALUES ($1, $2, $3) RETURNING Id", [`${siteName}-${ingress}`, ingress, site.backbone]);
+                        await client.query(`UPDATE InteriorSites SET ${ingress}Access = $1 WHERE Id = $2`, [apResult.rows[0].id, sid]);
+                    } else if (norm[ingress] === false && site[`${ingress}access`]) {
+                        //
+                        // Update asked to remove this ingress and there is one currently in place
+                        //
+                        await client.query("DELETE FROM BackboneAccessPoints WHERE Id = $1", [site[`${ingress}access`]]);
+                        await client.query(`UPDATE InteriorSites SET ${ingress}Access = NULL WHERE Id = $1`, [sid]);
+                    } else if ((norm[ingress] === true || norm[ingress] === null) && site[`${ingress}access`] && nameChanged) {
+                        //
+                        // There exists an ingress, it will stay in place, and the site name has changed
+                        //
+                        await client.query("UPDATE BackboneAccessPoints SET Name = $1 WHERE Id = $2", [`${siteName}-${ingress}`, site[`${ingress}access`]]);
                     }
                 }
-                await client.query("COMMIT");
-
-                res.status(returnStatus).end();
-            } catch (error) {
-                await client.query("ROLLBACK");
-                returnStatus = 500;
-                res.status(returnStatus).send(error.message);
-            } finally {
-                client.release();
             }
+            await client.query("COMMIT");
+
+            res.status(returnStatus).end();
+        } catch (error) {
+            await client.query("ROLLBACK");
+            returnStatus = 500;
+            res.status(returnStatus).send(error.message);
+        } finally {
+            client.release();
         }
-    });
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).json({ message: error.message });
+    }
 
     return returnStatus;
 }
@@ -261,51 +240,44 @@ const updateBackboneSite = async function(sid, req, res) {
 const createBackboneLink = async function(bid, req, res) {
     var returnStatus;
     const form = new formidable.IncomingForm();
-    form.parse(req, async function(err, fields, files) {
-        if (err != null) {
-            Log(err)
-            res.status(400).json({ message: err.message });
-            return 400;
-        }
-
-        const [problem, norm] = validateAndNormalizeFields(fields, {
+    try {
+        const [fields, files] = await form.parse(req);
+        const norm = validateAndNormalizeFields(fields, {
             'listeningsite'  : {type: 'string', optional: false},
             'connectingsite' : {type: 'string', optional: false},
             'cost'           : {type: 'number', optional: true, default: 1},
         });
 
-        if (problem) {
-            returnStatus = 400;
-            res.status(returnStatus).json({ message: problem });
-        } else {
-            const client = await db.ClientFromPool();
-            try {
-                await client.query("BEGIN");
+        const client = await db.ClientFromPool();
+        try {
+            await client.query("BEGIN");
 
-                //
-                // Ensure that the referenced sites are in the specified backbone network
-                //
-                const siteResult = await client.query("SELECT Backbone FROM InteriorSites WHERE Id = $1 OR Id = $2", [norm.listeningsite, norm.connectingsite]);
-                if (siteResult.rowCount == 2 && siteResult.row[0].backbone == bid && siteResult.row[1].backbone == bid) {
-                    const linkResult = await client.query("INSERT INTO InterRouterLinks(ListeningInteriorSite, ConnectingInteriorSite, Cost) VALUES ($1, $2, $3) RETURNING Id", [norm.listeningsite, norm.connectingsite, norm.cost]);
-                    const linkId = linkResult.rows[0].id;
-                    await client.query("COMMIT");
-                    returnStatus = 201;
-                    res.status(returnStatus).json({id: linkId});
-                } else {
-                    returnStatus = 400;
-                    res.status(returnStatus).send('Sites not found or are not in the specified backbone');
-                    await client.query("ROLLBACK");
-                }
-            } catch (error) {
+            //
+            // Ensure that the referenced sites are in the specified backbone network
+            //
+            const siteResult = await client.query("SELECT Backbone FROM InteriorSites WHERE Id = $1 OR Id = $2", [norm.listeningsite, norm.connectingsite]);
+            if (siteResult.rowCount == 2 && siteResult.row[0].backbone == bid && siteResult.row[1].backbone == bid) {
+                const linkResult = await client.query("INSERT INTO InterRouterLinks(ListeningInteriorSite, ConnectingInteriorSite, Cost) VALUES ($1, $2, $3) RETURNING Id", [norm.listeningsite, norm.connectingsite, norm.cost]);
+                const linkId = linkResult.rows[0].id;
+                await client.query("COMMIT");
+                returnStatus = 201;
+                res.status(returnStatus).json({id: linkId});
+            } else {
+                returnStatus = 400;
+                res.status(returnStatus).send('Sites not found or are not in the specified backbone');
                 await client.query("ROLLBACK");
-                returnStatus = 500;
-                res.status(returnStatus).send(error.message);
-            } finally {
-                client.release();
             }
+        } catch (error) {
+            await client.query("ROLLBACK");
+            returnStatus = 500;
+            res.status(returnStatus).send(error.message);
+        } finally {
+            client.release();
         }
-    });
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).json({ message: error.message });
+    }
 
     return returnStatus;
 }
@@ -313,48 +285,40 @@ const createBackboneLink = async function(bid, req, res) {
 const updateBackboneLink = async function(lid, req, res) {
     var returnStatus = 204;
     const form = new formidable.IncomingForm();
-    form.parse(req, async function(err, fields, files) {
-        if (err != null) {
-            Log(err)
-            returnStatus = 400;
-            res.status(returnStatus).json({ message: err.message });
-            return;
-        }
-
-        const [problem, norm] = validateAndNormalizeFields(fields, {
+    try {
+        const [fields, files] = await form.parse(req);
+        const norm = validateAndNormalizeFields(fields, {
             'cost' : {type: 'number', optional: true, default: null},
         });
 
-        if (problem) {
-            returnStatus = 400;
-            res.status(returnStatus).json({ message: problem });
-        } else {
-            const client = await db.ClientFromPool();
-            try {
-                await client.query("BEGIN");
-                const linkResult = await client.query("SELECT * FROM InterRouterLinks WHERE Id = $1", [lid]);
-                if (linkResult.rowCount == 1) {
-                    const link = linkResult.rows[0];
+        const client = await db.ClientFromPool();
+        try {
+            await client.query("BEGIN");
+            const linkResult = await client.query("SELECT * FROM InterRouterLinks WHERE Id = $1", [lid]);
+            if (linkResult.rowCount == 1) {
+                const link = linkResult.rows[0];
 
-                    //
-                    // If the cost has been changed, update the link record in the database
-                    //
-                    if (norm.cost != null && norm.cost != link.cost) {
-                        await client.query("UPDATE InterRouterLinks SET Cost = $1 WHERE Id = $2", [norm.cost, lid]);
-                        returnStatus = 200;
-                    }
+                //
+                // If the cost has been changed, update the link record in the database
+                //
+                if (norm.cost != null && norm.cost != link.cost) {
+                    await client.query("UPDATE InterRouterLinks SET Cost = $1 WHERE Id = $2", [norm.cost, lid]);
+                    returnStatus = 200;
                 }
-                await client.query("COMMIT");
-                res.status(returnStatus).end();
-            } catch (error) {
-                await client.query("ROLLBACK");
-                returnStatus = 500;
-                res.status(returnStatus).send(error.message);
-            } finally {
-                client.release();
             }
+            await client.query("COMMIT");
+            res.status(returnStatus).end();
+        } catch (error) {
+            await client.query("ROLLBACK");
+            returnStatus = 500;
+            res.status(returnStatus).send(error.message);
+        } finally {
+            client.release();
         }
-    });
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).json({ message: error.message });
+    }
 
     return returnStatus;
 }
