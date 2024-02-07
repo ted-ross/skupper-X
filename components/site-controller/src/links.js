@@ -26,6 +26,7 @@
 const Log    = require('./common/log.js').Log;
 const kube   = require('./common/kube.js');
 const router = require('./common/router.js');
+const sync   = require('./site-sync.js');
 var   fs     = require('fs/promises');
 
 const MANAGE_PORT = 45670;  // TODO - centralize these
@@ -75,6 +76,7 @@ const sync_secrets = async function() {
             if (Object.keys(profiles).indexOf(profile_name) >= 0) {
                 delete profiles[profile_name];
             } else {
+                sync.LocalObjectUpdated('Secret', secret.metadata.name, secret.metadata.annotations['skupper.io/skx-hash']);
                 await inject_profile(profile_name, secret)
             }
         }
@@ -238,8 +240,10 @@ const sync_config_map_incoming = async function() {
     var configmap;
     try {
         configmap = await kube.LoadConfigmap('skupperx-links-incoming');
+        sync.LocalObjectUpdated('ConfigMap', 'skupperx-links-incoming', configmap.metadata.annotations['skupper.io/skx-hash']);
     } catch (error) {
         configmap = {data: {}};
+        sync.LocalObjectUpdated('ConfigMap', 'skupperx-links-incoming', null);
     }
 
     let actual_listeners  = await router.ListListeners();
@@ -252,8 +256,10 @@ const sync_config_map_outgoing = async function() {
     var configmap;
     try {
         configmap = await kube.LoadConfigmap('skupperx-links-outgoing');
+        sync.LocalObjectUpdated('ConfigMap', 'skupperx-links-outgoing', configmap.metadata.annotations['skupper.io/skx-hash']);
     } catch(err) {
         Log(`Failed to load skupperx-links-outgoing config-map, no links created`);
+        sync.LocalObjectUpdated('ConfigMap', 'skupperx-links-outgoing', null);
         return;
     }
 

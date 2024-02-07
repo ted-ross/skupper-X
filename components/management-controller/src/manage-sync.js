@@ -127,19 +127,17 @@ const checkSiteHashset = async function(backboneId, siteId, hashSet) {
 
     for (const key of deleteKeys) {
         // TODO - figure this out
+        Log(`Reconcile: Site ${siteId} - Delete key ${key}`);
     }
 
-    Log('checkSiteHashset');
     for (const key of updateKeys) {
-        Log(`    key: ${key}`);
         try {
             let index = siteIngressKeys[key];
             let apiSender = openLinks[backboneId].apiSender;
-            Log('    sending request...');
             const [responseAp, responseBody] = await amqp.Request(apiSender, protocol.GetObject('manage', key), {}, REQUEST_TIMEOUT_SECONDS, API_MY_ADDRESS_PREFIX + siteId);
-            Log(`    response code ${responseBody.statusCode}`);
             if (responseBody.statusCode == 200) {
                 if (responseBody.objectName == key) {
+                    Log(`Reconcile: Site ${siteId} - Update key ${key}`);
                     await api.AddHostToAccessPoint(siteId, key, responseBody.data.host, responseBody.data.port);
                     backbone.siteHashSet[index] = responseBody.hash;
                 } else {
@@ -154,7 +152,7 @@ const checkSiteHashset = async function(backboneId, siteId, hashSet) {
     }
 }
 
-const hashOfSecret = function(secret) {
+exports.HashOfSecret = function(secret) {
     let text = '';
     for (const [key, value] of Object.entries(secret.data)) {
         text += key + value;
@@ -169,11 +167,11 @@ const dataOfSecret = function(secret, hash) {
     if (!data.metadata.annotations) {
         data.metadata.annotations = {};
     }
-    data.metadata.annotations['skupperx/skx-hash'] = hash;
+    data.metadata.annotations['skupper.io/skx-hash'] = hash;
     return data;
 }
 
-const hashOfConfigMap = function(cm) {
+exports.HashOfConfigMap = function(cm) {
     let text = '';
     for (const [key, value] of Object.entries(cm.data)) {
         text += key + value;
@@ -195,7 +193,7 @@ const getSiteClient = async function(siteId) {
             'JOIN TlsCertificates ON InteriorSites.Certificate = TlsCertificates.Id WHERE Interiorsites.Id = $1', [siteId]);
         if (result.rowCount == 1) {
             let secret = await kube.LoadSecret(result.rows[0].secret_name);
-            hash = hashOfSecret(secret);
+            hash = exports.HashOfSecret(secret);
             data = dataOfSecret(secret, hash);
         }
         await client.query('COMMIT');
@@ -234,7 +232,7 @@ const getAccessCert = async function(siteId, kind) {
                 if (apResult.rowCount == 1) {
                     let ap = apResult.rows[0];
                     let secret = await kube.LoadSecret(ap.objectname);
-                    hash = hashOfSecret(secret);
+                    hash = exports.HashOfSecret(secret);
                     data = dataOfSecret(secret, hash);
                 }
             }
@@ -281,7 +279,7 @@ exports.GetBackboneIngresses_TX = async function(client, siteId) {
 }
 
 const getLinksIncoming = async function(siteId) {
-    var data = {
+    var configMap = {
         metadata : {
             annotations: {},
         },
@@ -291,9 +289,9 @@ const getLinksIncoming = async function(siteId) {
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
-        data.data = await exports.GetBackboneIngresses_TX(client, siteId);
-        hash = hashOfConfigMap(data);
-        data.metadata.annotations['skupperx/skx-hash'] = hash;
+        configMap.data = await exports.GetBackboneIngresses_TX(client, siteId);
+        hash = exports.HashOfConfigMap(configMap);
+        configMap.metadata.annotations['skupper.io/skx-hash'] = hash;
         await client.query('COMMIT');
     } catch (error) {
         Log(`Exception in getLinksIncoming: ${error.message}`);
@@ -302,7 +300,7 @@ const getLinksIncoming = async function(siteId) {
         client.release();
     }
 
-    return [hash, data];
+    return [hash, configMap];
 }
 
 exports.GetBackboneConnectors_TX = async function (client, siteId) {
@@ -323,7 +321,7 @@ exports.GetBackboneConnectors_TX = async function (client, siteId) {
 }
 
 const getLinksOutgoing = async function(siteId) {
-    let data = {
+    let configMap = {
         metadata : {
             annotations: {},
         },
@@ -333,9 +331,9 @@ const getLinksOutgoing = async function(siteId) {
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
-        data.data = await exports.GetBackboneConnectors_TX(client, siteId);
-        hash = hashOfConfigMap(data);
-        data.metadata.annotations['skupperx/skx-hash'] = hash;
+        configMap.data = await exports.GetBackboneConnectors_TX(client, siteId);
+        hash = exports.HashOfConfigMap(configMap);
+        configMap.metadata.annotations['skupper.io/skx-hash'] = hash;
         await client.query('COMMIT');
     } catch (err) {
         await client.query('ROLLBACK');
@@ -343,7 +341,7 @@ const getLinksOutgoing = async function(siteId) {
         client.release();
     }
 
-    return [hash, data];
+    return [hash, configMap];
 }
 
 const getObject = async function(siteId, objectname) {

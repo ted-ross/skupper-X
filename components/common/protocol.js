@@ -66,7 +66,6 @@ exports.GetObjectReponseFailure = function(code, description) {
 }
 
 exports.DispatchMessage = function(body, onHeartbeat, onSolicit, onGet) {
-    Log(`Dispatch message: ${body.op}`);
     switch (body.op) {
     case OP_HEARTBEAT         : onHeartbeat(body.site, body.hashset);  break;
     case OP_SOLICIT_HEARTBEAT : onSolicit(body.site);                  break;

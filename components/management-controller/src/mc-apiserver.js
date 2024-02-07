@@ -201,17 +201,18 @@ const site_config_map_edge = function(site_name, van_id) {
 }
 
 const link_config_map_yaml = function(name, data) {
-    let result = `apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ${name}
-data:
-`;
-    for (const [key, value] of Object.entries(data)) {
-        result += `  ${key}: '${value}'\n`;
-    }
+    let configMap = {
+        apiVersion: 'v1',
+        kind: 'ConfigMap',
+        metadata: {
+            name: name,
+            annotations: {},
+        },
+        data: data,
+    };
 
-    return result;
+    configMap.metadata.annotations['skupper.io/skx-hash'] = sync.HashOfConfigMap(configMap);
+    return yaml.dump(configMap);
 }
 
 const fetchInvitationKube = async function (iid, res) {

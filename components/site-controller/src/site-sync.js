@@ -110,10 +110,9 @@ const updateObject = async function(key, data) {
 const checkControllerHashset = async function(hashSet) {
     let updateKeys = [];
     let deleteKeys = [];
-    Log('checkControllerHashset');
-    Log(hashSet);
     for (const [key, hash] of Object.entries(hashSet)) {
         if (hash != backboneHashSet[key].hash) {
+            Log(`Hash mismatch for key ${key}: ${hash} != ${backboneHashSet[key].hash}`);
             if (hash == null) {
                 deleteKeys.push(key);
             } else {
@@ -123,6 +122,7 @@ const checkControllerHashset = async function(hashSet) {
     }
 
     for (const key of deleteKeys) {
+        Log(`Reconcile: Deleting object ${key}`);
         await deleteObject(key);
         backboneHashSet[key].hash = null;
     }
@@ -132,6 +132,7 @@ const checkControllerHashset = async function(hashSet) {
             const [responseAp, responseBody] = await amqp.Request(apiSender, protocol.GetObject(siteId, key), {}, REQUEST_TIMEOUT_SECONDS);
             if (responseBody.statusCode == 200) {
                 if (responseBody.objectName == key) {
+                    Log(`Reconcile: Updating object ${key}`);
                     await updateObject(key, responseBody.data);
                     backboneHashSet[key].hash = responseBody.hash;
                 } else {
@@ -183,11 +184,12 @@ const initializeHashState = async function() {
         try {
             if (value.kind == 'Secret') {
                 const secret = await kube.LoadSecret(value.objname);
-                backboneHashSet[key].hash = secret.metadata.annotations['skx-hash'];
+                backboneHashSet[key].hash = secret.metadata.annotations['skupper.io/skx-hash'];
             } else if (value.kind == 'ConfigMap') {
                 const configmap = await kube.LoadConfigmap(valud.objname);
-                backboneHashSet[key].hash = configmap.metadata.annotations['skx-hash'];
+                backboneHashSet[key].hash = configmap.metadata.annotations['skupper.io/skx-hash'];
             }
+            Log(`Initial hash state for key ${key}: ${backboneHashSet[key].hash}`);
         } catch (error) {
             // Ignore exception
             Log(`No local state found for: ${key}`);
@@ -205,8 +207,21 @@ const initializeLocalData = async function() {
     }
 }
 
+exports.LocalObjectUpdated = function(kind, objname, hash) {
+    for (const [key, value] of Object.entries(backboneHashSet)) {
+        if (value.kind == kind && value.objname == objname) {
+            if (backboneHashSet[key].hash != hash) {
+                Log(`Updated hashset key ${key} with hash ${hash}`);
+                backboneHashSet[key].hash = hash;
+            }
+            return;
+        }
+    }
+}
+
 exports.UpdateIngress = function(key, _hash, _data) {
     key = 'ingress/' + key;
+    Log(`Reconcile: Updating local hash for key ${key}`);
     if (_hash != localData[key].hash) {
         localData[key].hash = _hash;
         localData[key].data = _data;

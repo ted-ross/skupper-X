@@ -21,6 +21,7 @@
 
 const config = require('./config.js');
 const yaml   = require('js-yaml');
+const sync   = require('./manage-sync.js');
 
 const SA_NAME           = 'skupperx-backbone';
 const ROLE_NAME         = SA_NAME;
@@ -372,6 +373,8 @@ exports.SecretYaml = function(certificate, profile_name) {
         },
         data: certificate.data,
     };
+
+    secret.metadata.annotations['skupper.io/skx-hash'] = sync.HashOfSecret(secret);
 
     return "---\n" + yaml.dump(secret);
 }

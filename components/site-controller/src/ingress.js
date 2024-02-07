@@ -113,7 +113,6 @@ const backbone_route = function(name, socket) {
 }
 
 const sync_kube_service = async function() {
-    Log('sync_kube_service');
     let services = await kube.GetServices();
     let found    = false;
     let desired  = true;
@@ -133,19 +132,16 @@ const sync_kube_service = async function() {
     }
 
     if (desired && !found) {
-        Log('    desired && !found');
         let service = backbone_service();
         await kube.ApplyObject(service);
     }
 
     if (!desired && found) {
-        Log('    !desired && found');
         await kube.DeleteService(SERVICE_NAME);
     }
 }
 
 const sync_route = async function(name, socket) {
-    Log(`sync_route - ${socket}`);
     let routes  = await kube.GetRoutes();
     let found   = false;
     let desired = true;
@@ -168,13 +164,11 @@ const sync_route = async function(name, socket) {
     }
 
     if (desired && !found) {
-        Log('    desired && !found (r)');
         let route = backbone_route(name, socket);
         await kube.ApplyObject(route);
     }
 
     if (!desired && found) {
-        Log('    !desired && found (r)');
         await kube.DeleteRoute(name);
     }
 }
@@ -236,7 +230,6 @@ const onConfigMapWatch = function(type, apiObj) {
 }
 
 const onRouteWatch = async function(type, apiObj) {
-    Log('onRouteWatch');
     let routes = await kube.GetRoutes();
 
     for (const [key, value] of Object.entries(ingressState)) {
@@ -251,10 +244,8 @@ const onRouteWatch = async function(type, apiObj) {
                 const data = {host: route.spec.host, port: 443};
                 const hash = ingressHash(data);
                 ingressState[key].toDelete = false;
-                Log(`    found valid route: skx-${key}`);
 
                 if (hash != ingressState[key].hash) {
-                    Log(`       new hash: ${hash}`);
                     ingressState[key].hash = hash;
                     ingressState[key].data = data;
                     sync.UpdateIngress(key, hash, data);
@@ -265,7 +256,6 @@ const onRouteWatch = async function(type, apiObj) {
 
     for (const [key, value] of Object.entries(ingressState)) {
         if (value.toDelete) {
-            Log(`    deleting state for key: ${key}`);
             ingressState[key].hash = null;
             ingressState[key].data = {};
             ingressState[key].toDelete = false;
