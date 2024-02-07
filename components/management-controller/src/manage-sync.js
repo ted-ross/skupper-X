@@ -127,7 +127,7 @@ const checkSiteHashset = async function(backboneId, siteId, hashSet) {
 
     for (const key of deleteKeys) {
         // TODO - figure this out
-        Log(`Reconcile: Site ${siteId} - Delete key ${key}`);
+        Log(`Reconcile: Site ${siteId} - Delete key ${key} [no action taken]`);
     }
 
     for (const key of updateKeys) {
@@ -149,6 +149,25 @@ const checkSiteHashset = async function(backboneId, siteId, hashSet) {
         } catch (error) {
             Log(`Exception in checkSiteHashset processing for object ${key}: ${error.message}`);
         }
+    }
+
+    const client = await db.ClientFromPool();
+    try {
+        const result = await client.query("SELECT Lifecycle FROM InteriorSites WHERE Id = $1", [siteId]);
+        if (result.rowCount == 1) {
+            await client.query("BEGIN");
+            const row = result.rows[0];
+            if (row.lifecycle == 'ready') {
+                await client.query("UPDATE InteriorSites SET Lifecycle = 'active', FirstActiveTime = CURRENT_TIMESTAMP WHERE Id = $1", [siteId]);
+            }
+            await client.query("UPDATE InteriorSites SET LastHeartbeat = CURRENT_TIMESTAMP WHERE Id = $1", [siteId]);
+            await client.query("COMMIT");
+        }
+    } catch (error) {
+        Log(`Exception in heartbeat update: ${error.message}`);
+        await client.query("ROLLBACK");
+    } finally {
+        client.release();
     }
 }
 

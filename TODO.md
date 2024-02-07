@@ -1,5 +1,5 @@
 ## Bugs
- - Fix repeated/failed creation of connectors on the router
+ - ~~Fix repeated/failed creation of connectors on the router~~
  - ~~Figure out the issue with incorrect return values from API functions~~
 
 ## Backbone Feature Tasks
@@ -8,7 +8,7 @@
  - ~~Figure out how to establish connectivity from the management controller to the backbone~~
  - ~~Define the backbone-router-to-management-controller protocol and APIs~~
  - ~~Implement the link APIs inband to the management controller~~
- - Demonstrate automatic backbone site bootstrap
+ - ~~Demonstrate automatic backbone site bootstrap~~
  - ~~On initial creation for backbone sites, only include manage and peer incoming links~~
  - ~~Review the inband APIs to allow for full link updates at run time (add/remove links, rotate certificates)~~
  - Review the API for coherence in the URL paths

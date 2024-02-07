@@ -313,7 +313,6 @@ exports.WatchCertificates = function(callback) {
 var routeWatches = [];
 
 const startWatchRoutes = function() {
-    Log('startWatchRoutes');
     routeWatch.watch(
         `/apis/route.openshift.io/v1/namespaces/${namespace}/routes`,
         {},

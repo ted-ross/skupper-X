@@ -203,15 +203,15 @@ const sync_connectors = async function(router_connectors, config_connectors_json
 
         var config_connectors = {};
         for (const [key, value] of Object.entries(config_connectors_json)) {
-            config_connectors[key] = JSON.parse(value);
+            config_connectors['connector_' + key] = JSON.parse(value);
         }
 
         for (const [cname, cc] of Object.entries(config_connectors)) {
             if (cname in connector_map) {
                 delete connector_map[cname];
             } else {
-                Log(`Creating router connector connector_${cname}`);
-                await router.CreateConnector('connector_' + cname, {
+                Log(`Creating router connector ${cname}`);
+                await router.CreateConnector(cname, {
                     host:             cc.host,
                     port:             cc.port,
                     role:             backboneMode ? 'inter-router' : 'edge',

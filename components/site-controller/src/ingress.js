@@ -19,6 +19,13 @@
 
 "use strict";
 
+//
+// This module is responsible for setting up the requested ingresses into a site.  It maintains synchronization with the
+// incoming-links ConfigMap that controls ingress.
+//
+// Currently the only ingress supported is OpenShift Routes.
+//
+
 const kube   = require('./common/kube.js');
 const Log    = require('./common/log.js').Log;
 const sync   = require('./site-sync.js');
@@ -28,7 +35,6 @@ const SERVICE_NAME = 'skx-router';
 const ROUTER_LABEL = 'skx-router';
 
 const INCOMING_CONFIG_MAP_NAME = 'skupperx-links-incoming';
-const OUTGOING_CONFIG_MAP_NAME = 'skupperx-links-outgoing';
 
 var SITE_ID;
 
@@ -269,5 +275,4 @@ exports.Start = async function(siteId) {
     SITE_ID = siteId;
     kube.WatchConfigMaps(onConfigMapWatch);
     kube.WatchRoutes(onRouteWatch);
-    //await sync_ingress();
 }
