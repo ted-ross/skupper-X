@@ -14,7 +14,7 @@
  - Review the API for coherence in the URL paths
  - Review the module structure
  - ~~Ensure that Kube watches are working as expected~~
- - Disable API for backbone-site config after the site has "checked in" with the management controller
+ - ~~Disable API for backbone-site config after the site has "checked in" with the management controller~~
  - ~~Define the APIs for the front-end~~
  - Use PG notifications instead of polling to detect database changes
  - Explore ways to virtualize the Kubernetes content on backbones/member-sites for non-kube environments

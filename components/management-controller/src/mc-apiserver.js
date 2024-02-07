@@ -249,9 +249,12 @@ const fetchBackboneSiteKube = async function (bsid, res) {
     try {
         await client.query('BEGIN');
         const result = await client.query(
-            'SELECT InteriorSites.Certificate, TlsCertificates.ObjectName as secret_name FROM InteriorSites ' +
+            'SELECT InteriorSites.Certificate, InteriorSites.Lifecycle, TlsCertificates.ObjectName as secret_name FROM InteriorSites ' +
             'JOIN TlsCertificates ON InteriorSites.Certificate = TlsCertificates.Id WHERE Interiorsites.Id = $1', [bsid]);
         if (result.rowCount == 1) {
+            if (result.rows[0].lifecycle == 'active') {
+                throw(Error("Not permitted for an active site"));
+            }
             let secret = await kube.LoadSecret(result.rows[0].secret_name);
             let text = '';
             text += backbone.ServiceAccountYaml();
@@ -275,7 +278,7 @@ const fetchBackboneSiteKube = async function (bsid, res) {
         await client.query('COMMIT');
     } catch (err) {
         await client.query('ROLLBACK');
-        res.send(err.stack);
+        res.send(err.message);
         res.status(404).end();
     } finally {
         client.release();
