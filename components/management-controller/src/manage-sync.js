@@ -34,6 +34,7 @@ const API_MY_ADDRESS_PREFIX  = 'skx/sync/site/';
 const REQUEST_TIMEOUT_SECONDS   = 10;
 const HEARTBEAT_PERIOD_SECONDS  = 60;
 const HEARTBEAT_INITIAL_SECONDS = 2;
+const HEARTBEAT_WINDOW_SECONDS  = 5;
 
 const siteIngressKeys = {
     'ingress/manage' : 0,
@@ -55,6 +56,10 @@ const backboneHashKeys = {
 var activeBackboneSites = {};   // { siteId: { heartbeatTimer: <>, lastPingTime, bbHashSet: [], siteHashSet: [] } }
 var openLinks = {};             // { backboneId: { conn, apiSender, apiReceiver } }
 
+const timerDelaySeconds = function(floor) {
+    return (Math.floor(Math.random() * (HEARTBEAT_WINDOW_SECONDS + 1) + floor)) * 1000;
+}
+
 const sendHeartbeat = function(siteId) {
     let site = activeBackboneSites[siteId];
     let link = openLinks[site.backboneId];
@@ -69,9 +74,7 @@ const sendHeartbeat = function(siteId) {
             amqp.SendMessage(link.apiSender, protocol.Heartbeat('manage', hashSet), {}, API_MY_ADDRESS_PREFIX + siteId);
         }
 
-        site.heartbeatTimer = setTimeout(() => {
-            sendHeartbeat(siteId);
-        }, HEARTBEAT_PERIOD_SECONDS * 1000);
+        site.heartbeatTimer = setTimeout(sendHeartbeat, timerDelaySeconds(HEARTBEAT_PERIOD_SECONDS), siteId);
     } catch (error) {
         Log(`Exception during heartbeat send: ${error.message}`);
     }
@@ -104,7 +107,7 @@ const activateBackboneSite = async function(backboneId, siteId) {
         //
         // Schedule the initial heartbeat
         //
-        activeBackboneSites[siteId].heartbeatTimer = setTimeout(() => { sendHeartbeat(siteId); }, HEARTBEAT_INITIAL_SECONDS * 1000)
+        activeBackboneSites[siteId].heartbeatTimer = setTimeout(sendHeartbeat, HEARTBEAT_INITIAL_SECONDS * 1000, siteId);
     }
 }
 
@@ -181,10 +184,17 @@ exports.HashOfSecret = function(secret) {
 
 const dataOfSecret = function(secret, hash) {
     let data = {};
-    data.metadata = secret.metadata;
-    data.data     = secret.data;
-    if (!data.metadata.annotations) {
-        data.metadata.annotations = {};
+    data.metadata = {
+        name : secret.metadata.name,
+        annotations : {},
+    };
+    data.data = secret.data;
+    data.type = secret.type;
+    for (const [key, value] of Object.entries(secret.metadata.annotations)) {
+        const fields = key.split('/');
+        if (fields.length > 0 && fields[0] == 'skupper.io') {
+            data.metadata.annotations[key] = value;
+        }
     }
     data.metadata.annotations['skupper.io/skx-hash'] = hash;
     return data;
@@ -330,11 +340,13 @@ exports.GetBackboneConnectors_TX = async function (client, siteId) {
         'WHERE ConnectingInteriorSite = $1', [siteId]);
     let outgoing = {};
     for (const connection of result.rows) {
-        outgoing[connection.listeninginteriorsite] = JSON.stringify({
-            host: connection.hostname,
-            port: connection.port,
-            cost: connection.cost.toString(),
-        });
+        if (connection.hostname) {
+            outgoing[connection.listeninginteriorsite] = JSON.stringify({
+                host: connection.hostname,
+                port: connection.port,
+                cost: connection.cost.toString(),
+            });
+        }
     }
     return outgoing;
 }
@@ -419,6 +431,115 @@ const onLinkDeleted = async function(backboneId) {
     delete openLinks[backboneId];
 }
 
+const accelerateSiteHeartbeat = function(siteId) {
+    var site = activeBackboneSites[siteId];
+    clearTimeout(site.heartbeatTimer);
+    site.heartbeatTimer = setTimeout(sendHeartbeat, timerDelaySeconds(0), siteId);
+}
+
+//================================================================================
+// Database change notifications that affect the hash-sets for sites
+//================================================================================
+exports.SiteCertificateChanged = async function(certId) {
+    //
+    // Update the tls/site-client hash for the one affected site
+    //
+    const client = await db.ClientFromPool();
+    try {
+        const result = await client.query("SELECT Id FROM InteriorSites WHERE Certificate = $1", [certId]);
+        if (result.rowCount == 1) {
+            const siteId = result.rows[0].id;
+            if (activeBackboneSites[siteId]) {
+                const [hash, data] = await getSiteClient(siteId);
+                activeBackboneSites[siteId].bbHashSet[backboneHashKeys['tls/site-client']] = hash;
+                accelerateSiteHeartbeat(siteId);
+            }
+        }
+    } catch (error) {
+        Log(`Exception in SiteCertificateChanged: ${error.message}`);
+    } finally {
+        client.release();
+    }
+}
+
+exports.AccessCertificateChanged = async function(certId) {
+    //
+    // Update the tls/*-server hashes for the one affected site
+    //
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const accessResult = await client.query("SELECT Id FROM BackboneAccessPoints WHERE Certificate = $1", [certId]);
+        if (accessResult.rowCount == 1) {
+            const accessId = accessResult.rows[0].id;
+            const siteResult = await client.query("SELECT Id FROM InteriorSites WHERE ClaimAccess = $1 OR PeerAccess = $1 OR MemberAccess = $1 OR ManageAccess = $1", [accessId]);
+            if (siteResult.rowCount == 1) {
+                const siteId = siteResult.rows[0].id;
+                if (activeBackboneSites[siteId]) {
+                    for (const ingress of ['claim', 'peer', 'member', 'manage']) {
+                        const [hash, data] = await getAccessCert(siteId, ingress);
+                        activeBackboneSites[siteId].bbHashSet[backboneHashKeys[`tls/${ingress}-server`]] = hash;
+                    }
+                    accelerateSiteHeartbeat(siteId);
+                }
+            }
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in AccessCertificateChanged: ${error.message}`);
+        await client.query("ROLLBACK");
+    } finally {
+        client.release();
+    }
+}
+
+exports.SiteIngressChanged = async function(siteId) {
+    //
+    // Update the links/incoming hash for the one affected site
+    //
+    if (activeBackboneSites[siteId]) {
+        const [hash, data] = await getLinksIncoming(siteId);
+        activeBackboneSites[siteId].bbHashSet[backboneHashKeys['links/incoming']] = hash;
+        accelerateSiteHeartbeat(siteId);
+    }
+}
+
+exports.LinkChanged = async function(connectingSiteId) {
+    //
+    // Update the links/outgoing hash for the one affected connecting site
+    //
+    if (activeBackboneSites[connectingSiteId]) {
+        const [hash, data] = await getLinksOutgoing(connectingSiteId);
+        activeBackboneSites[connectingSiteId].bbHashSet[backboneHashKeys['links/outgoing']] = hash;
+        accelerateSiteHeartbeat(connectingSiteId);
+    }
+}
+
+exports.NewIngressAvailable = async function(siteId) {
+    //
+    // Update the links/outgoing hash for each site that connects to the indicated site
+    //
+    const client = await db.ClientFromPool();
+    try {
+        const result = await client.query("SELECT ConnectingInteriorSite FROM InterRouterLinks WHERE ListeningInteriorSite = $1", [siteId]);
+        for (const row of result.rows) {
+            const connectingSiteId = row.id;
+            if (activeBackboneSites[connectingSiteId]) {
+                const [hash, data] = await getLinksOutgoing(connectingSiteId);
+                activeBackboneSites[connectingSiteId].bbHashSet[backboneHashKeys['links/outgoing']] = hash;
+                accelerateSiteHeartbeat(connectingSiteId);
+            }
+        }
+    } catch (error) {
+        Log(`Exception in NewIngressAvailable: ${error.message}`);
+    } finally {
+        client.release();
+    }
+}
+
+//================================================================================
+// Startup Function
+//================================================================================
 exports.Start = async function () {
     Log('[Manage-Sync module started]');
     await bbLinks.RegisterHandler(onLinkAdded, onLinkDeleted);

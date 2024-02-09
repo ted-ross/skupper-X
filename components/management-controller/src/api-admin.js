@@ -21,6 +21,7 @@
 
 const formidable = require('formidable');
 const db         = require('./db.js');
+const sync       = require('./manage-sync.js');
 const Log        = require('./common/log.js').Log;
 
 const API_PREFIX   = '/api/v1alpha1/';
@@ -180,7 +181,8 @@ const updateBackboneSite = async function(sid, req, res) {
         const client = await db.ClientFromPool();
         try {
             await client.query("BEGIN");
-            let nameChanged = false;
+            let nameChanged   = false;
+            let accessChanged = false;
             const siteResult = await client.query("SELECT * FROM InteriorSites WHERE Id = $1", [sid]);
             if (siteResult.rowCount == 1) {
                 const site = siteResult.rows[0];
@@ -205,12 +207,14 @@ const updateBackboneSite = async function(sid, req, res) {
                         //
                         const apResult = await client.query("INSERT INTO BackboneAccessPoints(Name, Kind, Backbone) VALUES ($1, $2, $3) RETURNING Id", [`${siteName}-${ingress}`, ingress, site.backbone]);
                         await client.query(`UPDATE InteriorSites SET ${ingress}Access = $1 WHERE Id = $2`, [apResult.rows[0].id, sid]);
+                        accessChanged = true;
                     } else if (norm[ingress] === false && site[`${ingress}access`]) {
                         //
                         // Update asked to remove this ingress and there is one currently in place
                         //
                         await client.query("DELETE FROM BackboneAccessPoints WHERE Id = $1", [site[`${ingress}access`]]);
                         await client.query(`UPDATE InteriorSites SET ${ingress}Access = NULL WHERE Id = $1`, [sid]);
+                        accessChanged = true;
                     } else if ((norm[ingress] === true || norm[ingress] === null) && site[`${ingress}access`] && nameChanged) {
                         //
                         // There exists an ingress, it will stay in place, and the site name has changed
@@ -220,6 +224,13 @@ const updateBackboneSite = async function(sid, req, res) {
                 }
             }
             await client.query("COMMIT");
+
+            //
+            // Alert the sync module that an access point changed on a site
+            //
+            if (accessChanged) {
+                await sync.SiteIngressChanged(sid);
+            }
 
             res.status(returnStatus).end();
         } catch (error) {
@@ -256,21 +267,31 @@ const createBackboneLink = async function(bid, req, res) {
             // Ensure that the referenced sites are in the specified backbone network
             //
             const siteResult = await client.query("SELECT Backbone FROM InteriorSites WHERE Id = $1 OR Id = $2", [norm.listeningsite, norm.connectingsite]);
-            if (siteResult.rowCount == 2 && siteResult.row[0].backbone == bid && siteResult.row[1].backbone == bid) {
+            if (siteResult.rowCount == 2 && siteResult.rows[0].backbone == bid && siteResult.rows[1].backbone == bid) {
                 const linkResult = await client.query("INSERT INTO InterRouterLinks(ListeningInteriorSite, ConnectingInteriorSite, Cost) VALUES ($1, $2, $3) RETURNING Id", [norm.listeningsite, norm.connectingsite, norm.cost]);
                 const linkId = linkResult.rows[0].id;
                 await client.query("COMMIT");
                 returnStatus = 201;
                 res.status(returnStatus).json({id: linkId});
+
+                //
+                // Alert the sync module that a new backbone link was added for the connecting site
+                //
+                try {
+                    await sync.LinkChanged(norm.connectingsite);
+                } catch (error) {
+                    Log(`Exception in call to LinkChanged: ${error.message}`);
+                    Log(error.stack);
+                }
             } else {
                 returnStatus = 400;
-                res.status(returnStatus).send('Sites not found or are not in the specified backbone');
+                res.status(returnStatus).send('Sites are the same, not found, or are not in the specified backbone');
                 await client.query("ROLLBACK");
             }
         } catch (error) {
             await client.query("ROLLBACK");
             returnStatus = 500;
-            res.status(returnStatus).send(error.message);
+            res.status(returnStatus).send(error.stack);
         } finally {
             client.release();
         }
@@ -293,6 +314,7 @@ const updateBackboneLink = async function(lid, req, res) {
 
         const client = await db.ClientFromPool();
         try {
+            var linkChanged = null;
             await client.query("BEGIN");
             const linkResult = await client.query("SELECT * FROM InterRouterLinks WHERE Id = $1", [lid]);
             if (linkResult.rowCount == 1) {
@@ -304,10 +326,18 @@ const updateBackboneLink = async function(lid, req, res) {
                 if (norm.cost != null && norm.cost != link.cost) {
                     await client.query("UPDATE InterRouterLinks SET Cost = $1 WHERE Id = $2", [norm.cost, lid]);
                     returnStatus = 200;
+                    linkChanged = link.connectinginteriorsite;
                 }
             }
             await client.query("COMMIT");
             res.status(returnStatus).end();
+
+            //
+            // Alert the sync module that a backbone link was modified for the connecting site
+            //
+            if (linkChanged) {
+                await sync.LinkChanged(linkChanged);
+            }
         } catch (error) {
             await client.query("ROLLBACK");
             returnStatus = 500;
@@ -412,11 +442,26 @@ const deleteBackboneLink = async function(lid, res) {
     var returnStatus = 204;
     const client = await db.ClientFromPool();
     try {
+        var connectingSite = null;
         await client.query("BEGIN");
-        await client.query("DELETE FROM InterRouterLinks WHERE Id = $1", [lid]);
+        const result = await client.query("DELETE FROM InterRouterLinks WHERE Id = $1 RETURNING ConnectingInteriorSite", [lid]);
+        if (result.rowCount == 1) {
+            connectingSite = result.rows[0].connectinginteriorsite;
+        }
         await client.query("COMMIT");
-
         res.status(returnStatus).end();
+
+        //
+        // Alert the sync module that a backbone link was deleted for the connecting site
+        //
+        if (connectingSite) {
+            try {
+                await sync.LinkChanged(connectingSite);
+            } catch (error) {
+                Log(`Exception calling LinkChanged: ${error.message}`);
+                Log(error.stack);
+            }
+        }
     } catch (error) {
         await client.query("ROLLBACK");
         returnStatus = 400;

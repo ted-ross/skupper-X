@@ -23,6 +23,7 @@ const kube   = require('./common/kube.js');
 const Log    = require('./common/log.js').Log;
 const db     = require('./db.js');
 const config = require('./config.js');
+const sync   = require('./manage-sync.js');
 
 //
 // processNewManagementControllers
@@ -385,6 +386,8 @@ const secretAdded = async function(dblink, secret) {
         var ref_table;
         var ref_id;
         var is_ca = false;
+        var alertSiteCertChanged   = false;
+        var alertAccessCertChanged = false;
 
         if (result.rowCount == 1) {
             const cert_request = result.rows[0];
@@ -399,9 +402,11 @@ const secretAdded = async function(dblink, secret) {
             } else if (cert_request.interiorsite) {
                 ref_table  = 'InteriorSites';
                 ref_id     = cert_request.interiorsite;
+                alertSiteCertChanged = true;
             } else if (cert_request.accesspoint) {
                 ref_table  = 'BackboneAccessPoints';
                 ref_id     = cert_request.accesspoint;
+                alertAccessCertChanged = true;
             } else if (cert_request.applicationnetwork) {
                 ref_table  = 'ApplicationNetworks';
                 ref_id     = cert_request.applicationnetwork;
@@ -438,6 +443,15 @@ const secretAdded = async function(dblink, secret) {
             }
             Log(`Certificate${is_ca ? ' Authority' : ''} created: ${secret.metadata.name}`)
             await client.query('COMMIT');
+
+            //
+            // Alert the sync module that changes have been made that require reconciliation with remote sites
+            //
+            if (alertSiteCertChanged) {
+                await sync.SiteCertificateChanged(dblink);
+            } else if (alertAccessCertChanged) {
+                await sync.AccessCertificateChanged(dblink);
+            }
         } else {
             //
             // There's been no meaningful action taken.  Roll back the transaction.

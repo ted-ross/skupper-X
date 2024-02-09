@@ -349,7 +349,7 @@ const fetchBackboneLinksOutgoingKube = async function (bsid, res) {
     }
 }
 
-exports.AddHostToAccessPoint = async function(bsid, key, hostname, port) {
+exports.AddHostToAccessPoint = async function(siteId, key, hostname, port) {
     let retval = 1;
     const client = await db.ClientFromPool();
     try {
@@ -362,7 +362,7 @@ exports.AddHostToAccessPoint = async function(bsid, key, hostname, port) {
             case 'ingress/peer'   : ref = 'PeerAccess';    break;
             default: throw Error(`Invalid ingress key: ${key}`);
         }
-        const result = await client.query(`SELECT ${ref} as access_ref, BackboneAccessPoints.* FROM InteriorSites JOIN BackboneAccessPoints ON ${ref} = BackboneAccessPoints.Id WHERE InteriorSites.Id = $1`, [bsid]);
+        const result = await client.query(`SELECT ${ref} as access_ref, BackboneAccessPoints.* FROM InteriorSites JOIN BackboneAccessPoints ON ${ref} = BackboneAccessPoints.Id WHERE InteriorSites.Id = $1`, [siteId]);
         if (result.rowCount == 1) {
             let access = result.rows[0];
             if (access.hostname != hostname || access.port != port) {
@@ -375,8 +375,15 @@ exports.AddHostToAccessPoint = async function(bsid, key, hostname, port) {
                 await client.query("UPDATE BackboneAccessPoints SET Hostname = $1, Port=$2, Lifecycle='new' WHERE Id = $3", [hostname, port, access.access_ref]);
             }
             await client.query("COMMIT");
+
+            //
+            // Alert the sync module that an access point has advanced from 'partial' state if this is a peer ingress
+            //
+            if (key == 'ingress/peer') {
+                await sync.NewIngressAvailable(siteId);
+            }
         } else {
-            throw Error(`Access point not found for site ${bsid} (${ref})`);
+            throw Error(`Access point not found for site ${siteId} (${ref})`);
         }
     } catch (err) {
         await client.query('ROLLBACK');

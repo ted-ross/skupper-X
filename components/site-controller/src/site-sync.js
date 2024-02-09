@@ -82,7 +82,7 @@ const deleteObject = async function(key) {
     }
 }
 
-const updateObject = async function(key, data) {
+const updateObject = async function(key, data, isAdd) {
     try {
         let obj = {
             apiVersion : 'v1',
@@ -101,13 +101,21 @@ const updateObject = async function(key, data) {
             obj.metadata.annotations['skupper.io/skx-inject'] = sslProfileNames[key];
         }
 
-        await kube.ApplyObject(obj);
+        if (isAdd) {
+            await kube.ApplyObject(obj);
+        } else {
+            switch (obj.kind) {
+            case 'Secret'    : kube.ReplaceSecret(obj.metadata.name, obj);     break;
+            case 'ConfigMap' : kube.ReplaceConfigmap(obj.metadata.name, obj);  break;
+            }
+        }
     } catch (error) {
         Log(`Exception in updateObject: ${error.message}`);
     }
 }
 
 const checkControllerHashset = async function(hashSet) {
+    let updateType = {};  // { key => bool }  true => add, false => update
     let updateKeys = [];
     let deleteKeys = [];
     for (const [key, hash] of Object.entries(hashSet)) {
@@ -115,8 +123,12 @@ const checkControllerHashset = async function(hashSet) {
             Log(`Hash mismatch for key ${key}: ${hash} != ${backboneHashSet[key].hash}`);
             if (hash == null) {
                 deleteKeys.push(key);
+            } else if (backboneHashSet[key].hash == null) {
+                updateKeys.push(key);
+                updateType[key] = true;
             } else {
                 updateKeys.push(key);
+                updateType[key] = false;
             }
         }
     }
@@ -133,7 +145,7 @@ const checkControllerHashset = async function(hashSet) {
             if (responseBody.statusCode == 200) {
                 if (responseBody.objectName == key) {
                     Log(`Reconcile: Updating object ${key}`);
-                    await updateObject(key, responseBody.data);
+                    await updateObject(key, responseBody.data, updateType[key]);
                     backboneHashSet[key].hash = responseBody.hash;
                 } else {
                     Log(`Get response object name mismatch: Got ${responseBody.objectName}, expected ${key}`);
@@ -186,7 +198,7 @@ const initializeHashState = async function() {
                 const secret = await kube.LoadSecret(value.objname);
                 backboneHashSet[key].hash = secret.metadata.annotations['skupper.io/skx-hash'];
             } else if (value.kind == 'ConfigMap') {
-                const configmap = await kube.LoadConfigmap(valud.objname);
+                const configmap = await kube.LoadConfigmap(value.objname);
                 backboneHashSet[key].hash = configmap.metadata.annotations['skupper.io/skx-hash'];
             }
             Log(`Initial hash state for key ${key}: ${backboneHashSet[key].hash}`);

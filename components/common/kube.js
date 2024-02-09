@@ -152,6 +152,10 @@ exports.LoadSecret = async function(name) {
     return secret.body;
 }
 
+exports.ReplaceSecret = async function(name, obj) {
+    await v1Api.replaceNamespacedSecret(name, namespace, obj);
+}
+
 exports.DeleteSecret = async function(name) {
     await v1Api.deleteNamespacedSecret(name, namespace);
 }
@@ -164,6 +168,10 @@ exports.GetConfigmaps = async function() {
 exports.LoadConfigmap = async function(name) {
     let secret = await v1Api.readNamespacedConfigMap(name, namespace);
     return secret.body;
+}
+
+exports.ReplaceConfigmap = async function(name, obj) {
+    await v1Api.replaceNamespacedConfigMap(name, namespace, obj);
 }
 
 exports.DeleteConfigmap = async function(name) {
