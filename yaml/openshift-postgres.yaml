@@ -83,6 +83,7 @@ spec:
       name: data
     spec:
       accessModes: ["ReadWriteOnce"]
+      storageClassName: ibmc-vpc-block-retain-10iops-tier
       resources:
         requests:
           storage: 5Gi

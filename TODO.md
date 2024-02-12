@@ -29,9 +29,10 @@
  - Add ingress capability for non-OpenShift kubernetes
  - Consider replacing the boolean ingress indication with "no-ingress", "any", or ingress-style suggestions
  - ~~Trigger hash updates and heartbeats to sites when relevant database changes occur~~
+ - ~~Rename the site-controller image~~
 
 ## VAN Feature Tasks
- - Create non-backbone mode for the site-controller - disable ingress and other backbone-specific functions
+ - ~~Create non-backbone mode for the site-controller - disable ingress and other backbone-specific functions~~
  - Add a claim-handshake module to the site-controller
  - Design a mechanism by which invited sites become member sites
  - Design the member API

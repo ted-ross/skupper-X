@@ -53,7 +53,9 @@ exports.Main = async function() {
         let conn = amqp.OpenConnection('LocalRouter');
         await router.Start(conn);
         await links.Start(BACKBONE_MODE);
-        await ingress.Start(SITE_ID);
+        if (!BACKBONE_MODE) {
+            await ingress.Start(SITE_ID);
+        }
         await apiserver.Start();
         await siteSync.Start(BACKBONE_MODE, SITE_ID, conn);
         Log("[Site controller initialization completed successfully]");
@@ -63,4 +65,3 @@ exports.Main = async function() {
         process.exit(1);
     };
 };
-
