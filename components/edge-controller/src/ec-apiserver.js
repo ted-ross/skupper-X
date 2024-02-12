@@ -26,7 +26,9 @@ const Log     = require('./common/log.js').Log;
 
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8085;
-var api;
+const api = express();
+
+app.use(cors());
 
 const listInvitations = async function(res) {
     const client = await db.ClientFromPool();
@@ -114,7 +116,6 @@ const fetchInvitationKube = async function (iid, res) {
 
 exports.Start = async function() {
     Log('[API Server module started]');
-    api = express();
 
     api.get(API_PREFIX + 'invitations', (req, res) => {
         listInvitations(res);

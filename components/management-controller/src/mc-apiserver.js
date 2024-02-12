@@ -33,7 +33,9 @@ const admin      = require('./api-admin.js');
 
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8085;
-var api;
+const api = express();
+
+app.use(cors());
 
 const deployment_object = function(name, image, env = undefined) {
     let dep = {
@@ -416,7 +418,6 @@ const postBackboneIngress = async function (bsid, req, res) {
 
 exports.Start = async function() {
     Log('[API Server module started]');
-    api = express();
 
     api.get(API_PREFIX + 'invitation/:iid/kube', (req, res) => {
         Log(`Request for invitation (Kubernetes): ${req.params.iid}`);

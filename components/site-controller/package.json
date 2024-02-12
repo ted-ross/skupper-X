@@ -10,6 +10,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@kubernetes/client-node": "^0.14.0",
+    "cors": "^2.8.5",
     "express": "^4.17.1",
     "js-yaml": "^4.1.0",
     "rhea": "^2.0.4",

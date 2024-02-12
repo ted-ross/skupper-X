@@ -27,7 +27,9 @@ const Log      = require('./common/log.js').Log;
 
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8086;
-var api;
+api = express();
+
+app.use(cors());
 
 const get_hostnames = function(res) {
     let ingress_bundle = ingress.GetIngressBundle();
@@ -42,7 +44,6 @@ const get_hostnames = function(res) {
 
 exports.Start = async function() {
     Log('[API Server module started]');
-    api = express();
 
     api.get('/healthz', (req, res) => {
         res.send('OK');
