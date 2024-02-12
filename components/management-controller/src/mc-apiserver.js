@@ -20,6 +20,7 @@
 "use strict";
 
 const express    = require('express');
+const cors       = require('cors');
 const formidable = require('formidable');
 const yaml       = require('js-yaml');
 const crypto     = require('crypto');
@@ -417,6 +418,7 @@ const postBackboneIngress = async function (bsid, req, res) {
 exports.Start = async function() {
     Log('[API Server module started]');
     api = express();
+    api.use(cors());
 
     api.get(API_PREFIX + 'invitation/:iid/kube', (req, res) => {
         Log(`Request for invitation (Kubernetes): ${req.params.iid}`);

@@ -20,6 +20,7 @@
 "use strict";
 
 const express  = require('express');
+const cors     = require('cors');
 const yaml     = require('js-yaml');
 const ingress  = require('./ingress.js');
 const kube     = require('./common/kube.js');
@@ -43,6 +44,7 @@ const get_hostnames = function(res) {
 exports.Start = async function() {
     Log('[API Server module started]');
     api = express();
+    api.use(cors());
 
     api.get('/healthz', (req, res) => {
         res.send('OK');
