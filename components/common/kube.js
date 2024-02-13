@@ -354,7 +354,6 @@ exports.ApplyObject = async function(obj) {
         obj.metadata.annotations["skupper.io/skx-controlled"] = "true";
         obj.metadata.namespace = namespace;
         Log(`Creating resource: ${obj.kind} ${obj.metadata.name}`);
-        Log(obj);
         return await client.create(obj);
     } catch (error) {
         Log(`Exception in kube.ApplyObject: ${error.message}`);

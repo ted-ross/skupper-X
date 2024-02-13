@@ -443,10 +443,10 @@ Notes:
   - (DONE) Consider generalizing "offers" and "requires" as roles on a ServiceLink.  This allows the addition of more roles.
     Such roles should probably be renamed "connects" and "accepts".
 
-  - Take into account the fact that there may be multiple routers in an interior site.
+  - Take into account the fact that there may be multiple routers in an interior site.  OR define that there can only be one router per backbone site.
 
   - Keep in mind that an entire application network should be deployable via gitops.  This means that an already-created
-    application network should be able to be poplated with components and service-links via gitops.
+    application network should be able to be populated with components and service-links via gitops.
 
   - Components should be allocatable to multiple classes/sites.
 
@@ -465,7 +465,7 @@ Notes:
   - Add state to the invitation that controls whether the participant may or may not create their own interfaces in the
     application network.  If not permitted, the participant is limited to only using the allocated interfaces.
 
-  - Consider issuing a certificate per backbone-access point that contains the hostname of the access point.
+  - (DONE) Consider issuing a certificate per backbone-access point that contains the hostname of the access point.
 
 */
 

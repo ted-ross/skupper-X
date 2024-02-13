@@ -25,7 +25,7 @@ const formidable = require('formidable');
 const yaml       = require('js-yaml');
 const crypto     = require('crypto');
 const db         = require('./db.js');
-const backbone   = require('./backbone.js');
+const siteTemplates = require('./site-templates.js');
 const kube       = require('./common/kube.js');
 const { isObject } = require('util');
 const Log        = require('./common/log.js').Log;
@@ -35,171 +35,6 @@ const admin      = require('./api-admin.js');
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8085;
 var api;
-
-const deployment_object = function(name, image, env = undefined) {
-    let dep = {
-        apiVersion: 'apps/v1',
-        kind: 'Deployment',
-        metadata: {
-            name: name,
-        },
-        spec: {
-            replicas: 1,
-            selector: {
-                matchLabels: {
-                    app: name,
-                },
-            },
-            template: {
-                metadata: {
-                    labels: {
-                        app: name,
-                    },
-                },
-                spec: {
-                    serviceAccountName: 'skupper-site-controller',
-                    containers: [
-                        {
-                            image: image,
-                            imagePullPolicy: 'IfNotPresent',
-                            name: name,
-                        },
-                    ],
-                },
-            },
-        },
-    };
-
-    if (env) {
-        dep.spec.template.spec.containers[0].env = env;
-    }
-
-    return dep;
-}
-
-const secret_object_claim = function(name, source_secret, invitation) {
-    return {
-        apiVersion: 'v1',
-        kind: 'Secret',
-        type: 'kubernetes.io/tls',
-        metadata: {
-            name: name,
-            annotations: {
-                'skupper.io/skx-controlled':       'true',
-                'skupper.io/skx-van-id':           source_secret.metadata.annotations['skupper.io/skx-van-id'],
-                'skupper.io/skx-dataplane-image':  source_secret.metadata.annotations['skupper.io/skx-dataplane-image'],
-                'skupper.io/skx-configsync-image': source_secret.metadata.annotations['skupper.io/skx-configsync-image'],
-                'skupper.io/skx-interactive':      invitation.interactiveclaim ? 'true' : 'false',
-                // TODO - Add access URLs here
-            }
-        },
-        data: source_secret.data,
-    };
-}
-
-const service_account = function(name, application) {
-    return {
-        apiVersion: 'v1',
-        kind: 'ServiceAccount',
-        metadata: {
-            name: name,
-            labels: {
-                application: application,
-            },
-        },
-    };
-}
-
-const role = function(name, application) {
-    return {
-        apiVersion: 'rbac.authorization.k8s.io/v1',
-        kind: 'Role',
-        metadata: {
-            name: name,
-            labels: {
-                application: application,
-            },
-        },
-        rules: [
-            {
-                apiGroups: [""],
-                resources: ['configmaps', 'pods', 'pods/exec', 'services', 'secrets', 'serviceaccounts', 'events'],
-                verbs: ['get', 'list', 'watch', 'create', 'update', 'delete', 'patch'],
-            },
-            {
-                apiGroups: ['apps'],
-                resources: ['deployments', 'statefulsets', 'daemonsets'],
-                verbs: ['get', 'list', 'watch', 'create', 'update', 'delete'],
-            },
-            {
-                apiGroups: ['route.openshift.io'],
-                resources: ['routes'],
-                verbs: ['get', 'list', 'watch', 'create', 'update', 'delete'],
-            },
-            {
-                apiGroups: ['networking.k8s.io'],
-                resources: ['ingresses', 'networkpolicies'],
-                verbs: ['get', 'list', 'watch', 'create', 'delete'],
-            },
-            {
-                apiGroups: ['projectcontour.io'],
-                resources: ['httpproxies'],
-                verbs: ['get', 'list', 'watch', 'create', 'delete'],
-            },
-            {
-                apiGroups: ['rbac.authorization.k8s.io'],
-                resources: ['rolebindings', 'roles'],
-                verbs: ['get', 'list', 'watch', 'create', 'delete'],
-            },
-            {
-                apiGroups: ['apps.openshift.io'],
-                resources: ['deploymentconfigs'],
-                verbs: ['get', 'list', 'watch'],
-            },
-        ],
-    };
-}
-
-const role_binding = function(name, application) {
-    return {
-        apiVersion: 'rbac.authorization.k8s.io/v1',
-        kind: 'RoleBinding',
-        metadata: {
-            name: name,
-            labels: {
-                application: application,
-            },
-        },
-        subjects: [
-            {
-                kind: 'ServiceAccount',
-                name: name,
-            }
-        ],
-        roleRef: {
-            apiGroup: 'rbac.authorization.k8s.io',
-            kind: 'Role',
-            name: name,
-        },
-    };
-}
-
-const site_config_map_edge = function(site_name, van_id) {
-    return {
-        apiVersion: 'v1',
-        kind: 'ConfigMap',
-        metadata: {
-            name: 'skupper-site',
-        },
-        data: {
-            name: site_name,
-            'router-mode': 'edge',
-            'service-controller': 'true',
-            'service-sync': 'false',
-            'van-id': van_id,
-        },
-    };
-}
 
 const link_config_map_yaml = function(name, data) {
     let configMap = {
@@ -217,76 +52,85 @@ const link_config_map_yaml = function(name, data) {
 }
 
 const fetchInvitationKube = async function (iid, res) {
+    var returnStatus = 200;
     const client = await db.ClientFromPool();
-    const result = await client.query("SELECT MemberInvitations.*, TlsCertificates.ObjectName as secret_name FROM MemberInvitations " +
-                                      "JOIN TlsCertificates ON MemberInvitations.Certificate = TlsCertificates.Id WHERE MemberInvitations.Id = $1", [iid]);
-    if (result.rowCount == 1) {
-        const row = result.rows[0];
-        const secret = await kube.LoadSecret(row.secret_name);
-        var   invitation = '';
+    try {
+        const result = await client.query("SELECT MemberInvitations.*, TlsCertificates.ObjectName as secret_name FROM MemberInvitations " +
+                                        "JOIN TlsCertificates ON MemberInvitations.Certificate = TlsCertificates.Id WHERE MemberInvitations.Id = $1", [iid]);
+        if (result.rowCount == 1) {
+            const row = result.rows[0];
+            const secret = await kube.LoadSecret(row.secret_name);
+            let text = '';
 
-        invitation += "---\n" + yaml.dump(service_account('skupper-site-controller', 'skupper-site-controller'));
-        invitation += "---\n" + yaml.dump(role('skupper-site-controller', 'skupper-site-controller'));
-        invitation += "---\n" + yaml.dump(role_binding('skupper-site-controller', 'skupper-site-controller'));
-        invitation += "---\n" + yaml.dump(deployment_object('skupper-site-controller', secret.metadata.annotations['skupper.io/skx-controller-image'], [
-            {name: 'WATCH_NAMESPACE', valueFrom: {fieldRef: {fieldPath: 'metadata.namespace'}}},
-            {name: 'QDROUTERD_IMAGE', value: secret.metadata.annotations['skupper.io/skx-dataplane-image']},
-            {name: 'SKUPPER_CONFIG_SYNC_IMAGE', value: secret.metadata.annotations['skupper.io/skx-configsync-image']},
-        ]));
-        invitation += "---\n" + yaml.dump(secret_object_claim('skupperx-claim', secret, row));
-        invitation += "---\n" + yaml.dump(site_config_map_edge(crypto.randomUUID(), secret.metadata.annotations['skupper.io/skx-van-id']));
+            text += siteTemplates.ServiceAccountYaml();
+            text += siteTemplates.MemberRoleYaml();
+            text += siteTemplates.RoleBindingYaml();
+            text += siteTemplates.ConfigMapYaml('edge');
+            text += siteTemplates.DeploymentYaml(iid, false);
+            text += siteTemplates.SecretYaml(secret, 'claim');
 
-        res.send(invitation);
-        res.status(200).end();
-    } else {
-        res.status(404).end();
+            res.send(text);
+            res.status(returnStatus).end();
+        } else {
+            throw(Error('Invitation not found'));
+        }
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
     }
 
-    client.release();
+    return returnStatus;
 }
 
-const fetchBackboneSiteKube = async function (bsid, res) {
+const fetchBackboneSiteKube = async function (siteId, res) {
+    var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
         const result = await client.query(
             'SELECT InteriorSites.Certificate, InteriorSites.Lifecycle, TlsCertificates.ObjectName as secret_name FROM InteriorSites ' +
-            'JOIN TlsCertificates ON InteriorSites.Certificate = TlsCertificates.Id WHERE Interiorsites.Id = $1', [bsid]);
+            'JOIN TlsCertificates ON InteriorSites.Certificate = TlsCertificates.Id WHERE Interiorsites.Id = $1', [siteId]);
         if (result.rowCount == 1) {
             if (result.rows[0].lifecycle == 'active') {
                 throw(Error("Not permitted for an active site"));
             }
             let secret = await kube.LoadSecret(result.rows[0].secret_name);
             let text = '';
-            text += backbone.ServiceAccountYaml();
-            text += backbone.RoleYaml();
-            text += backbone.RoleBindingYaml();
-            text += backbone.ConfigMapYaml();
-            text += backbone.DeploymentYaml(bsid);
-            text += backbone.SecretYaml(secret, 'site-client');
+            text += siteTemplates.ServiceAccountYaml();
+            text += siteTemplates.BackboneRoleYaml();
+            text += siteTemplates.RoleBindingYaml();
+            text += siteTemplates.ConfigMapYaml('interior');
+            text += siteTemplates.DeploymentYaml(siteId, true);
+            text += siteTemplates.SecretYaml(secret, 'site-client');
 
-            const outgoing = await sync.GetBackboneConnectors_TX(client, bsid);
+            const outgoing = await sync.GetBackboneConnectors_TX(client, siteId);
             text += "---\n" + link_config_map_yaml('skupperx-links-outgoing', outgoing);
 
-            const incoming = await sync.GetBackboneIngresses_TX(client, bsid);
+            const incoming = await sync.GetBackboneIngresses_TX(client, siteId);
             text += "---\n" + link_config_map_yaml('skupperx-links-incoming', incoming)
 
             res.send(text);
-            res.status(200).end();
+            res.status(returnStatus).end();
         } else {
             throw Error('Site secret not found');
         }
         await client.query('COMMIT');
     } catch (err) {
         await client.query('ROLLBACK');
+        returnStatus = 400;
         res.send(err.message);
-        res.status(404).end();
+        res.status(returnStatus).end();
     } finally {
         client.release();
     }
+
+    return returnStatus;
 }
 
 const fetchBackboneLinksIncomingKube = async function (bsid, res) {
+    var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
@@ -309,7 +153,7 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
                     if (ap_result.rowCount == 1) {
                         let ap = ap_result.rows[0];
                         let secret = await kube.LoadSecret(ap.objectname);
-                        text += backbone.SecretYaml(secret, `${work.profile}-server`);
+                        text += siteTemplates.SecretYaml(secret, `${work.profile}-server`);
 
                         incoming[work.profile] = 'true';
                     }
@@ -319,7 +163,7 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
             text += "---\n" + link_config_map_yaml('skupperx-incoming', incoming);
 
             res.send(text);
-            res.status(200).end();
+            res.status(returnStatus).end();
         } else {
             throw Error('Site not found');
         }
@@ -327,27 +171,34 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
     } catch (err) {
         await client.query('ROLLBACK');
         res.send(err.message);
-        res.status(404).end();
+        returnStatus = 400;
+        res.status(returnStatus).end();
     } finally {
         client.release();
     }
+
+    return returnStatus;
 }
 
 const fetchBackboneLinksOutgoingKube = async function (bsid, res) {
+    var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
         const outgoing = await sync.GetBackboneConnectors_TX(client, bsid);
         res.send(link_config_map_yaml('skupperx-outgoing', outgoing));
-        res.status(200).end();
+        res.status(returnStatus).end();
         await client.query('COMMIT');
     } catch (err) {
         await client.query('ROLLBACK');
+        resutnStatus = 400;
         res.send(err.message);
-        res.status(404).end();
+        res.status(returnStatus).end();
     } finally {
         client.release();
     }
+
+    return returnStatus;
 }
 
 exports.AddHostToAccessPoint = async function(siteId, key, hostname, port) {
@@ -397,13 +248,10 @@ exports.AddHostToAccessPoint = async function(siteId, key, hostname, port) {
 }
 
 const postBackboneIngress = async function (bsid, req, res) {
+    var returnStatus = 201;
     const form = new formidable.IncomingForm();
-    form.parse(req, async function(err, fields, files) {
-        if (err != null) {
-            Log(err)
-            res.status(400).json({ message: err.message });
-        }
-
+    try {
+        const [fields, files] = await form.parse(req);
         let count = 0;
         if (typeof fields.ingresses == 'object') {
             for (const [key, obj] of Object.entries(fields.ingresses)) {
@@ -411,8 +259,17 @@ const postBackboneIngress = async function (bsid, req, res) {
             }
         }
 
-        res.json({ processed: count });
-    });
+        res.status(returnStatus).json({ processed: count });
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).send(err.message);
+    }
+
+    return returnStatus;
+}
+
+const apiLog = function(req, status) {
+    Log(`OperAPI: ${req.ip} - (${status}) ${req.method} ${req.originalUrl}`);
 }
 
 exports.Start = async function() {
@@ -420,29 +277,24 @@ exports.Start = async function() {
     api = express();
     api.use(cors());
 
-    api.get(API_PREFIX + 'invitation/:iid/kube', (req, res) => {
-        Log(`Request for invitation (Kubernetes): ${req.params.iid}`);
-        fetchInvitationKube(req.params.iid, res);
+    api.get(API_PREFIX + 'invitation/:iid/kube', async (req, res) => {
+        apiLog(req, await fetchInvitationKube(req.params.iid, res));
     });
 
-    api.get(API_PREFIX + 'backbonesite/:bsid/kube', (req, res) => {
-        Log(`Request for backbone site (Kubernetes): ${req.params.bsid}`);
-        fetchBackboneSiteKube(req.params.bsid, res);
+    api.get(API_PREFIX + 'backbonesite/:bsid/kube', async (req, res) => {
+        apiLog(req, await fetchBackboneSiteKube(req.params.bsid, res));
     });
 
-    api.get(API_PREFIX + 'backbonesite/:bsid/links/incoming/kube', (req, res) => {
-        Log(`Request for incoming backbone links (Kubernetes): ${req.params.bsid}`);
-        fetchBackboneLinksIncomingKube(req.params.bsid, res);
+    api.get(API_PREFIX + 'backbonesite/:bsid/links/incoming/kube', async (req, res) => {
+        apiLog(req, await fetchBackboneLinksIncomingKube(req.params.bsid, res));
     });
 
-    api.get(API_PREFIX + 'backbonesite/:bsid/links/outgoing/kube', (req, res) => {
-        Log(`Request for outgoing backbone links (Kubernetes): ${req.params.bsid}`);
-        fetchBackboneLinksOutgoingKube(req.params.bsid, res);
+    api.get(API_PREFIX + 'backbonesite/:bsid/links/outgoing/kube', async (req, res) => {
+        apiLog(req, await fetchBackboneLinksOutgoingKube(req.params.bsid, res));
     });
 
-    api.post(API_PREFIX + 'backbonesite/:bsid/ingress', (req, res) => {
-        Log(`POST - backbone site ingress data for site ${req.params.bsid}`);
-        postBackboneIngress(req.params.bsid, req, res);
+    api.post(API_PREFIX + 'backbonesite/:bsid/ingress', async (req, res) => {
+        apiLog(req, await postBackboneIngress(req.params.bsid, req, res));
     });
 
     admin.Initialize(api);

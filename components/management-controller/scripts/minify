@@ -5,7 +5,7 @@ mkdir app
 mkdir app/src
 mkdir app/src/common
 uglifyjs index.js -c -m -o app/index.js
-for MODULE in api-admin backbone-links backbone certs config db manage-sync mc-apiserver mc-main prune
+for MODULE in api-admin backbone-links site-templates certs config db manage-sync mc-apiserver mc-main prune
 do
     cp src/$MODULE.js app/src/$MODULE.js
 #    uglifyjs src/$MODULE.js --toplevel -c -m -o app/src/$MODULE.js

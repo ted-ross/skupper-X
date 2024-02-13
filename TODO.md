@@ -2,11 +2,21 @@
  - ~~Fix repeated/failed creation of connectors on the router~~
  - ~~Figure out the issue with incorrect return values from API functions~~
 
-## Technical Debt
+## General Stuff
  - Use PG notifications instead of polling to detect database changes
  - Explore ways to virtualize the Kubernetes content on backbones/member-sites for non-kube environments
  - Consolidate string definitions
  - When reconciling changes that are immutable, delete the synced object and re-reconcile for the create
+ - Do something sensible when AMQP destinations are no longer reachable (i.e. credit runs out)
+ - Consider issuing temporary credentials so that the first site of a new backbone can be bootstrapped on another backbone
+ - Set up router policies to restrict access to management-plane APIs
+ - Router-feature: Use a PKI signature for the router configuration so the configuration cannot be altered
+   - HMAC digest for the initial configuration that is signed by the router's private key
+   - Digest is carried in the connection properties and is enforced by the connected router
+   - If policy (or other security) configuration is altered after the initial startup, the router is shut down
+   - Inter-router/Edge connections are:
+     - Authenticated via MTLS
+     - Accepted only if the connecting site has an authentic initial configuration
 
 ## Backbone Feature Tasks
  - ~~In initial setup, specify which ingresses are needed on the site based on configured access points (skupperx-incoming configmap?)~~
@@ -30,6 +40,8 @@
  - Consider replacing the boolean ingress indication with "no-ingress", "any", or ingress-style suggestions
  - ~~Trigger hash updates and heartbeats to sites when relevant database changes occur~~
  - ~~Rename the site-controller image~~
+ - Add a PUT to allow backbones to be renamed
+ - Consider adding a "metadata" field to the interiorsites table to store arbitrary (JSON) data from the front-end
 
 ## VAN Feature Tasks
  - ~~Create non-backbone mode for the site-controller - disable ingress and other backbone-specific functions~~

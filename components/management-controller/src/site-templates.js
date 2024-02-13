@@ -23,13 +23,13 @@ const config = require('./config.js');
 const yaml   = require('js-yaml');
 const sync   = require('./manage-sync.js');
 
-const SA_NAME           = 'skupperx-backbone';
+const SA_NAME           = 'skupperx-site';
 const ROLE_NAME         = SA_NAME;
 const ROLE_BINDING_NAME = SA_NAME;
 const APPLICATION       = 'skupperx';
 const ROUTER_LABEL      = 'skx-router';
 const CM_NAME           = 'skupper-internal';
-const DEPLOYMENT_NAME   = 'skupperx-backbone';
+const DEPLOYMENT_NAME   = 'skupperx-site';
 
 exports.ServiceAccountYaml = function() {
     return `---
@@ -42,7 +42,7 @@ metadata:
 `;
 }
 
-exports.RoleYaml = function() {
+exports.BackboneRoleYaml = function() {
     return `---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -51,87 +51,45 @@ metadata:
   labels:
     application: ${APPLICATION}
 rules:
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  - pods
-  - pods/exec
-  - services
-  - secrets
-  - serviceaccounts
-  - events
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - delete
-  - patch
-- apiGroups:
-  - apps
-  resources:
-  - deployments
-  - statefulsets
-  - daemonsets
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - delete
-- apiGroups:
-  - route.openshift.io
-  resources:
-  - routes
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - delete
-- apiGroups:
-  - networking.k8s.io
-  resources:
-  - ingresses
-  - networkpolicies
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - delete
-- apiGroups:
-  - projectcontour.io
-  resources:
-  - httpproxies
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - delete
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - rolebindings
-  - roles
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - delete
-- apiGroups:
-  - apps.openshift.io
-  resources:
-  - deploymentconfigs
-  verbs:
-  - get
-  - list
-  - watch
+- apiGroups: [""]
+  resources: ["configmaps", "pods", "pods/exec", "services", "secrets", "serviceaccounts", "events"]
+  verbs: ["get", "list", "watch", "create", "update", "delete", "patch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets", "daemonsets"]
+  verbs: ["get", "list", "watch", "create", "update", "delete"]
+- apiGroups: ["route.openshift.io"]
+  resources: ["routes"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses", "networkpolicies"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+- apiGroups: ["projectcontour.io"]
+  resources: ["httpproxies"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["rolebindings", "roles"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+- apiGroups: ["apps.openshift.io"]
+  resources: ["deploymentconfigs"]
+  verbs: ["get", "list", "watch"]
+`;
+}
+
+exports.MemberRoleYaml = function() {
+  return `---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ${ROLE_NAME}
+  labels:
+    application: ${APPLICATION}
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "pods", "pods/exec", "services", "secrets", "serviceaccounts", "events"]
+  verbs: ["get", "list", "watch", "create", "update", "delete", "patch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets", "daemonsets"]
+  verbs: ["get", "list", "watch", "create", "update", "delete"]
 `;
 }
 
@@ -153,7 +111,7 @@ roleRef:
 `;
 }
 
-exports.ConfigMapYaml = function() {
+exports.ConfigMapYaml = function(mode) {
     return `---
 apiVersion: v1
 kind: ConfigMap
@@ -165,8 +123,8 @@ data:
         [
             "router",
             {
-                "id": "skx-bb-\${HOSTNAME}",
-                "mode": "interior",
+                "id": "skx-\${HOSTNAME}",
+                "mode": "${mode}",
                 "helloMaxAgeSeconds": "3",
                 "metadata": "{\\"version\\":\\"1.4.3\\",\\"platform\\":\\"kubernetes\\"}"
             }
@@ -209,7 +167,7 @@ data:
 `;
 }
 
-exports.DeploymentYaml = function(bsid) {
+exports.DeploymentYaml = function(bsid, backboneMode) {
     return `---
 apiVersion: apps/v1
 kind: Deployment
@@ -319,7 +277,7 @@ spec:
         - name: SKUPPERX_SITE_ID
           value: ${bsid}
         - name: SKX_BACKBONE
-          value: "YES"
+          value: "${backboneMode ? 'YES' : 'NO'}"
         ports:
         - containerPort: 8086
           name: http
