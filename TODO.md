@@ -14,6 +14,7 @@
    - HMAC digest for the initial configuration that is signed by the router's private key
    - Digest is carried in the connection properties and is enforced by the connected router
    - If policy (or other security) configuration is altered after the initial startup, the router is shut down
+   - Consider also sending the cryptographic signatures of the pod images in the connection properties
    - Inter-router/Edge connections are:
      - Authenticated via MTLS
      - Accepted only if the connecting site has an authentic initial configuration
@@ -41,7 +42,8 @@
  - ~~Trigger hash updates and heartbeats to sites when relevant database changes occur~~
  - ~~Rename the site-controller image~~
  - Add a PUT to allow backbones to be renamed
- - Consider adding a "metadata" field to the interiorsites table to store arbitrary (JSON) data from the front-end
+ - ~~Consider adding a "metadata" field to the interiorsites table to store opaque (JSON) data from the front-end~~
+ - Add a "platform" column for sites - probably enumerated for formality
 
 ## VAN Feature Tasks
  - ~~Create non-backbone mode for the site-controller - disable ingress and other backbone-specific functions~~

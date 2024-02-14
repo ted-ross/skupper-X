@@ -181,6 +181,8 @@ CREATE TABLE InteriorSites (
     Failure text,
     Certificate UUID REFERENCES TlsCertificates,
 
+    Metadata text,
+
     FirstActiveTime timestamptz,
     LastHeartbeat timestamptz,
 

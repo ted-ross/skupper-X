@@ -45,6 +45,9 @@ const validateAndNormalizeFields = function(fields, table) {
             if (typeof value != 'string') {
                 throw(Error(`Expected string value for key ${key}`));
             }
+            if (value.indexOf("'") != -1) {
+                throw(Error(`Single quotes not permitted for key ${key}`));
+            }
             normalized[key] = value;
             break;
 
@@ -114,11 +117,12 @@ const createBackboneSite = async function(bid, req, res) {
     try {
         const [fields, files] = await form.parse(req)
         const norm = validateAndNormalizeFields(fields, {
-            'name'   : {type: 'string', optional: false},
-            'claim'  : {type: 'bool',   optional: true, default: true},
-            'peer'   : {type: 'bool',   optional: true, default: false},
-            'member' : {type: 'bool',   optional: true, default: true},
-            'manage' : {type: 'bool',   optional: true, default: false},
+            'name'     : {type: 'string', optional: false},
+            'metadata' : {type: 'string', optional: true, default: null},
+            'claim'    : {type: 'bool',   optional: true, default: true},
+            'peer'     : {type: 'bool',   optional: true, default: false},
+            'member'   : {type: 'bool',   optional: true, default: true},
+            'manage'   : {type: 'bool',   optional: true, default: false},
         });
 
         const client = await db.ClientFromPool();
@@ -139,6 +143,14 @@ const createBackboneSite = async function(bid, req, res) {
                     extraCols += `, ${ingress}Access`;
                     extraVals += `, '${apId}'`;
                 }
+            }
+
+            //
+            // Handle the optional metadata
+            //
+            if (norm.metadata) {
+                extraCols += ', Metadata';
+                extraVals += `, '${norm.metadata}'`;
             }
 
             //
@@ -171,11 +183,12 @@ const updateBackboneSite = async function(sid, req, res) {
     try {
         const [fields, files] = await form.parse(req);
         const norm = validateAndNormalizeFields(fields, {
-            'name'   : {type: 'string', optional: true, default: null},
-            'claim'  : {type: 'bool',   optional: true, default: null},
-            'peer'   : {type: 'bool',   optional: true, default: null},
-            'member' : {type: 'bool',   optional: true, default: null},
-            'manage' : {type: 'bool',   optional: true, default: null},
+            'name'     : {type: 'string', optional: true, default: null},
+            'metadata' : {type: 'string', optional: true, default: null},
+            'claim'    : {type: 'bool',   optional: true, default: null},
+            'peer'     : {type: 'bool',   optional: true, default: null},
+            'member'   : {type: 'bool',   optional: true, default: null},
+            'manage'   : {type: 'bool',   optional: true, default: null},
         });
     
         const client = await db.ClientFromPool();
@@ -195,6 +208,13 @@ const updateBackboneSite = async function(sid, req, res) {
                     nameChanged = true;
                     await client.query("UPDATE InteriorSites SET Name = $1 WHERE Id = $2", [norm.name, sid]);
                     siteName = norm.name;
+                }
+
+                //
+                // Update the metadata if needed
+                //
+                if (norm.metadata != null && norm.metadata != site.metadata) {
+                    await client.query("UPDATE InteriorSites SET Metadata = $1 WHERE Id = $2", [norm.metadata, sid]);
                 }
 
                 //
@@ -503,7 +523,7 @@ const listBackboneSites = async function(id, res, byBackbone) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query(`SELECT Id, Name, Lifecycle, Failure, FirstActiveTime, LastHeartbeat FROM InteriorSites WHERE ${byBackbone ? 'Backbone' : 'Id'} = $1`, [id]);
+        const result = await client.query(`SELECT Id, Name, Lifecycle, Failure, Metadata, FirstActiveTime, LastHeartbeat FROM InteriorSites WHERE ${byBackbone ? 'Backbone' : 'Id'} = $1`, [id]);
         var list = [];
         result.rows.forEach(row => {
             list.push(row);
