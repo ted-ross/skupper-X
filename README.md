@@ -66,8 +66,8 @@ An Interface is a site-specific way that a software component interacts with oth
 
 Roles are extensible to support future interaction patterns.  The initial set of roles is as follows:
 
- * **Connect** - An interface for this role is a listening socket to be used by components that _connect_ to other components using a stream socket (i.e. TCP).
- * **Accept** - The counterpart for _Connect_.  A connecting socket that extablishes connections to components that _accept_ incoming connections via a stream socket.
+ * **Accept** - An interface for this role is a listening socket to be used by components that _connect_ to other components using a stream socket (i.e. TCP).
+ * **Connect** - The counterpart for _Accept_.  A connecting socket that establishes connections to components that _accept_ incoming connections via a stream socket.
  ---
  * **Send** - An interface used by components that _send_ data messages or streams to other components.  This could be a datagram socket or a messaging endpoint.
  * **Receive** - The counterpart for _Send_.
