@@ -19,14 +19,15 @@
 
 "use strict";
 
-const Log       = require('./common/log.js').Log;
-const amqp      = require('./common/amqp.js');
-const db        = require('./db.js');
-const kube      = require('./common/kube.js');
-const protocol  = require('./common/protocol.js');
-const api       = require('./mc-apiserver.js');
-const bbLinks   = require('./backbone-links.js');
-const crypto    = require('crypto');
+const Log        = require('./common/log.js').Log;
+const amqp       = require('./common/amqp.js');
+const db         = require('./db.js');
+const kube       = require('./common/kube.js');
+const protocol   = require('./common/protocol.js');
+const api        = require('./mc-apiserver.js');
+const bbLinks    = require('./backbone-links.js');
+const deployment = require('./site-deployment-state.js');
+const crypto     = require('crypto');
 
 const API_CONTROLLER_ADDRESS = 'skx/sync/mgmtcontroller';
 const API_MY_ADDRESS_PREFIX  = 'skx/sync/site/';
@@ -158,13 +159,19 @@ const checkSiteHashset = async function(backboneId, siteId, hashSet) {
     try {
         const result = await client.query("SELECT Lifecycle FROM InteriorSites WHERE Id = $1", [siteId]);
         if (result.rowCount == 1) {
+            let notify = false;
             await client.query("BEGIN");
             const row = result.rows[0];
             if (row.lifecycle == 'ready') {
                 await client.query("UPDATE InteriorSites SET Lifecycle = 'active', FirstActiveTime = CURRENT_TIMESTAMP WHERE Id = $1", [siteId]);
+                notify = true;
             }
             await client.query("UPDATE InteriorSites SET LastHeartbeat = CURRENT_TIMESTAMP WHERE Id = $1", [siteId]);
             await client.query("COMMIT");
+
+            if (notify) {
+                await deployment.SiteLifecycleChanged(siteId, 'active');
+            }
         }
     } catch (error) {
         Log(`Exception in heartbeat update: ${error.message}`);

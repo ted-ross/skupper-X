@@ -93,11 +93,14 @@ const fetchBackboneSiteKube = async function (siteId, res) {
     try {
         await client.query('BEGIN');
         const result = await client.query(
-            'SELECT InteriorSites.Certificate, InteriorSites.Lifecycle, TlsCertificates.ObjectName as secret_name FROM InteriorSites ' +
+            'SELECT InteriorSites.Certificate, InteriorSites.Lifecycle, InteriorSites.DeploymentState, TlsCertificates.ObjectName as secret_name FROM InteriorSites ' +
             'JOIN TlsCertificates ON InteriorSites.Certificate = TlsCertificates.Id WHERE Interiorsites.Id = $1', [siteId]);
         if (result.rowCount == 1) {
-            if (result.rows[0].lifecycle == 'active') {
-                throw(Error("Not permitted for an active site"));
+            if (result.rows[0].deploymentstate == 'deployed') {
+                throw(Error("Not permitted, site already deployed"));
+            }
+            if (result.rows[0].deploymentstate == 'not-ready') {
+                throw(Error("Not permitted, site not ready for deployment"));
             }
             let secret = await kube.LoadSecret(result.rows[0].secret_name);
             let text = '';
@@ -138,9 +141,14 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
     try {
         await client.query('BEGIN');
         const result = await client.query(
-            'SELECT * FROM InteriorSites WHERE Id = $1', [bsid]);
+            'SELECT ManageAccess, PeerAccess, MemberAccess, ClaimAccess, DeploymentState FROM InteriorSites WHERE Id = $1', [bsid]);
         if (result.rowCount == 1) {
             let site = result.rows[0];
+
+            if (site.deploymentstate != 'ready-bootstrap') {
+                throw(Error('Not permitted, site not ready for bootstrap deployment'));
+            }
+
             let text = '';
             let incoming = {};
             const worklist = [
@@ -171,9 +179,9 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
             throw Error('Site not found');
         }
         await client.query('COMMIT');
-    } catch (err) {
+    } catch (error) {
         await client.query('ROLLBACK');
-        res.send(err.message);
+        res.send(error.message);
         returnStatus = 400;
         res.status(returnStatus).end();
     } finally {

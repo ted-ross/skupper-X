@@ -19,11 +19,12 @@
 
 "use strict";
 
-const kube   = require('./common/kube.js');
-const Log    = require('./common/log.js').Log;
-const db     = require('./db.js');
-const config = require('./config.js');
-const sync   = require('./manage-sync.js');
+const kube       = require('./common/kube.js');
+const Log        = require('./common/log.js').Log;
+const db         = require('./db.js');
+const config     = require('./config.js');
+const sync       = require('./manage-sync.js');
+const deployment = require('./site-deployment-state.js');
 
 //
 // processNewManagementControllers
@@ -446,6 +447,7 @@ const secretAdded = async function(dblink, secret) {
             // Alert the sync module that changes have been made that require reconciliation with remote sites
             //
             if (alertSiteCertChanged) {
+                await deployment.SiteLifecycleChanged(ref_id, 'ready');
                 await sync.SiteCertificateChanged(dblink);
             } else if (alertAccessCertChanged) {
                 await sync.AccessCertificateChanged(dblink);

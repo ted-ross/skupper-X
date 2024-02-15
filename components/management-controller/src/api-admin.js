@@ -23,6 +23,7 @@ const formidable = require('formidable');
 const db         = require('./db.js');
 const sync       = require('./manage-sync.js');
 const Log        = require('./common/log.js').Log;
+const deployment = require('./site-deployment-state.js');
 
 const API_PREFIX   = '/api/v1alpha1/';
 const INGRESS_LIST = ['claim', 'peer', 'member', 'manage'];
@@ -196,6 +197,8 @@ const updateBackboneSite = async function(sid, req, res) {
             await client.query("BEGIN");
             let nameChanged   = false;
             let accessChanged = false;
+            let manageAdded   = false;
+            let manageDeleted = false;
             const siteResult = await client.query("SELECT * FROM InteriorSites WHERE Id = $1", [sid]);
             if (siteResult.rowCount == 1) {
                 const site = siteResult.rows[0];
@@ -228,6 +231,9 @@ const updateBackboneSite = async function(sid, req, res) {
                         const apResult = await client.query("INSERT INTO BackboneAccessPoints(Name, Kind, Backbone) VALUES ($1, $2, $3) RETURNING Id", [`${siteName}-${ingress}`, ingress, site.backbone]);
                         await client.query(`UPDATE InteriorSites SET ${ingress}Access = $1 WHERE Id = $2`, [apResult.rows[0].id, sid]);
                         accessChanged = true;
+                        if (ingress = 'manage') {
+                            manageAdded = true;
+                        }
                     } else if (norm[ingress] === false && site[`${ingress}access`]) {
                         //
                         // Update asked to remove this ingress and there is one currently in place
@@ -235,6 +241,9 @@ const updateBackboneSite = async function(sid, req, res) {
                         await client.query("DELETE FROM BackboneAccessPoints WHERE Id = $1", [site[`${ingress}access`]]);
                         await client.query(`UPDATE InteriorSites SET ${ingress}Access = NULL WHERE Id = $1`, [sid]);
                         accessChanged = true;
+                        if (ingress = 'manage') {
+                            manageDeleted = true;
+                        }
                     } else if ((norm[ingress] === true || norm[ingress] === null) && site[`${ingress}access`] && nameChanged) {
                         //
                         // There exists an ingress, it will stay in place, and the site name has changed
@@ -250,6 +259,15 @@ const updateBackboneSite = async function(sid, req, res) {
             //
             if (accessChanged) {
                 await sync.SiteIngressChanged(sid);
+            }
+
+            //
+            // Alert the deployment-state module if a change was made to the "manage" access
+            //
+            if (manageAdded) {
+                await deployment.ManageIngressAdded(sid);
+            } else if (manageDeleted) {
+                await deployment.ManageIngressDeleted(sid);
             }
 
             res.status(returnStatus).end();
@@ -295,12 +313,13 @@ const createBackboneLink = async function(bid, req, res) {
                 res.status(returnStatus).json({id: linkId});
 
                 //
-                // Alert the sync module that a new backbone link was added for the connecting site
+                // Alert the sync and deployment-state modules that a new backbone link was added for the connecting site
                 //
                 try {
+                    await deployment.LinkAddedOrDeleted(norm.connectingsite, norm.listeningsite);
                     await sync.LinkChanged(norm.connectingsite);
                 } catch (error) {
-                    Log(`Exception in call to LinkChanged: ${error.message}`);
+                    Log(`Exception createBackboneLink module notifications: ${error.message}`);
                     Log(error.stack);
                 }
             } else {
@@ -472,13 +491,14 @@ const deleteBackboneLink = async function(lid, res) {
         res.status(returnStatus).end();
 
         //
-        // Alert the sync module that a backbone link was deleted for the connecting site
+        // Alert the sync and deployment-state modules that a backbone link was deleted for the connecting site
         //
         if (connectingSite) {
             try {
+                await deployment.LinkAddedOrDeleted(norm.connectingsite, norm.listeningsite);
                 await sync.LinkChanged(connectingSite);
             } catch (error) {
-                Log(`Exception calling LinkChanged: ${error.message}`);
+                Log(`Exception deleteBackboneLink module notifications: ${error.message}`);
                 Log(error.stack);
             }
         }
