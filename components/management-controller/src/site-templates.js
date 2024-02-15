@@ -111,7 +111,7 @@ roleRef:
 `;
 }
 
-exports.ConfigMapYaml = function(mode) {
+exports.ConfigMapYaml = function(mode, vanId = null) {
     return `---
 apiVersion: v1
 kind: ConfigMap
@@ -125,6 +125,7 @@ data:
             {
                 "id": "skx-\${HOSTNAME}",
                 "mode": "${mode}",
+${vanId ? `                "vanId": "${vanId}",` : ''}
                 "helloMaxAgeSeconds": "3",
                 "metadata": "{\\"version\\":\\"1.4.3\\",\\"platform\\":\\"kubernetes\\"}"
             }

@@ -55,8 +55,10 @@ const fetchInvitationKube = async function (iid, res) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT MemberInvitations.*, TlsCertificates.ObjectName as secret_name FROM MemberInvitations " +
-                                        "JOIN TlsCertificates ON MemberInvitations.Certificate = TlsCertificates.Id WHERE MemberInvitations.Id = $1", [iid]);
+        const result = await client.query("SELECT MemberInvitations.*, TlsCertificates.ObjectName as secret_name, ApplicationNetworks.VanId FROM MemberInvitations " +
+                                          "JOIN TlsCertificates ON MemberInvitations.Certificate = TlsCertificates.Id " +
+                                          "JOIN ApplicationNetworks ON MemberInvitations.MemberOf = ApplicationNetworks.Id " +
+                                          "WHERE MemberInvitations.Id = $1", [iid]);
         if (result.rowCount == 1) {
             const row = result.rows[0];
             const secret = await kube.LoadSecret(row.secret_name);
@@ -65,9 +67,10 @@ const fetchInvitationKube = async function (iid, res) {
             text += siteTemplates.ServiceAccountYaml();
             text += siteTemplates.MemberRoleYaml();
             text += siteTemplates.RoleBindingYaml();
-            text += siteTemplates.ConfigMapYaml('edge');
+            text += siteTemplates.ConfigMapYaml('edge', row.vanid);
             text += siteTemplates.DeploymentYaml(iid, false);
             text += siteTemplates.SecretYaml(secret, 'claim');
+            // TODO - Add the claim config-map
 
             res.send(text);
             res.status(returnStatus).end();

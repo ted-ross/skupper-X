@@ -108,8 +108,7 @@ const processNewAccessPoints = async function() {
         if (result.rowCount == 1) {
             const row = result.rows[0];
             Log(`New Backbone Access Point: ${row.name}`);
-            const van_id = row.id.substr(-5);
-            var   duration_ms;
+            var duration_ms;
 
             if (row.endtime) {
                 duration_ms = row.endtime.getTime() - row.starttime.getTime() + db.IntervalMilliseconds(row.deletedelay);
@@ -220,7 +219,7 @@ const processNewInvitations = async function() {
     try {
         await client.query('BEGIN');
         const result = await client.query(
-            "SELECT MemberInvitations.*, ApplicationNetworks.Lifecycle as vanlc, ApplicationNetworks.Certificate as vanca , ApplicationNetworks.VanId as van_id FROM MemberInvitations " + 
+            "SELECT MemberInvitations.*, ApplicationNetworks.Lifecycle as vanlc, ApplicationNetworks.Certificate as vanca FROM MemberInvitations " + 
             "JOIN ApplicationNetworks ON MemberInvitations.MemberOf = ApplicationNetworks.Id WHERE MemberInvitations.Lifecycle = 'new' and ApplicationNetworks.Lifecycle = 'ready' LIMIT 1"
         );
         if (result.rowCount == 1) {
@@ -228,8 +227,8 @@ const processNewInvitations = async function() {
             Log(`New Invitation: ${row.name}`);
             var duration_ms = db.IntervalMilliseconds(config.DefaultCertExpiration());
             await client.query(
-                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, Invitation, Issuer, VanId) VALUES(gen_random_uuid(), 'memberClaim', now(), now(), $1, $2, $3, $4)",
-                [duration_ms / 3600000, row.id, row.vanca, row.van_id]
+                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, Invitation, Issuer) VALUES(gen_random_uuid(), 'memberClaim', now(), now(), $1, $2, $3)",
+                [duration_ms / 3600000, row.id, row.vanca]
             );
             await client.query("UPDATE MemberInvitations SET Lifecycle = 'skx_cr_created' WHERE Id = $1", [row.id]);
             reschedule_delay = 0;
@@ -335,7 +334,6 @@ const processNewCertificateRequests = async function() {
                     extra_annotations['skupper.io/skx-dataplane-image']  = config.SiteDataplaneImage();
                     extra_annotations['skupper.io/skx-configsync-image'] = config.ConfigSyncImage();
                     extra_annotations['skupper.io/skx-controller-image'] = config.SiteControllerImage();
-                    extra_annotations['skupper.io/skx-van-id']           = row.vanid;
                     // TODO - Add annotations for valid and expiration times for this claim
                     break;
                 case 'vanSite':

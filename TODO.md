@@ -44,6 +44,7 @@
  - Add a PUT to allow backbones to be renamed
  - ~~Consider adding a "metadata" field to the interiorsites table to store opaque (JSON) data from the front-end~~
  - Add a "platform" column for sites - probably enumerated for formality
+ - Provide guidance in the deployment of backbone sites - bootstrapping the first site; indicating which sites can be deployed in sequence - deployment-state?
 
 ## VAN Feature Tasks
  - ~~Create non-backbone mode for the site-controller - disable ingress and other backbone-specific functions~~

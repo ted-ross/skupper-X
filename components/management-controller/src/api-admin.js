@@ -523,7 +523,7 @@ const listBackboneSites = async function(id, res, byBackbone) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query(`SELECT Id, Name, Lifecycle, Failure, Metadata, FirstActiveTime, LastHeartbeat FROM InteriorSites WHERE ${byBackbone ? 'Backbone' : 'Id'} = $1`, [id]);
+        const result = await client.query(`SELECT Id, Name, Lifecycle, Failure, Metadata, DeploymentState, FirstActiveTime, LastHeartbeat FROM InteriorSites WHERE ${byBackbone ? 'Backbone' : 'Id'} = $1`, [id]);
         var list = [];
         result.rows.forEach(row => {
             list.push(row);

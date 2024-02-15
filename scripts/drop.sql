@@ -41,3 +41,4 @@ DROP TYPE AccessPointType;
 DROP TYPE CertificateRequestType;
 DROP TYPE RoleType;
 DROP TYPE LifecycleType;
+DROP TYPE DeploymentStateType

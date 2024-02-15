@@ -87,6 +87,18 @@ CREATE TYPE RoleType AS ENUM ('accept', 'connect', 'send', 'receive', 'asyncRequ
 CREATE TYPE LifecycleType AS ENUM ('partial', 'new', 'skx_cr_created', 'cm_cert_created', 'cm_issuer_created', 'ready', 'active', 'expired', 'failed');
 
 --
+-- DeploymentStateType
+--
+-- Used to indicate what actions can be taken to deploy interior backbone sites
+--
+--   not-ready        The site is not ready to be deployed
+--   ready-bootstrap  The site is ready to be deployed by the bootstrap process
+--   ready-automatic  The site is ready to be deployed by the automatic process
+--   deployed         The site is deployed and has checked in with the management plane
+--
+CREATE TYPE DeploymentStateType AS ENUM ('not-ready', 'ready-bootstrap', 'ready-automatic', 'deployed');
+
+--
 -- Global configuration for Skupper-X
 --
 CREATE TABLE Configuration (
@@ -180,6 +192,7 @@ CREATE TABLE InteriorSites (
     Lifecycle LifecycleType DEFAULT 'new',
     Failure text,
     Certificate UUID REFERENCES TlsCertificates,
+    DeploymentState DeploymentStateType DEFAULT 'not-ready',
 
     Metadata text,
 
@@ -322,8 +335,6 @@ CREATE TABLE CertificateRequests (
     -- (relatively long) expiration interval will be used.
     --
     DurationHours integer,
-
-    VanId text,
 
     --
     -- Link to the requesting
