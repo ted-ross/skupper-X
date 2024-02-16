@@ -51,14 +51,36 @@ const link_config_map_yaml = function(name, data) {
     return yaml.dump(configMap);
 }
 
+const claim_config_map_yaml = function(id, hostname, port) {
+    let configMap = {
+        apiVersion : 'v1',
+        kind       : 'ConfigMap',
+        metadata   : {
+            name        : 'skupperx-claim',
+            annotations : {},
+        },
+        data: {}
+    };
+
+    configMap.data[id] = JSON.stringify({
+        host: hostname,
+        port: port,
+    });
+
+    configMap.metadata.annotations['skupper.io/skx-hash'] = sync.HashOfConfigMap(configMap);
+    return yaml.dump(configMap);
+}
+
 const fetchInvitationKube = async function (iid, res) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT MemberInvitations.*, TlsCertificates.ObjectName as secret_name, ApplicationNetworks.VanId FROM MemberInvitations " +
+        const result = await client.query("SELECT MemberInvitations.*, TlsCertificates.ObjectName as secret_name, ApplicationNetworks.VanId, " +
+                                          "BackboneAccessPoints.Id as accessid, BackboneAccessPoints.Hostname, BackboneAccessPoints.Port FROM MemberInvitations " +
                                           "JOIN TlsCertificates ON MemberInvitations.Certificate = TlsCertificates.Id " +
                                           "JOIN ApplicationNetworks ON MemberInvitations.MemberOf = ApplicationNetworks.Id " +
-                                          "WHERE MemberInvitations.Id = $1", [iid]);
+                                          "JOIN BackboneAccessPoints ON MemberInvitations.ClaimAccess = BackboneAccessPoints.Id " +
+                                          "WHERE MemberInvitations.Id = $1 AND BackboneAccessPoints.Lifecycle = 'ready'", [iid]);
         if (result.rowCount == 1) {
             const row = result.rows[0];
             const secret = await kube.LoadSecret(row.secret_name);
@@ -70,12 +92,12 @@ const fetchInvitationKube = async function (iid, res) {
             text += siteTemplates.ConfigMapYaml('edge', row.vanid);
             text += siteTemplates.DeploymentYaml(iid, false);
             text += siteTemplates.SecretYaml(secret, 'claim');
-            // TODO - Add the claim config-map
+            text += claim_config_map_yaml(row.accessid, row.hostname, row.port);
 
             res.send(text);
             res.status(returnStatus).end();
         } else {
-            throw(Error('Invitation not found'));
+            throw(Error('Invitation not found or not ready'));
         }
     } catch (error) {
         returnStatus = 400;
