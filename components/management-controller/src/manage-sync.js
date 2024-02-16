@@ -30,7 +30,6 @@ const deployment = require('./site-deployment-state.js');
 const crypto     = require('crypto');
 
 const API_CONTROLLER_ADDRESS = 'skx/sync/mgmtcontroller';
-const API_MY_ADDRESS_PREFIX  = 'skx/sync/site/';
 
 const REQUEST_TIMEOUT_SECONDS   = 10;
 const HEARTBEAT_PERIOD_SECONDS  = 60;
@@ -54,7 +53,7 @@ const backboneHashKeys = {
     'links/outgoing'    : 6,
 };
 
-var activeBackboneSites = {};   // { siteId: { heartbeatTimer: <>, lastPingTime, bbHashSet: [], siteHashSet: [] } }
+var activeBackboneSites = {};   // { siteId: { heartbeatTimer: <>, lastPingTime: <>, address: <>, bbHashSet: [], siteHashSet: [] } }
 var openLinks = {};             // { backboneId: { conn, apiSender, apiReceiver } }
 
 const timerDelaySeconds = function(floor) {
@@ -72,7 +71,7 @@ const sendHeartbeat = function(siteId) {
                 hashSet[key] = site.bbHashSet[index];
             }
 
-            amqp.SendMessage(link.apiSender, protocol.Heartbeat('manage', hashSet), {}, API_MY_ADDRESS_PREFIX + siteId);
+            amqp.SendMessage(link.apiSender, protocol.Heartbeat('manage', hashSet), {}, site.address);
         }
 
         site.heartbeatTimer = setTimeout(sendHeartbeat, timerDelaySeconds(HEARTBEAT_PERIOD_SECONDS), siteId);
@@ -91,6 +90,7 @@ const activateBackboneSite = async function(backboneId, siteId) {
             backboneId     : backboneId,
             heartbeatTimer : null,
             lastPingTime   : null,
+            address        : null,
             bbHashSet      : [null, null, null, null, null, null, null],
             siteHashSet    : [null, null, null, null],
         };
@@ -112,15 +112,16 @@ const activateBackboneSite = async function(backboneId, siteId) {
     }
 }
 
-const checkSiteHashset = async function(backboneId, siteId, hashSet) {
+const checkSiteHashset = async function(backboneId, siteId, hashSet, address) {
     await activateBackboneSite(backboneId, siteId);
-    let backbone = activeBackboneSites[siteId];
-    backbone.lastPingTime = Date.now();
+    let backboneSite = activeBackboneSites[siteId];
+    backboneSite.lastPingTime = Date.now();
+    backboneSite.address      = address;
     let updateKeys = [];
     let deleteKeys = [];
     for (const [key, hash] of Object.entries(hashSet)) {
         let index = siteIngressKeys[key];
-        if (hash != backbone.siteHashSet[index]) {
+        if (hash != backboneSite.siteHashSet[index]) {
             if (hash == null) {
                 deleteKeys.push(key);
             } else {
@@ -138,12 +139,12 @@ const checkSiteHashset = async function(backboneId, siteId, hashSet) {
         try {
             let index = siteIngressKeys[key];
             let apiSender = openLinks[backboneId].apiSender;
-            const [responseAp, responseBody] = await amqp.Request(apiSender, protocol.GetObject('manage', key), {}, REQUEST_TIMEOUT_SECONDS, API_MY_ADDRESS_PREFIX + siteId);
+            const [responseAp, responseBody] = await amqp.Request(apiSender, protocol.GetObject('manage', key), {}, REQUEST_TIMEOUT_SECONDS, backboneSite.address);
             if (responseBody.statusCode == 200) {
                 if (responseBody.objectName == key) {
                     Log(`Reconcile: Site ${siteId} - Update key ${key}`);
                     await api.AddHostToAccessPoint(siteId, key, responseBody.data.host, responseBody.data.port);
-                    backbone.siteHashSet[index] = responseBody.hash;
+                    backboneSite.siteHashSet[index] = responseBody.hash;
                 } else {
                     Log(`Get response object name mismatch: Got ${responseBody.objectName}, expected ${key}`);
                 }
@@ -406,8 +407,8 @@ const onSendable = function(unused) {
 const onMessage = async function(backboneId, application_properties, body, onReply) {
     try {
         protocol.DispatchMessage(body,
-            async (site, hashset) => {     // onHeartbeat
-                await checkSiteHashset(backboneId, site, hashset);
+            async (site, hashset, address) => {     // onHeartbeat
+                await checkSiteHashset(backboneId, site, hashset, address);
             },
             (site) => {                    // onSolicit
                 let backbone = activeBackboneSites[site];
@@ -415,6 +416,7 @@ const onMessage = async function(backboneId, application_properties, body, onRep
                 sendHeartbeat(site);
             },
             async (site, objectname) => {  // onGet
+                Log(`Reconcile: Received GET request from ${site} for object ${objectname}`);
                 let [hash, data] = await getObject(site, objectname);
                 onReply({}, protocol.GetObjectResponseSuccess(objectname, hash, data));
                 activeBackboneSites[site].bbHashSet[objectname] = hash;

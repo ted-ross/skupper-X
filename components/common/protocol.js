@@ -19,17 +19,18 @@
 
 "use strict";
 
-const Log = require('./log.js').Log;
+//const Log = require('./log.js').Log;
 
 const OP_HEARTBEAT         = 'HB';
 const OP_SOLICIT_HEARTBEAT = 'SH';
 const OP_GET               = 'GET';
 
-exports.Heartbeat = function(fromSite, hashSet) {
+exports.Heartbeat = function(fromSite, hashSet, address="") {
     return {
         op      : OP_HEARTBEAT,
         site    : fromSite,
         hashset : hashSet,
+        address : address,
     };
 }
 
@@ -67,9 +68,9 @@ exports.GetObjectReponseFailure = function(code, description) {
 
 exports.DispatchMessage = function(body, onHeartbeat, onSolicit, onGet) {
     switch (body.op) {
-    case OP_HEARTBEAT         : onHeartbeat(body.site, body.hashset);  break;
-    case OP_SOLICIT_HEARTBEAT : onSolicit(body.site);                  break;
-    case OP_GET               : onGet(body.site, body.objectname);     break;
+    case OP_HEARTBEAT         : onHeartbeat(body.site, body.hashset, body.address);  break;
+    case OP_SOLICIT_HEARTBEAT : onSolicit(body.site);                                break;
+    case OP_GET               : onGet(body.site, body.objectname);                   break;
     default:
         throw Error(`Unknown op-code ${body.op}`);
     }

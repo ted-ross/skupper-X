@@ -18,6 +18,8 @@
    - Inter-router/Edge connections are:
      - Authenticated via MTLS
      - Accepted only if the connecting site has an authentic initial configuration
+ - Consider having the sites generate their own certificates and CSRs to be sync'd to the MC for signing
+   - This would require the installation of openssl into the site-controller container image
 
 ## Backbone Feature Tasks
  - ~~In initial setup, specify which ingresses are needed on the site based on configured access points (skupperx-incoming configmap?)~~
@@ -34,20 +36,21 @@
  - ~~Disable API for backbone-site config after the site has "checked in" with the management controller~~
  - ~~Define the APIs for the front-end~~
  - ~~Change the field validator to a validator/normalizer which returns a copy of the fields with their expected types~~
+ - ~~Trigger hash updates and heartbeats to sites when relevant database changes occur~~
+ - ~~Rename the site-controller image~~
+ - ~~Consider adding a "metadata" field to the interiorsites table to store opaque (JSON) data from the front-end~~
+ - ~~Provide guidance in the deployment of backbone sites - bootstrapping the first site; indicating which sites can be deployed in sequence - deployment-state~~
  - Clean up the async structure of the "prune" module
  - Add an entry point in the "prune" module to clean things up after objects are deleted
  - When creating a link and there is no "peer" ingress on the listening site, either error out or create a peer ingress as a side effect
  - Add ingress capability for non-OpenShift kubernetes
  - Consider replacing the boolean ingress indication with "no-ingress", "any", or ingress-style suggestions
- - ~~Trigger hash updates and heartbeats to sites when relevant database changes occur~~
- - ~~Rename the site-controller image~~
  - Add a PUT to allow backbones to be renamed
- - ~~Consider adding a "metadata" field to the interiorsites table to store opaque (JSON) data from the front-end~~
  - Add a "platform" column for sites - probably enumerated for formality
- - ~~Provide guidance in the deployment of backbone sites - bootstrapping the first site; indicating which sites can be deployed in sequence - deployment-state~~
 
 ## VAN Feature Tasks
  - ~~Create non-backbone mode for the site-controller - disable ingress and other backbone-specific functions~~
+ - Remove backbone-mode and replace with backbone-enabled, member-enabled, claim-enabled.  This allows a site to be a member and a backbone at the same time
  - Add a claim-handshake module to the site-controller
  - Design a mechanism by which invited sites become member sites
  - Design the member API

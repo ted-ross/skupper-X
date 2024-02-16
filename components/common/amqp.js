@@ -51,6 +51,11 @@ const rhea_handlers = function() {
                     }
                 });
             }
+        } else {
+            let rx = context.receiver.skxReceiver;
+            if (rx && rx.onAddress) {
+                rx.onAddress(rx.context, context.receiver.source.address);
+            }
         }
     });
 
@@ -150,6 +155,21 @@ exports.OpenReceiver = function(conn, address, onMessage, context=undefined) {
     let receiver = {
         amqpReceiver : conn.amqpConnection.open_receiver(address),
         onMessage    : onMessage,
+        onAddress    : null,
+        context      : context,
+    };
+
+    receiver.amqpReceiver.skxReceiver = receiver;
+    conn.receivers.push(receiver);
+
+    return receiver;
+}
+
+exports.OpenDynamicReceiver = function(conn, onMessage, onAddress, context=undefined) {
+    let receiver = {
+        amqpReceiver : conn.amqpConnection.open_receiver({source:{dynamic:true}}),
+        onMessage    : onMessage,
+        onAddress    : onAddress,
         context      : context,
     };
 
@@ -162,7 +182,12 @@ exports.OpenReceiver = function(conn, address, onMessage, context=undefined) {
 exports.SendMessage = function(sender, messageBody, ap={}, destination=null) {
     const messageId = nextMessageId;
     nextMessageId++;
-    let message = {message_id: messageId, body: messageBody, application_properties: ap};
+    let message = {
+        message_id             : messageId,
+        reply_to               : sender.conn.replyTo,
+        body                   : messageBody,
+        application_properties : ap,
+    };
     if (destination) {
         message.to = destination;        
     }

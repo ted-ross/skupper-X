@@ -26,15 +26,16 @@ const ingress  = require('./ingress.js');
 const protocol = require('./common/protocol.js');
 
 const API_CONTROLLER_ADDRESS = 'skx/sync/mgmtcontroller';
-const API_MY_ADDRESS_PREFIX  = 'skx/sync/site/';
 
 const REQUEST_TIMEOUT_SECONDS   = 10;
 const HEARTBEAT_PERIOD_SECONDS  = 60;
 
 var backboneMode;
 var siteId;
+var apiConnection;
 var apiSender;
 var apiReceiver;
+var myAddress;
 var heartbeatTimer;
 
 var localData = {
@@ -69,7 +70,7 @@ const sendHeartbeat = function() {
         localHashSet[key] = value.hash;
     }
     if (apiSender) {
-        amqp.SendMessage(apiSender, protocol.Heartbeat(siteId, localHashSet));
+        amqp.SendMessage(apiSender, protocol.Heartbeat(siteId, localHashSet, myAddress));
     }
     heartbeatTimer = setTimeout(sendHeartbeat, HEARTBEAT_PERIOD_SECONDS * 1000);
 }
@@ -175,7 +176,7 @@ const onSendable = function(unused) {
 
 const onMessage = async function(unused, application_properties, body, onReply) {
     protocol.DispatchMessage(body,
-        async (site, hashset) => {     // onHeartbeat
+        async (site, hashset, address) => {     // onHeartbeat
             await checkControllerHashset(hashset);
         },
         (site) => {              // onSolicit
@@ -183,9 +184,18 @@ const onMessage = async function(unused, application_properties, body, onReply) 
             sendHeartbeat();
         },
         async (site, objectname) => {  // onGet
+            Log(`Reconcile: Received GET request from ${site} for object ${objectname}`);
             let [hash, data] = await getObject(objectname);
             onReply({}, protocol.GetObjectResponseSuccess(objectname, hash, data));
         });
+}
+
+const onAddress = async function(unused, dynamicAddress) {
+    Log(`Dynamic AMQP address is ${dynamicAddress}`);
+    myAddress = dynamicAddress;
+    if (apiSender == undefined) {
+        apiSender = amqp.OpenSender('Site-Sync', apiConnection, API_CONTROLLER_ADDRESS, onSendable);
+    }
 }
 
 const initializeHashState = async function() {
@@ -244,10 +254,10 @@ exports.UpdateIngress = function(key, _hash, _data) {
 
 exports.Start = async function (mode, id, connection) {
     Log('[Site-Sync module started]');
-    backboneMode = mode;
-    siteId       = id;
+    backboneMode  = mode;
+    siteId        = id;
+    apiConnection = connection;
     await initializeHashState();
     await initializeLocalData();
-    apiSender   = amqp.OpenSender('Site-Sync', connection, API_CONTROLLER_ADDRESS, onSendable);
-    apiReceiver = amqp.OpenReceiver(connection, API_MY_ADDRESS_PREFIX + siteId, onMessage);
+    apiReceiver = amqp.OpenDynamicReceiver(connection, onMessage, onAddress);
 }
