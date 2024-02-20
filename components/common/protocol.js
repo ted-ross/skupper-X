@@ -24,6 +24,7 @@
 const OP_HEARTBEAT         = 'HB';
 const OP_SOLICIT_HEARTBEAT = 'SH';
 const OP_GET               = 'GET';
+const OP_CLAIM             = 'CLAIM';
 
 exports.Heartbeat = function(fromSite, hashSet, address="") {
     return {
@@ -59,7 +60,23 @@ exports.GetObjectResponseSuccess = function(objectName, hash, data) {
     };
 }
 
-exports.GetObjectReponseFailure = function(code, description) {
+exports.AssertClaim = function(claimId) {
+    return {
+        op    : OP_CLAIM,
+        claim : claimId,
+    };
+}
+
+exports.AssertClaimResponseSuccess = function(outgoingLinks, siteClient) {
+    return {
+        statusCode        : 200,
+        statusDescription : 'OK',
+        outgoingLinks     : outgoingLinks,
+        siteClient        : siteClient,
+    };
+}
+
+exports.ReponseFailure = function(code, description) {
     return {
         statusCode        : code,
         statusDescription : description,

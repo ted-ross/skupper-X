@@ -41,7 +41,7 @@ const get_hostnames = function(res) {
     }
 }
 
-exports.Start = async function() {
+exports.Start = async function(backboneMode) {
     Log('[API Server module started]');
     api = express();
     api.use(cors());
@@ -51,10 +51,12 @@ exports.Start = async function() {
         res.status(200).end();
     });
 
-    api.get(API_PREFIX + 'hostnames', (req, res) => {
-        Log(`API: Hostname request from ${req.ip}`);
-        get_hostnames(res);
-    });
+    if (backboneMode) {
+        api.get(API_PREFIX + 'hostnames', (req, res) => {
+            Log(`API: Hostname request from ${req.ip}`);
+            get_hostnames(res);
+        });
+    }
 
     let server = api.listen(API_PORT, () => {
         let host = server.address().address;

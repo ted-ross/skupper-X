@@ -30,6 +30,7 @@ const siteSync    = require('./site-sync.js');
 const router      = require('./common/router.js');
 const links       = require('./links.js');
 const ingress     = require('./ingress.js');
+const claim       = require('./claim.js');
 const Log         = require('./common/log.js').Log;
 const Flush       = require('./common/log.js').Flush;
 
@@ -50,17 +51,32 @@ exports.Main = async function() {
     try {
         await kube.Start(k8s, fs, yaml, !STANDALONE);
         await amqp.Start(rhea);
+
+        //
+        // Start the API server early so we don't cause readiness-probe problems.
+        //
+        await apiserver.Start(BACKBONE_MODE);
+
+        if (!BACKBONE_MODE) {
+            //
+            // If we are in member mode, we must assert a claim (or use a previously accepted claim) to join an application network.
+            // This function does not complete until after the claim has been asserted, accepted, and processed.  On subsequent
+            // restarts of this controller after claim acceptance, the following function is effectively a no-op.
+            //
+            await claim.Start();
+        }
+
         let conn = amqp.OpenConnection('LocalRouter');
         await router.Start(conn);
         await links.Start(BACKBONE_MODE);
         if (BACKBONE_MODE) {
             await ingress.Start(SITE_ID);
         }
-        await apiserver.Start();
         await siteSync.Start(BACKBONE_MODE, SITE_ID, conn);
         Log("[Site controller initialization completed successfully]");
-    } catch (reason) {
-        Log(`Site controller initialization failed: ${reason.stack}`)
+    } catch (error) {
+        Log(`Site controller initialization failed: ${error.message}`)
+        Log(error.stack);
         Flush();
         process.exit(1);
     };

@@ -20,6 +20,7 @@
      - Accepted only if the connecting site has an authentic initial configuration
  - Consider having the sites generate their own certificates and CSRs to be sync'd to the MC for signing
    - This would require the installation of openssl into the site-controller container image
+ - Generalize and parameterize the "hash-sets" for site-to-management reconciliation allowing for greater flexibility in development
 
 ## Backbone Feature Tasks
  - ~~In initial setup, specify which ingresses are needed on the site based on configured access points (skupperx-incoming configmap?)~~
@@ -47,6 +48,7 @@
  - Consider replacing the boolean ingress indication with "no-ingress", "any", or ingress-style suggestions
  - Add a PUT to allow backbones to be renamed
  - Add a "platform" column for sites - probably enumerated for formality
+ - Add a shell command in one of the site containers that extracts the host info for bootstrap-deployment
 
 ## VAN Feature Tasks
  - ~~Create non-backbone mode for the site-controller - disable ingress and other backbone-specific functions~~

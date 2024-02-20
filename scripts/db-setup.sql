@@ -269,8 +269,8 @@ CREATE TABLE MemberInvitations (
     JoinDeadline timestamptz,
     MemberClass UUID REFERENCES SiteClasses,
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
-    InstanceLimit integer,
-    InstanceCount integer,
+    InstanceLimit integer,                    -- NULL => no limit
+    InstanceCount integer DEFAULT 0,
     InteractiveClaim boolean DEFAULT false    -- If true, don't assert the claim until the invitee intervenes
 );
 

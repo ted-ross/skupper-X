@@ -134,21 +134,50 @@ exports.CloseConnection = function(conn) {
     conn.amqpConnection.close();
 }
 
-exports.OpenSender = function(logName, conn, address, onSendable, context=undefined) {
-    let sender = {
-        conn       : conn,
-        amqpSender : conn.amqpConnection.open_sender(address),
-        onSendable : onSendable,
-        context    : context,
-        logName    : logName,
-        sendable   : false,
-        notified   : false,
-    };
+exports.OpenSender = function(logName, conn, address, onSendable=undefined, context=undefined) {
+    if (onSendable) {
+        //
+        // This is the synchronous version of the function
+        //
+        let sender = {
+            conn       : conn,
+            amqpSender : conn.amqpConnection.open_sender(address),
+            onSendable : onSendable,
+            context    : context,
+            logName    : logName,
+            sendable   : false,
+            notified   : false,
+        };
 
-    sender.amqpSender.skxSender = sender;
-    conn.senders.push(sender);
+        sender.amqpSender.skxSender = sender;
+        conn.senders.push(sender);
 
-    return sender;
+        return sender;
+    } else {
+        //
+        // This is the asynchronous version of the function which does not resolve until the sender is sendable
+        //
+        return Promise((resolve, reject) => {
+            let sender = {
+                conn       : conn,
+                amqpSender : null,
+                onSendable : null,
+                context    : null,
+                logName    : logName,
+                sendable   : false,
+                notified   : false,
+            };
+
+            sender.amqpSender.skxSender = sender;
+            conn.senders.push(sender);
+
+            sender.onSendable = (unusedContext) => {
+                resolve(sender);
+            };
+
+            sender.amqpSender = conn.amqpConnection.open_sender(address);
+        });
+    }
 }
 
 exports.OpenReceiver = function(conn, address, onMessage, context=undefined) {

@@ -51,7 +51,7 @@ const link_config_map_yaml = function(name, data) {
     return yaml.dump(configMap);
 }
 
-const claim_config_map_yaml = function(id, hostname, port) {
+const claim_config_map_yaml = function(claimId, hostname, port) {
     let configMap = {
         apiVersion : 'v1',
         kind       : 'ConfigMap',
@@ -62,7 +62,7 @@ const claim_config_map_yaml = function(id, hostname, port) {
         data: {}
     };
 
-    configMap.data[id] = JSON.stringify({
+    configMap.data[claimId] = JSON.stringify({
         host: hostname,
         port: port,
     });
@@ -92,7 +92,7 @@ const fetchInvitationKube = async function (iid, res) {
             text += siteTemplates.ConfigMapYaml('edge', row.vanid);
             text += siteTemplates.DeploymentYaml(iid, false);
             text += siteTemplates.SecretYaml(secret, 'claim');
-            text += claim_config_map_yaml(row.accessid, row.hostname, row.port);
+            text += claim_config_map_yaml(row.id, row.hostname, row.port);
 
             res.send(text);
             res.status(returnStatus).end();
