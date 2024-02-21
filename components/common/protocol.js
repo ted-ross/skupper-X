@@ -60,10 +60,11 @@ exports.GetObjectResponseSuccess = function(objectName, hash, data) {
     };
 }
 
-exports.AssertClaim = function(claimId) {
+exports.AssertClaim = function(claimId, name) {
     return {
         op    : OP_CLAIM,
         claim : claimId,
+        name  : name,
     };
 }
 
@@ -83,11 +84,12 @@ exports.ReponseFailure = function(code, description) {
     };
 }
 
-exports.DispatchMessage = function(body, onHeartbeat, onSolicit, onGet) {
+exports.DispatchMessage = function(body, onHeartbeat, onSolicit, onGet, onClaim) {
     switch (body.op) {
     case OP_HEARTBEAT         : onHeartbeat(body.site, body.hashset, body.address);  break;
     case OP_SOLICIT_HEARTBEAT : onSolicit(body.site);                                break;
     case OP_GET               : onGet(body.site, body.objectname);                   break;
+    case OP_CLAIM             : onClaim(body.claim, body.name);                      break;
     default:
         throw Error(`Unknown op-code ${body.op}`);
     }

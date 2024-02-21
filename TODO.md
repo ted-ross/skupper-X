@@ -52,9 +52,11 @@
 
 ## VAN Feature Tasks
  - ~~Create non-backbone mode for the site-controller - disable ingress and other backbone-specific functions~~
+ - ~~Add a claim-handshake module to the site-controller~~
+ - ~~Design a mechanism by which invited sites become member sites~~
  - Remove backbone-mode and replace with backbone-enabled, member-enabled, claim-enabled.  This allows a site to be a member and a backbone at the same time
- - Add a claim-handshake module to the site-controller
- - Design a mechanism by which invited sites become member sites
+ - Add the User API for access to application networks, invitations, and member sites
  - Design the member API
+ - Add interactive invitations so member-console action is needed before the claim is asserted
 
 ## Application Definition Tasks

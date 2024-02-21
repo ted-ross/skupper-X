@@ -84,7 +84,7 @@ const sync_secrets = async function() {
 
     for (const p of Object.values(profiles)) {
         await router.DeleteSslProfile(p.name);
-        await fs.rm(CERT_DIRECTORY + p.name, force=true, recursive=true);
+        await fs.rm(CERT_DIRECTORY + p.name, recursive=true);
     };
 }
 

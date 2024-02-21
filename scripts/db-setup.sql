@@ -278,6 +278,7 @@ CREATE TABLE MemberInvitations (
 -- Mapping of participant sites to their backbone attach point(s)
 --
 CREATE TABLE EdgeLinks (
+    Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     AccessPoint UUID REFERENCES BackboneAccessPoints ON DELETE CASCADE,
     EdgeToken UUID REFERENCES MemberInvitations ON DELETE CASCADE,
     Priority integer DEFAULT 4
@@ -295,7 +296,6 @@ CREATE TABLE MemberSites (
 
     FirstActiveTime timestamptz,
     LastHeartbeat timestamptz,
-    InbandAddress text,
 
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
     Invitation UUID REFERENCES MemberInvitations ON DELETE CASCADE,

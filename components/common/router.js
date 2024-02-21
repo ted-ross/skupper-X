@@ -149,5 +149,6 @@ const onSendable = function(unused) {
 
 exports.Start = async function(connection) {
     Log('[Router-management module started]')
-    mgmtSender = amqp.OpenSender('Management', connection, '$management', onSendable);
+    mgmtSender = await amqp.OpenSender('Management', connection, '$management');
+    onSendable();
 }

@@ -71,8 +71,8 @@ exports.Main = async function() {
         await links.Start(BACKBONE_MODE);
         if (BACKBONE_MODE) {
             await ingress.Start(SITE_ID);
+            await siteSync.Start(BACKBONE_MODE, SITE_ID, conn);
         }
-        await siteSync.Start(BACKBONE_MODE, SITE_ID, conn);
         Log("[Site controller initialization completed successfully]");
     } catch (error) {
         Log(`Site controller initialization failed: ${error.message}`)

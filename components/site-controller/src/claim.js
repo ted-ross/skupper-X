@@ -69,12 +69,12 @@ const startClaim = async function(configMap, secret) {
     //
     Log(`Asserting claim via amqps://${connInfo.host}:${connInfo.port}`);
     let claimConnection = amqp.OpenConnection('Claim', connInfo.host, connInfo.port, 'tls', tls_ca, tls_cert, tls_key);
-    let claimSender     = amqp.OpenSender('Claim', claimConnection, CLAIM_CONTROLLER_ADDRESS);
+    let claimSender     = await amqp.OpenSender('Claim', claimConnection, CLAIM_CONTROLLER_ADDRESS);
 
     //
     // Send the claim-assert request to the management controller
     //
-    const [ap, response] = await amqp.Request(claimSender, protocol.AssertClaim(claimId), {}, CLAIM_REQUEST_TIMEOUT_SECONDS);
+    const [ap, response] = await amqp.Request(claimSender, protocol.AssertClaim(claimId, "TODO-name-me"), {}, CLAIM_REQUEST_TIMEOUT_SECONDS);
     if (response.statusCode != 200) {
         throw(Error(`Claim Rejected: ${response.statusCode} - ${response.statusDescription}`));
     }

@@ -197,15 +197,17 @@ const ingressHash = function(data) {
 }
 
 exports.GetInitialConfig = async function() {
-    const routeList = await kube.GetRoutes();
-    for (const route of routeList) {
-        for (const [key, unused] of Object.entries(ingressState)) {
-            if (route.metadata.name == 'skx-' + key && route.spec.host) {
-                ingressState[key].data = {host: route.spec.host, port: 443};
-                ingressState[key].hash = ingressHash(ingressState[key].data);
+    try {
+        const routeList = await kube.GetRoutes();
+        for (const route of routeList) {
+            for (const [key, unused] of Object.entries(ingressState)) {
+                if (route.metadata.name == 'skx-' + key && route.spec.host) {
+                    ingressState[key].data = {host: route.spec.host, port: 443};
+                    ingressState[key].hash = ingressHash(ingressState[key].data);
+                }
             }
         }
-    }
+    } catch (error) {}
 
     return ingressState;
 }

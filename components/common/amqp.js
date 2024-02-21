@@ -157,7 +157,7 @@ exports.OpenSender = function(logName, conn, address, onSendable=undefined, cont
         //
         // This is the asynchronous version of the function which does not resolve until the sender is sendable
         //
-        return Promise((resolve, reject) => {
+        return new Promise((resolve, reject) => {
             let sender = {
                 conn       : conn,
                 amqpSender : null,
@@ -168,14 +168,13 @@ exports.OpenSender = function(logName, conn, address, onSendable=undefined, cont
                 notified   : false,
             };
 
-            sender.amqpSender.skxSender = sender;
-            conn.senders.push(sender);
-
             sender.onSendable = (unusedContext) => {
                 resolve(sender);
             };
 
             sender.amqpSender = conn.amqpConnection.open_sender(address);
+            sender.amqpSender.skxSender = sender;
+            conn.senders.push(sender);
         });
     }
 }

@@ -29,7 +29,8 @@ const bbLinks    = require('./backbone-links.js');
 const deployment = require('./site-deployment-state.js');
 const crypto     = require('crypto');
 
-const API_CONTROLLER_ADDRESS = 'skx/sync/mgmtcontroller';
+const API_CONTROLLER_ADDRESS   = 'skx/sync/mgmtcontroller';
+const CLAIM_CONTROLLER_ADDRESS = 'skx/claim';
 
 const REQUEST_TIMEOUT_SECONDS   = 10;
 const HEARTBEAT_PERIOD_SECONDS  = 60;
@@ -55,6 +56,7 @@ const backboneHashKeys = {
 
 var activeBackboneSites = {};   // { siteId: { heartbeatTimer: <>, lastPingTime: <>, address: <>, bbHashSet: [], siteHashSet: [] } }
 var openLinks = {};             // { backboneId: { conn, apiSender, apiReceiver } }
+var memberCompletions = {};     // { memberId: completion-function }
 
 const timerDelaySeconds = function(floor) {
     return (Math.floor(Math.random() * (HEARTBEAT_WINDOW_SECONDS + 1) + floor)) * 1000;
@@ -400,27 +402,183 @@ const getObject = async function(siteId, objectname) {
     } 
 }
 
+const memberCompletion = function(memberId) { // => [outgoingLinks, siteClient]
+    return new Promise((resolve, reject) => {
+        memberCompletions[memberId] = async () => {
+            var outgoingLinks;
+            var siteClient;
+            const client = await db.ClientFromPool();
+            try {
+                await client.query("BEGIN");
+                //
+                // Get the member-site record from the database
+                //
+                const result = await client.query("SELECT Certificate, Invitation, TlsCertificates.ObjectName FROM MemberSites "+
+                                                  "JOIN TlsCertificates ON TlsCertificates.Id = Certificate " +
+                                                  "WHERE MemberSites.Id = $1", [memberId]);
+                if (result.rowCount != 1) {
+                    throw(Error(`Could not find MemberSite with Id ${memberId}`));
+                }
+                const memberSite = result.rows[0];
+
+                //
+                // Get the member site's siteClient certificate
+                //
+                const secret = await kube.LoadSecret(memberSite.objectname);
+                const secretHash = exports.HashOfSecret(secret);
+                siteClient = dataOfSecret(secret, secretHash);
+                siteClient.apiVersion    = 'v1';
+                siteClient.kind          = 'Secret';
+                siteClient.metadata.name = 'skupperx-site-client';
+                siteClient.metadata.annotations['skupper.io/skx-inject'] = 'site-client';
+
+                //
+                // Gather the edge-link information for the outgoingLinks
+                //
+                const linkResult = await client.query("SELECT EdgeLinks.*, BackboneAccessPoints.Id as bbid, BackboneAccessPoints.Hostname, BackboneAccessPoints.Port FROM EdgeLinks " + 
+                                                      "JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = AccessPoint " + 
+                                                      "WHERE EdgeToken = $1", [memberSite.invitation]);
+                outgoingLinks = {
+                    apiVersion : 'v1',
+                    kind : 'ConfigMap',
+                    metadata : {
+                        name : 'skupperx-links-outgoing',
+                        annotations: {},
+                    },
+                    data : {},
+                };
+                for (const link of linkResult.rows) {
+                    outgoingLinks.data[link.bbid] = JSON.stringify({
+                        host     : link.hostname,
+                        port     : link.port,
+                        cost     : 1,
+                        priority : link.priority,
+                    });
+                }
+                const lrHash = exports.HashOfConfigMap(outgoingLinks);
+                outgoingLinks.metadata.annotations['skupper.io/skx-hash'] = lrHash;
+
+                await client.query("COMMIT");
+            } catch (error) {
+                await client.query("ROLLBACK");
+                Log(`Exception caught in memberCompletion: ${error.message}`);
+                Log(error.stack);
+                reject(error);
+            } finally {
+                client.release();
+            }
+
+            resolve([outgoingLinks, siteClient]);
+        }
+    });
+}
+
+const processClaim = async function(claimId, name) {
+    var statusCode        = 200;
+    var statusDescription = 'OK';
+    var outgoingLinks     = null;
+    var siteClient        = null;
+    var memberId;
+
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT * FROM MemberInvitations WHERE Id = $1 and (JoinDeadline IS NULL OR JoinDeadline > now())", [claimId]);
+        if (result.rowCount != 1) {
+            throw(Error("No valid invitation exists for the claim"));
+        }
+
+        //
+        // Reject the claim if the instance limit has already been reached
+        //
+        const claim = result.rows[0];
+        if (claim.instancelimit && claim.instancecount == claim.instancelimit) {
+            throw(Error("Instance limit on this claim has been reached"));
+        }
+
+        //
+        // Increment the instance count for the invitation
+        //
+        await client.query("UPDATE MemberInvitations SET InstanceCount = $1 WHERE Id = $2", [claim.instancecount + 1, claimId]);
+
+        //
+        // Create a new member from the invitation
+        //
+        const memberResult = await client.query("INSERT INTO MemberSites (Name, MemberOf, Invitation, SiteClass) VALUES ($1, $2, $3, $4) RETURNING Id",
+                                                [name, claim.memberof, claim.id, claim.memberclass]);
+        memberId = memberResult.rows[0].id;
+        await client.query("COMMIT");
+    } catch (error) {
+        await client.query("ROLLBACK");
+        Log(`Exception in claim processing: ${error.message}`);
+        statusCode        = 400;
+        statusDescription = `Claim rejected: ${error.message}`;
+    } finally {
+        client.release();
+    }
+
+    if (statusCode == 200) {
+        try {
+            [outgoingLinks, siteClient] = await memberCompletion(memberId);
+        } catch (error) {
+            Log(`Exception in claim processing, memberCompetion: ${error.message}`);
+            Log(error.stack);
+            statusCode = 500;
+            statusDescription = error.message;
+        }
+    }
+
+    return [statusCode, statusDescription, outgoingLinks, siteClient];
+}
+
 const onSendable = function(unused) {
     // This function intentionally left blank
 }
 
-const onMessage = async function(backboneId, application_properties, body, onReply) {
+const onMessageSite = async function(backboneId, application_properties, body, onReply) {
     try {
         protocol.DispatchMessage(body,
-            async (site, hashset, address) => {     // onHeartbeat
+            async (site, hashset, address) => { // onHeartbeat
                 await checkSiteHashset(backboneId, site, hashset, address);
             },
-            (site) => {                    // onSolicit
+            (site) => {                         // onSolicit
                 let backbone = activeBackboneSites[site];
                 clearTimeout(backbone.heartbeatTimer);
                 sendHeartbeat(site);
             },
-            async (site, objectname) => {  // onGet
+            async (site, objectname) => {       // onGet
                 Log(`Reconcile: Received GET request from ${site} for object ${objectname}`);
                 let [hash, data] = await getObject(site, objectname);
                 onReply({}, protocol.GetObjectResponseSuccess(objectname, hash, data));
                 activeBackboneSites[site].bbHashSet[objectname] = hash;
-            });
+            },
+            async (claimId, name) => {          // onClaim
+            }
+        );
+    } catch (error) {
+        Log(`Exception in onMessage: ${error.message}`);
+    }
+}
+
+const onMessageClaim = async function(backboneId, application_properties, body, onReply) {
+    try {
+        protocol.DispatchMessage(body,
+            async (site, hashset, address) => { // onHeartbeat
+            },
+            (site) => {                         // onSolicit
+            },
+            async (site, objectname) => {       // onGet
+            },
+            async (claimId, name) => {          // onClaim
+                Log(`Received claim for invitation ${claimId}`);
+                let [statusCode, statusDescription, outgoingLinks, siteClient] = await processClaim(claimId, name);
+                if (statusCode == 200) {
+                    onReply({}, protocol.AssertClaimResponseSuccess(outgoingLinks, siteClient));
+                } else {
+                    onReply({}, protocol.ReponseFailure(statusCode, statusDescription));
+                }
+            }
+        );
     } catch (error) {
         Log(`Exception in onMessage: ${error.message}`);
     }
@@ -428,9 +586,10 @@ const onMessage = async function(backboneId, application_properties, body, onRep
 
 const onLinkAdded = async function(backboneId, conn) {
     let link = {
-        conn        : conn,
-        apiSender   : amqp.OpenSender('AnonymousSender', conn, undefined, onSendable),
-        apiReceiver : amqp.OpenReceiver(conn, API_CONTROLLER_ADDRESS, onMessage, backboneId),
+        conn          : conn,
+        apiSender     : amqp.OpenSender('AnonymousSender', conn, undefined, onSendable),
+        apiReceiver   : amqp.OpenReceiver(conn, API_CONTROLLER_ADDRESS, onMessageSite, backboneId),
+        claimReceiver : amqp.OpenReceiver(conn, CLAIM_CONTROLLER_ADDRESS, onMessageClaim, backboneId),
     };
     link.apiReceiver.backboneId = backboneId;
     openLinks[backboneId] = link;
@@ -543,6 +702,14 @@ exports.NewIngressAvailable = async function(siteId) {
         Log(`Exception in NewIngressAvailable: ${error.message}`);
     } finally {
         client.release();
+    }
+}
+
+exports.CompleteMember = async function(memberId) {
+    const handler = memberCompletions[memberId];
+    if (handler) {
+        delete memberCompletions[memberId];
+        await handler();
     }
 }
 

@@ -387,6 +387,7 @@ const secretAdded = async function(dblink, secret) {
         var is_ca = false;
         var alertSiteCertChanged   = false;
         var alertAccessCertChanged = false;
+        var alertMemberCompletion  = false;
 
         if (result.rowCount == 1) {
             const cert_request = result.rows[0];
@@ -416,6 +417,7 @@ const secretAdded = async function(dblink, secret) {
             } else if (cert_request.site) {
                 ref_table  = 'MemberSites';
                 ref_id     = cert_request.site;
+                alertMemberCompletion = true;
             } else {
                 throw new Error('Unknown Target');
             }
@@ -451,6 +453,13 @@ const secretAdded = async function(dblink, secret) {
                 await sync.SiteCertificateChanged(dblink);
             } else if (alertAccessCertChanged) {
                 await sync.AccessCertificateChanged(dblink);
+            }
+
+            //
+            // If we just updated a member site, there will be a claim-assertion that is awaiting completion.  Invoke the completion function.
+            //
+            if (alertMemberCompletion) {
+                await sync.CompleteMember(ref_id);
             }
         } else {
             //

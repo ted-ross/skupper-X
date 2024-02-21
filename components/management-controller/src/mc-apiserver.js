@@ -68,7 +68,7 @@ const claim_config_map_yaml = function(claimId, hostname, port) {
     });
 
     configMap.metadata.annotations['skupper.io/skx-hash'] = sync.HashOfConfigMap(configMap);
-    return yaml.dump(configMap);
+    return "---\n" + yaml.dump(configMap);
 }
 
 const fetchInvitationKube = async function (iid, res) {

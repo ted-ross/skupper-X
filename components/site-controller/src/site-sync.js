@@ -176,18 +176,22 @@ const onSendable = function(unused) {
 
 const onMessage = async function(unused, application_properties, body, onReply) {
     protocol.DispatchMessage(body,
-        async (site, hashset, address) => {     // onHeartbeat
+        async (site, hashset, address) => { // onHeartbeat
             await checkControllerHashset(hashset);
         },
-        (site) => {              // onSolicit
+        (site) => {                         // onSolicit
             clearTimeout(heartbeatTimer);
             sendHeartbeat();
         },
-        async (site, objectname) => {  // onGet
+        async (site, objectname) => {       // onGet
             Log(`Reconcile: Received GET request from ${site} for object ${objectname}`);
             let [hash, data] = await getObject(objectname);
             onReply({}, protocol.GetObjectResponseSuccess(objectname, hash, data));
-        });
+        },
+        (claimId, name) => {                      // onClaim
+            onReply({}, protocol.ReponseFailure(400, 'Unsupported op-code'));
+        }
+        );
 }
 
 const onAddress = async function(unused, dynamicAddress) {
