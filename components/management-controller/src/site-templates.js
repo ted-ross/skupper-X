@@ -281,7 +281,7 @@ spec:
           value: "${backboneMode ? 'YES' : 'NO'}"
         ports:
         - containerPort: 8086
-          name: http
+          name: siteapi
           protocol: TCP
         readinessProbe:
           failureThreshold: 3
@@ -317,6 +317,31 @@ spec:
       - emptyDir: {}
         name: skupper-router-certs
 `;
+}
+
+exports.SiteApiServiceYaml = function() {
+    let service = {
+        apiVersion: 'v1',
+        kind:       'Service',
+        metadata: {
+            name: 'skupperx-site-api',
+        },
+        spec: {
+            type: 'ClusterIP',
+            internalTrafficPolicy: 'Cluster',
+            ports: [{
+                name:      'siteapi',
+                port:       8086,
+                protocol:  'TCP',
+                targetPort: 8086,
+            }],
+            selector: {
+                application: ROUTER_LABEL,
+            },
+        },
+    };
+
+    return "---\n" + yaml.dump(service);
 }
 
 exports.SecretYaml = function(certificate, profile_name) {

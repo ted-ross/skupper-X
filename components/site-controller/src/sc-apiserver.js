@@ -19,26 +19,61 @@
 
 "use strict";
 
-const express  = require('express');
-const cors     = require('cors');
-const yaml     = require('js-yaml');
-const ingress  = require('./ingress.js');
-const kube     = require('./common/kube.js');
-const Log      = require('./common/log.js').Log;
+const formidable = require('formidable');
+const express    = require('express');
+const cors       = require('cors');
+const yaml       = require('js-yaml');
+const ingress    = require('./ingress.js');
+const claim      = require('./claim.js');
+const kube       = require('./common/kube.js');
+const util       = require('./common/util.js');
+const Log        = require('./common/log.js').Log;
 
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8086;
 var api;
 
-const get_hostnames = function(res) {
+const getHostnames = function(res) {
     let ingress_bundle = ingress.GetIngressBundle();
     if (ingress_bundle.ready) {
         res.send(JSON.stringify(ingress_bundle));
         res.status(200).end();
+        return 200;
     } else {
         res.send('Ingress content is not yet available');
         res.status(204).end();
+        return 204;
     }
+}
+
+const getSiteStatus = function(res) {
+    const claimState = claim.GetClaimState();
+    res.status(200).json(claimState);
+    return 200;
+}
+
+const startClaim = async function(req, res) {
+    var returnStatus;
+    const form = new formidable.IncomingForm();
+    try {
+        const [fields, files] = await form.parse(req);
+        const norm = util.ValidateAndNormalizeFields(fields, {
+            'name' : {type: 'string', optional: false},
+        });
+
+        await claim.StartClaim(norm.name);
+        returnStatus = 201;
+        res.status(returnStatus).json({ name : norm.name });
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).json({ message : error.message });
+    }
+
+    return returnStatus;
+}
+
+const apiLog = function(req, status) {
+    Log(`SiteAPI: ${req.ip} - (${status}) ${req.method} ${req.originalUrl}`);
 }
 
 exports.Start = async function(backboneMode) {
@@ -53,8 +88,15 @@ exports.Start = async function(backboneMode) {
 
     if (backboneMode) {
         api.get(API_PREFIX + 'hostnames', (req, res) => {
-            Log(`API: Hostname request from ${req.ip}`);
-            get_hostnames(res);
+            apiLog(req, getHostnames(res));
+        });
+    } else {
+        api.get(API_PREFIX + 'site/status', (req, res) => {
+            apiLog(req, getSiteStatus(res));
+        });
+
+        api.put(API_PREFIX + 'site/start', async (req, res) => {
+            apiLog(req, await startClaim(req, res));
         });
     }
 

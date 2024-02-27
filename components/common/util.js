@@ -73,3 +73,54 @@ exports.allSettled = function(plist) {
         }
     });
 }
+
+exports.ValidateAndNormalizeFields = function(fields, table) {
+    var optional = {};
+    for (const [key, value] of Object.entries(table)) {
+        optional[key] = value.optional;
+    }
+
+    var normalized = {};
+
+    for (const [key, value] of Object.entries(fields)) {
+        if (Object.keys(table).indexOf(key) < 0) {
+            throw(Error(`Unknown field key ${key}`));
+        }
+        delete optional[key];
+        switch (table[key].type) {
+        case 'string' :
+            if (typeof value != 'string') {
+                throw(Error(`Expected string value for key ${key}`));
+            }
+            if (value.indexOf("'") != -1) {
+                throw(Error(`Single quotes not permitted for key ${key}`));
+            }
+            normalized[key] = value;
+            break;
+
+        case 'bool' :
+            if (typeof value != 'string' || (value != 'true' && value != 'false')) {
+                throw(Error(`Expected boolean string for key ${key}`));
+            }
+            normalized[key] = value == 'true';
+            break;
+
+        case 'number' :
+            if (typeof value != 'string' || isNaN(value)) {
+                throw(Error(`Expected numeric string for key ${key}`));
+            }
+            normalized[key] = parseInt(value);
+            break;
+        }
+    }
+
+    for (const [key, value] of Object.entries(optional)) {
+        if (!value) {
+            throw(Error(`Mandatory key ${key} not found`));
+        } else {
+            normalized[key] = table[key].default;
+        }
+    }
+
+    return normalized;
+}

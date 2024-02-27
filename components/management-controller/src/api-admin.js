@@ -24,67 +24,17 @@ const db         = require('./db.js');
 const sync       = require('./manage-sync.js');
 const Log        = require('./common/log.js').Log;
 const deployment = require('./site-deployment-state.js');
+const util       = require('./common/util.js');
 
 const API_PREFIX   = '/api/v1alpha1/';
 const INGRESS_LIST = ['claim', 'peer', 'member', 'manage'];
-
-const validateAndNormalizeFields = function(fields, table) {
-    var optional = {};
-    for (const [key, value] of Object.entries(table)) {
-        optional[key] = value.optional;
-    }
-
-    var normalized = {};
-
-    for (const [key, value] of Object.entries(fields)) {
-        if (Object.keys(table).indexOf(key) < 0) {
-            throw(Error(`Unknown field key ${key}`));
-        }
-        delete optional[key];
-        switch (table[key].type) {
-        case 'string' :
-            if (typeof value != 'string') {
-                throw(Error(`Expected string value for key ${key}`));
-            }
-            if (value.indexOf("'") != -1) {
-                throw(Error(`Single quotes not permitted for key ${key}`));
-            }
-            normalized[key] = value;
-            break;
-
-        case 'bool' :
-            if (typeof value != 'string' || (value != 'true' && value != 'false')) {
-                throw(Error(`Expected boolean string for key ${key}`));
-            }
-            normalized[key] = value == 'true';
-            break;
-
-        case 'number' :
-            if (typeof value != 'string' || isNaN(value)) {
-                throw(Error(`Expected numeric string for key ${key}`));
-            }
-            normalized[key] = parseInt(value);
-            break;
-        }
-    }
-
-    for (const [key, value] of Object.entries(optional)) {
-        if (!value) {
-            throw(Error(`Mandatory key ${key} not found`));
-        } else {
-            normalized[key] = table[key].default;
-        }
-    }
-
-    return normalized;
-}
 
 const createBackbone = async function(req, res) {
     var returnStatus;
     const form = new formidable.IncomingForm();
     try {
         const [fields, files] = await form.parse(req);
-        const norm = validateAndNormalizeFields(fields, {
+        const norm = util.ValidateAndNormalizeFields(fields, {
             'name'        : {type: 'string', optional: false},
             'multitenant' : {type: 'bool',   optional: true, default: true},
         });
@@ -117,7 +67,7 @@ const createBackboneSite = async function(bid, req, res) {
     const form = new formidable.IncomingForm();
     try {
         const [fields, files] = await form.parse(req)
-        const norm = validateAndNormalizeFields(fields, {
+        const norm = util.ValidateAndNormalizeFields(fields, {
             'name'     : {type: 'string', optional: false},
             'metadata' : {type: 'string', optional: true, default: null},
             'claim'    : {type: 'bool',   optional: true, default: true},
@@ -183,7 +133,7 @@ const updateBackboneSite = async function(sid, req, res) {
     const form = new formidable.IncomingForm();
     try {
         const [fields, files] = await form.parse(req);
-        const norm = validateAndNormalizeFields(fields, {
+        const norm = util.ValidateAndNormalizeFields(fields, {
             'name'     : {type: 'string', optional: true, default: null},
             'metadata' : {type: 'string', optional: true, default: null},
             'claim'    : {type: 'bool',   optional: true, default: null},
@@ -291,7 +241,7 @@ const createBackboneLink = async function(bid, req, res) {
     const form = new formidable.IncomingForm();
     try {
         const [fields, files] = await form.parse(req);
-        const norm = validateAndNormalizeFields(fields, {
+        const norm = util.ValidateAndNormalizeFields(fields, {
             'listeningsite'  : {type: 'string', optional: false},
             'connectingsite' : {type: 'string', optional: false},
             'cost'           : {type: 'number', optional: true, default: 1},
@@ -347,7 +297,7 @@ const updateBackboneLink = async function(lid, req, res) {
     const form = new formidable.IncomingForm();
     try {
         const [fields, files] = await form.parse(req);
-        const norm = validateAndNormalizeFields(fields, {
+        const norm = util.ValidateAndNormalizeFields(fields, {
             'cost' : {type: 'number', optional: true, default: null},
         });
 

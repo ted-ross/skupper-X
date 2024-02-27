@@ -51,13 +51,15 @@ const link_config_map_yaml = function(name, data) {
     return yaml.dump(configMap);
 }
 
-const claim_config_map_yaml = function(claimId, hostname, port) {
+const claim_config_map_yaml = function(claimId, hostname, port, interactive) {
     let configMap = {
         apiVersion : 'v1',
         kind       : 'ConfigMap',
         metadata   : {
             name        : 'skupperx-claim',
-            annotations : {},
+            annotations : {
+                'skupper.io/skx-interactive' : interactive ? 'true' : 'false',
+            },
         },
         data: {}
     };
@@ -91,8 +93,9 @@ const fetchInvitationKube = async function (iid, res) {
             text += siteTemplates.RoleBindingYaml();
             text += siteTemplates.ConfigMapYaml('edge', row.vanid);
             text += siteTemplates.DeploymentYaml(iid, false);
+            text += siteTemplates.SiteApiServiceYaml();
             text += siteTemplates.SecretYaml(secret, 'claim');
-            text += claim_config_map_yaml(row.id, row.hostname, row.port);
+            text += claim_config_map_yaml(row.id, row.hostname, row.port, row.interactiveclaim);
 
             res.send(text);
             res.status(returnStatus).end();

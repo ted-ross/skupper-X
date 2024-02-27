@@ -35,8 +35,17 @@ const CLAIM_SECRET_NAME             = 'skupperx-claim';
 const CLAIM_CONTROLLER_ADDRESS      = 'skx/claim';
 const CLAIM_REQUEST_TIMEOUT_SECONDS = 30;
 
+var claimState = {
+    interactive : true,
+    status      : 'awaiting-name',  // processing, joined, failed
+    siteName    : null,
+    failure     : null,
+};
+
 
 const startClaim = async function(configMap, secret) {
+    claimState.status = 'processing';
+
     //
     // Extract the needed certificates and keys from the secret
     //
@@ -74,11 +83,12 @@ const startClaim = async function(configMap, secret) {
     //
     // Send the claim-assert request to the management controller
     //
-    const [ap, response] = await amqp.Request(claimSender, protocol.AssertClaim(claimId, "TODO-name-me"), {}, CLAIM_REQUEST_TIMEOUT_SECONDS);
+    const [ap, response] = await amqp.Request(claimSender, protocol.AssertClaim(claimId, claimState.siteName), {}, CLAIM_REQUEST_TIMEOUT_SECONDS);
     if (response.statusCode != 200) {
         throw(Error(`Claim Rejected: ${response.statusCode} - ${response.statusDescription}`));
     }
     Log('Claim accepted');
+    claimState.status = 'joined';
 
     //
     // Create the objects needed to establish member connectivity
@@ -105,6 +115,7 @@ const checkClaimState = async function() {
 
     try {
         claimConfigMap = await kube.LoadConfigmap(CLAIM_CONFIG_MAP_NAME);
+        claimState.interactive = !! claimConfigMap.metadata.annotations['skupper.io/skx-interactive'];
     } catch (error) {}
 
     try {
@@ -134,7 +145,11 @@ const checkClaimState = async function() {
             //
             // If there is no link config-map but there is a claim config-map, we may begin the claim process.
             //
-            await startClaim(claimConfigMap, claimSecret);
+            if (claimState.interactive && claimState.siteName) {
+                await startClaim(claimConfigMap, claimSecret);
+            } else {
+                Log('Claim is interactive - Awaiting API intervention');
+            }
         } else {
             //
             // If neither config-map is present, check again after a delay.
@@ -143,7 +158,20 @@ const checkClaimState = async function() {
         }
     } catch (error) {
         Log(`Claim-state check failed: ${error.message}`);
+        claimState.status  = 'failed';
+        claimState.failure = error.message;
         throw(error);
+    }
+}
+
+exports.GetClaimState = function () {
+    return claimState;
+}
+
+exports.StartClaim = async function (name) {
+    if (claimState.status == 'awaiting-name') {
+        claimState.siteName = name;
+        await checkClaimState();
     }
 }
 
