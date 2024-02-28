@@ -344,20 +344,21 @@ exports.SiteApiServiceYaml = function() {
     return "---\n" + yaml.dump(service);
 }
 
-exports.SecretYaml = function(certificate, profile_name) {
+exports.SecretYaml = function(certificate, profile_name, inject) {
     let secret = {
         apiVersion: 'v1',
         kind: 'Secret',
         type: 'kubernetes.io/tls',
         metadata: {
             name: 'skupperx-' + profile_name,
-            annotations: {
-                'skupper.io/skx-inject' : profile_name,
-            },
+            annotations: {},
         },
         data: certificate.data,
     };
 
+    if (inject) {
+        secret.metadata.annotations['skupper.io/skx-inject'] = profile_name;  
+    }
     secret.metadata.annotations['skupper.io/skx-hash'] = sync.HashOfSecret(secret);
 
     return "---\n" + yaml.dump(secret);

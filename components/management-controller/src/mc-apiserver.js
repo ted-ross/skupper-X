@@ -94,7 +94,7 @@ const fetchInvitationKube = async function (iid, res) {
             text += siteTemplates.ConfigMapYaml('edge', row.vanid);
             text += siteTemplates.DeploymentYaml(iid, false);
             text += siteTemplates.SiteApiServiceYaml();
-            text += siteTemplates.SecretYaml(secret, 'claim');
+            text += siteTemplates.SecretYaml(secret, 'claim', false);
             text += claim_config_map_yaml(row.id, row.hostname, row.port, row.interactiveclaim);
 
             res.send(text);
@@ -134,7 +134,7 @@ const fetchBackboneSiteKube = async function (siteId, res) {
             text += siteTemplates.RoleBindingYaml();
             text += siteTemplates.ConfigMapYaml('interior');
             text += siteTemplates.DeploymentYaml(siteId, true);
-            text += siteTemplates.SecretYaml(secret, 'site-client');
+            text += siteTemplates.SecretYaml(secret, 'site-client', true);
 
             const outgoing = await sync.GetBackboneConnectors_TX(client, siteId);
             text += "---\n" + link_config_map_yaml('skupperx-links-outgoing', outgoing);
@@ -189,7 +189,7 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
                     if (ap_result.rowCount == 1) {
                         let ap = ap_result.rows[0];
                         let secret = await kube.LoadSecret(ap.objectname);
-                        text += siteTemplates.SecretYaml(secret, `${work.profile}-server`);
+                        text += siteTemplates.SecretYaml(secret, `${work.profile}-server`, true);
 
                         incoming[work.profile] = 'true';
                     }
