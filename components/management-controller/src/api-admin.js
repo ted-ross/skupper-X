@@ -66,6 +66,10 @@ const createBackboneSite = async function(bid, req, res) {
     var returnStatus;
     const form = new formidable.IncomingForm();
     try {
+        if (!util.IsValidUuid(bid)) {
+            throw(Error('Backbone-Id is not a valid uuid'));
+        }
+
         const [fields, files] = await form.parse(req)
         const norm = util.ValidateAndNormalizeFields(fields, {
             'name'     : {type: 'string', optional: false},
@@ -132,6 +136,10 @@ const updateBackboneSite = async function(sid, req, res) {
     var returnStatus = 200;
     const form = new formidable.IncomingForm();
     try {
+        if (!util.IsValidUuid(sid)) {
+            throw(Error('Site-Id is not a valid uuid'));
+        }
+
         const [fields, files] = await form.parse(req);
         const norm = util.ValidateAndNormalizeFields(fields, {
             'name'     : {type: 'string', optional: true, default: null},
@@ -240,10 +248,14 @@ const createBackboneLink = async function(bid, req, res) {
     var returnStatus;
     const form = new formidable.IncomingForm();
     try {
+        if (!util.IsValidUuid(bid)) {
+            throw(Error('Backbone-Id is not a valid uuid'));
+        }
+
         const [fields, files] = await form.parse(req);
         const norm = util.ValidateAndNormalizeFields(fields, {
-            'listeningsite'  : {type: 'string', optional: false},
-            'connectingsite' : {type: 'string', optional: false},
+            'listeningsite'  : {type: 'uuid',   optional: false},
+            'connectingsite' : {type: 'uuid',   optional: false},
             'cost'           : {type: 'number', optional: true, default: 1},
         });
 
@@ -296,6 +308,10 @@ const updateBackboneLink = async function(lid, req, res) {
     var returnStatus = 204;
     const form = new formidable.IncomingForm();
     try {
+        if (!util.IsValidUuid(lid)) {
+            throw(Error('Link-Id is not a valid uuid'));
+        }
+
         const [fields, files] = await form.parse(req);
         const norm = util.ValidateAndNormalizeFields(fields, {
             'cost' : {type: 'number', optional: true, default: null},
@@ -347,6 +363,10 @@ const activateBackbone = async function(res, bid) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
+        if (!util.IsValidUuid(bid)) {
+            throw(Error('Backbone-Id is not a valid uuid'));
+        }
+
         await client.query("UPDATE Backbones SET Lifecycle = 'new' WHERE Id = $1 and LifeCycle = 'partial'", [bid]);
         await client.query("COMMIT");
         res.status(returnStatus).end();
@@ -366,6 +386,10 @@ const deleteBackbone = async function(res, bid) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
+        if (!util.IsValidUuid(bid)) {
+            throw(Error('Backbone-Id is not a valid uuid'));
+        }
+
         const vanResult = await client.query("SELECT Id FROM ApplicationNetworks WHERE Backbone = $1 and LifeCycle = 'ready'", [bid]);
         if (vanResult.rowCount > 0) {
             throw(Error('Cannot delete a backbone with active application networks'));
@@ -394,6 +418,10 @@ const deleteBackboneSite = async function(res, sid) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
+        if (!util.IsValidUuid(sid)) {
+            throw(Error('Site-Id is not a valid uuid'));
+        }
+
         const result = await client.query("SELECT ClaimAccess, PeerAccess, MemberAccess, ManageAccess from InteriorSites WHERE Id = $1", [sid]);
         if (result.rowCount == 1) {
             const row = result.rows[0];
@@ -432,10 +460,16 @@ const deleteBackboneLink = async function(lid, res) {
     const client = await db.ClientFromPool();
     try {
         var connectingSite = null;
+        var listeningSite  = null;
         await client.query("BEGIN");
-        const result = await client.query("DELETE FROM InterRouterLinks WHERE Id = $1 RETURNING ConnectingInteriorSite", [lid]);
+        if (!util.IsValidUuid(lid)) {
+            throw(Error('Link-Id is not a valid uuid'));
+        }
+
+        const result = await client.query("DELETE FROM InterRouterLinks WHERE Id = $1 RETURNING ConnectingInteriorSite, ListeningInteriorSite", [lid]);
         if (result.rowCount == 1) {
             connectingSite = result.rows[0].connectinginteriorsite;
+            listeningSite  = result.rows[0].listeninginteriorsite;
         }
         await client.query("COMMIT");
         res.status(returnStatus).end();
@@ -445,7 +479,7 @@ const deleteBackboneLink = async function(lid, res) {
         //
         if (connectingSite) {
             try {
-                await deployment.LinkAddedOrDeleted(norm.connectingsite, norm.listeningsite);
+                await deployment.LinkAddedOrDeleted(connectingSite, listeningSite);
                 await sync.LinkChanged(connectingSite);
             } catch (error) {
                 Log(`Exception deleteBackboneLink module notifications: ${error.message}`);
@@ -469,6 +503,10 @@ const listBackbones = async function(res, bid=null) {
     try {
         var result;
         if (bid) {
+            if (!util.IsValidUuid(bid)) {
+                throw(Error('Backbone-Id is not a valid uuid'));
+            }
+
             result = await client.query("SELECT Id, Name, Lifecycle, Failure, MultiTenant FROM Backbones WHERE Id = $1", [bid]);
         } else {
             result = await client.query("SELECT Id, Name, Lifecycle, Failure, MultiTenant FROM Backbones");
@@ -480,7 +518,7 @@ const listBackbones = async function(res, bid=null) {
         res.json(list);
         res.status(returnStatus).end();
     } catch (error) {
-        returnStatus = 500;
+        returnStatus = 400;
         res.status(returnStatus).send(error.message);
     } finally {
         client.release();
@@ -493,6 +531,10 @@ const listBackboneSites = async function(id, res, byBackbone) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
+        if (!util.IsValidUuid(id)) {
+            throw(Error('Id is not a valid uuid'));
+        }
+
         const result = await client.query(`SELECT Id, Name, Lifecycle, Failure, Metadata, DeploymentState, FirstActiveTime, LastHeartbeat FROM InteriorSites WHERE ${byBackbone ? 'Backbone' : 'Id'} = $1`, [id]);
         var list = [];
         result.rows.forEach(row => {
@@ -501,7 +543,7 @@ const listBackboneSites = async function(id, res, byBackbone) {
         res.json(list);
         res.status(returnStatus).end();
     } catch (error) {
-        returnStatus = 500;
+        returnStatus = 400;
         res.status(returnStatus).send(error.message);
     } finally {
         client.release();
@@ -514,6 +556,10 @@ const listBackboneLinks = async function(bid, res) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
+        if (!util.IsValidUuid(bid)) {
+            throw(Error('Backbone-Id is not a valid uuid'));
+        }
+
         const result = await client.query("SELECT InterRouterLinks.* FROM InterRouterLinks JOIN InteriorSites ON InterRouterLinks.ListeningInteriorSite = InteriorSites.Id WHERE InteriorSites.Backbone = $1", [bid]);
         var list = [];
         result.rows.forEach(row => {
@@ -522,7 +568,7 @@ const listBackboneLinks = async function(bid, res) {
         res.json(list);
         res.status(returnStatus).end();
     } catch (error) {
-        returnStatus = 500;
+        returnStatus = 400;
         res.status(returnStatus).send(error.message);
     } finally {
         client.release();
@@ -535,6 +581,10 @@ const listSiteIngresses = async function(sid, res) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
+        if (!util.IsValidUuid(sid)) {
+            throw(Error('Site-Id is not a valid uuid'));
+        }
+
         const sites = await client.query("SELECT ClaimAccess, PeerAccess, MemberAccess, ManageAccess FROM InteriorSites WHERE Id = $1", [sid]);
         var list = [];
         if (sites.rowCount == 1) {
@@ -549,7 +599,7 @@ const listSiteIngresses = async function(sid, res) {
         res.json(list);
         res.status(returnStatus).end();
     } catch (error) {
-        returnStatus = 500;
+        returnStatus = 400;
         res.status(returnStatus).send(error.message);
     } finally {
         client.release();

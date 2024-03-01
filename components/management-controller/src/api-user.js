@@ -90,6 +90,69 @@ const createVan = async function(bid, req, res) {
 }
 
 const createInvitation = async function(vid, req, res) {
+    var returnStatus;
+    const form = new formidable.IncomingForm();
+    try {
+        const [fields, files] = await form.parse(req)
+        const norm = util.ValidateAndNormalizeFields(fields, {
+            'name'            : {type: 'string',     optional: false},
+            'claimaccess'     : {type: 'uuid',       optional: false},
+            'memberof'        : {type: 'uuid',       optional: false},
+            'primaryaccess'   : {type: 'uuid',       optional: false},
+            'secondaryaccess' : {type: 'uuid',       optional: true, default: null},
+            'joindeadline'    : {type: 'timestampz', optional: true, default: null},
+            'siteclass'       : {type: 'string',     optional: true, default: null},
+            'instancelimit'   : {type: 'number',     optional: true, default: null},
+            'interactive'     : {type: 'bool',       optional: true, default: false},
+        });
+
+        const client = await db.ClientFromPool();
+        try {
+            await client.query("BEGIN");
+
+            var extraCols = "";
+            var extraVals = "";
+
+            //
+            // Handle the optional fields
+            //
+            if (norm.starttime) {
+                extraCols += ', StartTime';
+                extraVals += `, '${norm.starttime}'`;
+            }
+
+            if (norm.endtime) {
+                extraCols += ', EndTime';
+                extraVals += `, '${norm.endtime}'`;
+            }
+
+            if (norm.deletedelay) {
+                extraCols += ', DeleteDelay';
+                extraVals += `, '${norm.deletedelay}'`;
+            }
+
+            //
+            // Create the application network
+            //
+            const result = await client.query(`INSERT INTO ApplicationNetworks(Name, Backbone${extraCols}) VALUES ($1, $2${extraVals}) RETURNING Id`, [norm.name, bid]);
+            const siteId = result.rows[0].id;
+            await client.query("COMMIT");
+
+            returnStatus = 201;
+            res.status(returnStatus).json({id: siteId});
+        } catch (error) {
+            await client.query("ROLLBACK");
+            returnStatus = 500
+            res.status(returnStatus).send(error.message);
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).json({ message: error.message });
+    }
+
+    return returnStatus;
 }
 
 const readVan = async function(res, vid) {

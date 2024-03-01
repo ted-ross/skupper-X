@@ -74,6 +74,12 @@ exports.allSettled = function(plist) {
     });
 }
 
+const uuidRegex = RegExp("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+
+exports.IsValidUuid = function(text) {
+    return uuidRegex.test(text);
+}
+
 exports.ValidateAndNormalizeFields = function(fields, table) {
     var optional = {};
     for (const [key, value] of Object.entries(table)) {
@@ -111,6 +117,15 @@ exports.ValidateAndNormalizeFields = function(fields, table) {
             }
             normalized[key] = parseInt(value);
             break;
+
+        case 'timestampz' :
+            throw(Error('timestampz field type not implemented'));
+
+        case 'uuid' :
+            if (!exports.IsValidUuid(value)) {
+                throw(Error(`Expected valid uuid for key ${key}`));
+            }
+            normalized[key] = value;
         }
     }
 
