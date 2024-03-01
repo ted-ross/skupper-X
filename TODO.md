@@ -49,6 +49,7 @@
  - Add a PUT to allow backbones to be renamed
  - Add a "platform" column for sites - probably enumerated for formality
  - Add a shell command in one of the site containers that extracts the host info for bootstrap-deployment
+ - Use router names that are more descriptive and derived from the backbone site name
 
 ## VAN Feature Tasks
  - ~~Create non-backbone mode for the site-controller - disable ingress and other backbone-specific functions~~
@@ -59,5 +60,14 @@
  - Remove backbone-mode and replace with backbone-enabled, member-enabled, claim-enabled.  This allows a site to be a member and a backbone at the same time
  - Add the User API for access to application networks, invitations, and member sites
  - Design the member API
+   - ~~Site status and site activation~~
+   - Active and inactive application state
 
 ## Application Definition Tasks
+ - Define the data structures to support Skupper-v2 equivalent functionality
+ - Implement APIs to access v2-equivalent functions
+ - Define the data structures to support full application definition
+ - Design the kube-state representation of the above data
+ - Implement the synchronization of the kube-state to the management controller
+ - Implement APIs to access the full application definition
+ - Implement site-scoped service addressing
