@@ -50,6 +50,7 @@
  - Add a "platform" column for sites - probably enumerated for formality
  - Add a shell command in one of the site containers that extracts the host info for bootstrap-deployment
  - Use router names that are more descriptive and derived from the backbone site name
+ - Return an error on the ingress-post (during bootstrap) if the input is not validated
 
 ## VAN Feature Tasks
  - ~~Create non-backbone mode for the site-controller - disable ingress and other backbone-specific functions~~
@@ -57,8 +58,8 @@
  - ~~Design a mechanism by which invited sites become member sites~~
  - ~~Add interactive invitations so member-console action is needed before the claim is asserted~~
  - ~~Remove the skx-inject annotation for claim secrets as they are not needed in the router~~
+ - ~~Add the User API for access to application networks, invitations, and member sites~~
  - Remove backbone-mode and replace with backbone-enabled, member-enabled, claim-enabled.  This allows a site to be a member and a backbone at the same time
- - Add the User API for access to application networks, invitations, and member sites
  - Design the member API
    - ~~Site status and site activation~~
    - Active and inactive application state

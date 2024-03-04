@@ -30,7 +30,8 @@ const kube       = require('./common/kube.js');
 const { isObject } = require('util');
 const Log        = require('./common/log.js').Log;
 const sync       = require('./manage-sync.js');
-const admin      = require('./api-admin.js');
+const adminApi   = require('./api-admin.js');
+const userApi    = require('./api-user.js');
 
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8085;
@@ -333,7 +334,8 @@ exports.Start = async function() {
         apiLog(req, await postBackboneIngress(req.params.bsid, req, res));
     });
 
-    admin.Initialize(api);
+    adminApi.Initialize(api);
+    userApi.Initialize(api);
 
     let server = api.listen(API_PORT, () => {
         let host = server.address().address;

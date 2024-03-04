@@ -97,7 +97,6 @@ const createInvitation = async function(vid, req, res) {
         const norm = util.ValidateAndNormalizeFields(fields, {
             'name'            : {type: 'string',     optional: false},
             'claimaccess'     : {type: 'uuid',       optional: false},
-            'memberof'        : {type: 'uuid',       optional: false},
             'primaryaccess'   : {type: 'uuid',       optional: false},
             'secondaryaccess' : {type: 'uuid',       optional: true, default: null},
             'joindeadline'    : {type: 'timestampz', optional: true, default: null},
@@ -116,30 +115,32 @@ const createInvitation = async function(vid, req, res) {
             //
             // Handle the optional fields
             //
-            if (norm.starttime) {
-                extraCols += ', StartTime';
-                extraVals += `, '${norm.starttime}'`;
+            if (norm.siteclass) {
+                extraCols += ', MemberClass';
+                extraVals += `, '${norm.siteclass}'`;
             }
 
-            if (norm.endtime) {
-                extraCols += ', EndTime';
-                extraVals += `, '${norm.endtime}'`;
-            }
-
-            if (norm.deletedelay) {
-                extraCols += ', DeleteDelay';
-                extraVals += `, '${norm.deletedelay}'`;
+            if (norm.instancelimit) {
+                extraCols += ', InstanceLimit';
+                extraVals += `, ${norm.instancelimit}`;
             }
 
             //
             // Create the application network
             //
-            const result = await client.query(`INSERT INTO ApplicationNetworks(Name, Backbone${extraCols}) VALUES ($1, $2${extraVals}) RETURNING Id`, [norm.name, bid]);
-            const siteId = result.rows[0].id;
+            const result = await client.query(`INSERT INTO MemberInvitations(Name, MemberOf, ClaimAccess, Interactive${extraCols}) ` +
+                                              `VALUES ($1, $2, $3, $4${extraVals}) RETURNING Id`, [norm.name, vid, norm.claimaccess, norm.interactive]);
+            const invitationId = result.rows[0].id;
+
+            await client.query("INSERT INTO EdgeLinks(AccessPoint, EdgeToken, Priority) VALUES ($1, $2, 1)", [norn.primaryaccess, invitationId]);
+
+            if (norm.secondaryaccess) {
+                await client.query("INSERT INTO EdgeLinks(AccessPoint, EdgeToken, Priority) VALUES ($1, $2, 2)", [norn.secondaryaccess, invitationId]);
+            }
             await client.query("COMMIT");
 
             returnStatus = 201;
-            res.status(returnStatus).json({id: siteId});
+            res.status(returnStatus).json({id: invitationId});
         } catch (error) {
             await client.query("ROLLBACK");
             returnStatus = 500
@@ -156,21 +157,111 @@ const createInvitation = async function(vid, req, res) {
 }
 
 const readVan = async function(res, vid) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        const result = await client.query("SELECT ApplicationNetworks.Name, ApplicationNetworks.LifeCycle, Backbones.Name as backbonename, StartTime, EndTime, DeleteDelay FROM ApplicationNetworks " +
+                                          "JOIN Backbones ON ApplicationNetworks.Backbone = Backbones.Id WHERE ApplicationNetworks.Id = $1", [vid]);
+        if (result.rowCount == 1) {
+            res.status(returnStatus).json(result.rows[0]);
+        } else {
+            returnStatus = 400;
+            res.status(returnStatus).end();
+        }
+    } catch (error) {
+        returnStatus = 500
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
 }
 
 const readInvitation = async function(res, iid) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        const result = await client.query("SELECT MemberInvitations.Name, MemberInvitations.LifeCycle, ApplicationNetworks.Name as vanname, JoinDeadline, InstanceLimit, InstanceCount, InteractiveClaim as interactive FROM MemberInvitations " +
+                                          "JOIN ApplicationNetworks ON ApplicationNetworks.Id = MemberInvitations.MemberOf WHERE MemberInvitations.Id = $1", [iid]);
+        if (result.rowCount == 1) {
+            res.status(returnStatus).json(result.rows[0]);
+        } else {
+            returnStatus = 400;
+            res.status(returnStatus).end();
+        }
+    } catch (error) {
+        returnStatus = 500
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
 }
 
 const readVanMember = async function(res, mid) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        const result = await client.query("SELECT MemberSites.Name, MemberSites.LifeCycle, ApplicationNetworks.Name as vanname, FiratActiveTime, LastHeartbeat, SiteClass FROM MemberSites " +
+                                          "JOIN ApplicationNetworks ON ApplicationNetworks.Id = MemberSites.MemberOf WHERE MemberSites.Id = $1", [mid]);
+        if (result.rowCount == 1) {
+            res.status(returnStatus).json(result.rows[0]);
+        } else {
+            returnStatus = 400;
+            res.status(returnStatus).end();
+        }
+    } catch (error) {
+        returnStatus = 500
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
 }
 
 const listVans = async function(res, bid) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        const result = await client.query("SELECT Id, Name, LifeCycle, StartTime, EndTime, DeleteDelay FROM ApplicationNetworks WHERE Backbone = $1", [bid]);
+        res.status(returnStatus).json(result.rows);
+    } catch (error) {
+        returnStatus = 500
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
 }
 
 const listInvitations = async function(res, vid) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        const result = await client.query("SELECT Id, Name, LifeCycle, JoinDeadline, MemberClass, InstanceLimit, InstanceCount, InteractiveClaim as interactive FROM MemberInvitations WHERE MemberOf = $1", [vid]);
+        res.status(returnStatus).json(result.rows);
+    } catch (error) {
+        returnStatus = 500
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
 }
 
 const listVanMembers = async function(res, vid) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        const result = await client.query("SELECT id, Name, LifeCycle, FirstActiveTime, LastHeartbeat, SiteClass FROM MemberSites WHERE MemberOf = $1", [vid]);
+        res.status(returnStatus).json(result.rows);
+    } catch (error) {
+        returnStatus = 500
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
 }
 
 const deleteVan = async function(res, vid) {
