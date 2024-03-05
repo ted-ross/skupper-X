@@ -83,7 +83,7 @@ const fetchInvitationKube = async function (iid, res) {
                                           "JOIN TlsCertificates ON MemberInvitations.Certificate = TlsCertificates.Id " +
                                           "JOIN ApplicationNetworks ON MemberInvitations.MemberOf = ApplicationNetworks.Id " +
                                           "JOIN BackboneAccessPoints ON MemberInvitations.ClaimAccess = BackboneAccessPoints.Id " +
-                                          "WHERE MemberInvitations.Id = $1 AND BackboneAccessPoints.Lifecycle = 'ready'", [iid]);
+                                          "WHERE MemberInvitations.Id = $1 AND BackboneAccessPoints.Lifecycle = 'ready' AND MemberInvitations.Lifecycle = 'ready'", [iid]);
         if (result.rowCount == 1) {
             const row = result.rows[0];
             const secret = await kube.LoadSecret(row.secret_name);
@@ -101,7 +101,7 @@ const fetchInvitationKube = async function (iid, res) {
             res.send(text);
             res.status(returnStatus).end();
         } else {
-            throw(Error('Invitation not found or not ready'));
+            throw(Error('Valid invitation not found'));
         }
     } catch (error) {
         returnStatus = 400;
@@ -140,7 +140,7 @@ const fetchBackboneSiteKube = async function (siteId, res) {
             const outgoing = await sync.GetBackboneConnectors_TX(client, siteId);
             text += "---\n" + link_config_map_yaml('skupperx-links-outgoing', outgoing);
 
-            const incoming = await sync.GetBackboneIngresses_TX(client, siteId);
+            const incoming = await sync.GetBackboneIngresses_TX(client, siteId, true);
             text += "---\n" + link_config_map_yaml('skupperx-links-incoming', incoming)
 
             res.send(text);
@@ -167,7 +167,7 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
     try {
         await client.query('BEGIN');
         const result = await client.query(
-            'SELECT ManageAccess, PeerAccess, MemberAccess, ClaimAccess, DeploymentState FROM InteriorSites WHERE Id = $1', [bsid]);
+            'SELECT ManageAccess, PeerAccess, DeploymentState FROM InteriorSites WHERE Id = $1', [bsid]);
         if (result.rowCount == 1) {
             let site = result.rows[0];
 
@@ -180,19 +180,23 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
             const worklist = [
                 {ap_ref: site.manageaccess, profile: 'manage'},
                 {ap_ref: site.peeraccess,   profile: 'peer'},
-                {ap_ref: site.memberaccess, profile: 'member'},
-                {ap_ref: site.claimaccess,  profile: 'claim'},
+                {ap_ref: null,              profile: 'member'}, // Let member and claim get picked up later during reconciliation
+                {ap_ref: null,              profile: 'claim'},
             ]
 
             for (const work of worklist) {
                 if (work.ap_ref) {
-                    const ap_result = await client.query('SELECT *, TlsCertificates.ObjectName FROM BackboneAccessPoints JOIN TlsCertificates ON TlsCertificates.Id = Certificate WHERE BackboneAccessPoints.Id = $1', [work.ap_ref]);
+                    const ap_result = await client.query("SELECT *, TlsCertificates.ObjectName FROM BackboneAccessPoints " +
+                                                         "JOIN TlsCertificates ON TlsCertificates.Id = Certificate " +
+                                                         "WHERE BackboneAccessPoints.Id = $1 AND Lifecycle = 'ready'", [work.ap_ref]);
                     if (ap_result.rowCount == 1) {
                         let ap = ap_result.rows[0];
                         let secret = await kube.LoadSecret(ap.objectname);
                         text += siteTemplates.SecretYaml(secret, `${work.profile}-server`, true);
 
                         incoming[work.profile] = 'true';
+                    } else {
+                        throw(Error(`Certificate for profile ${work.profile} not yet ready`));
                     }
                 }
             }
@@ -207,9 +211,8 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
         await client.query('COMMIT');
     } catch (error) {
         await client.query('ROLLBACK');
-        res.send(error.message);
         returnStatus = 400;
-        res.status(returnStatus).end();
+        res.status(returnStatus).send(error.message);
     } finally {
         client.release();
     }

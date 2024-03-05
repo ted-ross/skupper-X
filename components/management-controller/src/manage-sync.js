@@ -289,7 +289,7 @@ const getAccessCert = async function(siteId, kind) {
     return [hash, data];
 }
 
-exports.GetBackboneIngresses_TX = async function(client, siteId) {
+exports.GetBackboneIngresses_TX = async function(client, siteId, initialOnly = false) {
     let data = {};
     const result = await client.query(
         'SELECT * FROM InteriorSites WHERE Id = $1', [siteId]);
@@ -298,8 +298,8 @@ exports.GetBackboneIngresses_TX = async function(client, siteId) {
         const apRefs = {
             manage : site.manageaccess,
             peer   : site.peeraccess,
-            member : site.memberaccess,
-            claim  : site.claimaccess,
+            member : initialOnly ? null : site.memberaccess,
+            claim  : initialOnly ? null : site.claimaccess,
         };
 
         for (const [profile, apRef] of Object.entries(apRefs)) {
