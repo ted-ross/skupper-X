@@ -160,7 +160,7 @@ const readVan = async function(res, vid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT ApplicationNetworks.Name, ApplicationNetworks.LifeCycle, Backbones.Name as backbonename, StartTime, EndTime, DeleteDelay FROM ApplicationNetworks " +
+        const result = await client.query("SELECT ApplicationNetworks.Name, ApplicationNetworks.LifeCycle, ApplicationNetworks.Failure, Backbones.Name as backbonename, StartTime, EndTime, DeleteDelay FROM ApplicationNetworks " +
                                           "JOIN Backbones ON ApplicationNetworks.Backbone = Backbones.Id WHERE ApplicationNetworks.Id = $1", [vid]);
         if (result.rowCount == 1) {
             res.status(returnStatus).json(result.rows[0]);
@@ -181,7 +181,7 @@ const readInvitation = async function(res, iid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT MemberInvitations.Name, MemberInvitations.LifeCycle, ApplicationNetworks.Name as vanname, JoinDeadline, InstanceLimit, InstanceCount, InteractiveClaim as interactive FROM MemberInvitations " +
+        const result = await client.query("SELECT MemberInvitations.Name, MemberInvitations.LifeCycle, MemberInvitations.Failure, ApplicationNetworks.Name as vanname, JoinDeadline, InstanceLimit, InstanceCount, InteractiveClaim as interactive FROM MemberInvitations " +
                                           "JOIN ApplicationNetworks ON ApplicationNetworks.Id = MemberInvitations.MemberOf WHERE MemberInvitations.Id = $1", [iid]);
         if (result.rowCount == 1) {
             res.status(returnStatus).json(result.rows[0]);
@@ -202,7 +202,7 @@ const readVanMember = async function(res, mid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT MemberSites.Name, MemberSites.LifeCycle, ApplicationNetworks.Name as vanname, FiratActiveTime, LastHeartbeat, SiteClass FROM MemberSites " +
+        const result = await client.query("SELECT MemberSites.Name, MemberSites.LifeCycle, MemberSites.Failure, ApplicationNetworks.Name as vanname, FiratActiveTime, LastHeartbeat, SiteClass FROM MemberSites " +
                                           "JOIN ApplicationNetworks ON ApplicationNetworks.Id = MemberSites.MemberOf WHERE MemberSites.Id = $1", [mid]);
         if (result.rowCount == 1) {
             res.status(returnStatus).json(result.rows[0]);
@@ -223,7 +223,7 @@ const listVans = async function(res, bid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT Id, Name, LifeCycle, StartTime, EndTime, DeleteDelay FROM ApplicationNetworks WHERE Backbone = $1", [bid]);
+        const result = await client.query("SELECT Id, Name, LifeCycle, Failure, StartTime, EndTime, DeleteDelay FROM ApplicationNetworks WHERE Backbone = $1", [bid]);
         res.status(returnStatus).json(result.rows);
     } catch (error) {
         returnStatus = 500
@@ -238,7 +238,7 @@ const listInvitations = async function(res, vid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT Id, Name, LifeCycle, JoinDeadline, MemberClass, InstanceLimit, InstanceCount, InteractiveClaim as interactive FROM MemberInvitations WHERE MemberOf = $1", [vid]);
+        const result = await client.query("SELECT Id, Name, LifeCycle, Failure, JoinDeadline, MemberClass, InstanceLimit, InstanceCount, InteractiveClaim as interactive FROM MemberInvitations WHERE MemberOf = $1", [vid]);
         res.status(returnStatus).json(result.rows);
     } catch (error) {
         returnStatus = 500
@@ -253,7 +253,7 @@ const listVanMembers = async function(res, vid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT id, Name, LifeCycle, FirstActiveTime, LastHeartbeat, SiteClass FROM MemberSites WHERE MemberOf = $1", [vid]);
+        const result = await client.query("SELECT id, Name, LifeCycle, Failure, FirstActiveTime, LastHeartbeat, SiteClass FROM MemberSites WHERE MemberOf = $1", [vid]);
         res.status(returnStatus).json(result.rows);
     } catch (error) {
         returnStatus = 500
@@ -268,6 +268,45 @@ const deleteVan = async function(res, vid) {
 }
 
 const deleteInvitation = async function(res, iid) {
+    var returnStatus = 204;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT id FROM MemberSites WHERE Invitation = $1 LIMIT 1", [iid]);
+        if (result.rowCount == 0) {
+            await client.query("DELETE FROM MemberInvitations WHERE Id = $1", [iid]);
+            res.status(returnStatus).end();
+        } else {
+            returnStatus = 400;
+            res.status(returnStatus).send('Cannot delete invitation because members still exist that use the invitation');
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        await client.query("ROLLBACK");
+        returnStatus = 500
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+}
+
+const expireInvitation = async function(res, iid) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        const result = await client.query("UPDATE MemberInvitations SET Lifecycle = 'expired', Failure = 'Expired via API' WHERE Id = $1 RETURNING Id", [iid]);
+        if (result.rowCount == 0) {
+            returnStatus = 404;
+        }
+        res.status(returnStatus).end();
+    } catch (error) {
+        returnStatus = 500
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
 }
 
 const evictMember = async function(mid, req, res) {
@@ -327,6 +366,11 @@ exports.Initialize = async function(api) {
     api.delete(API_PREFIX + 'invitation/:iid', async (req, res) => {
         apiLog(req, await deleteInvitation(res, req.params.iid));
     });
+
+    // COMMANDS
+    api.put(API_PREFIX + 'invitation/:iid/expire', async (req, res) => {
+        apiLog(req, await expireInvitation(res, req.params.iid));
+    })
 
     //========================================
     // Member Sites
