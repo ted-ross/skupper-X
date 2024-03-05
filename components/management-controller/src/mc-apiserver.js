@@ -32,6 +32,7 @@ const Log        = require('./common/log.js').Log;
 const sync       = require('./manage-sync.js');
 const adminApi   = require('./api-admin.js');
 const userApi    = require('./api-user.js');
+const util       = require('./common/util.js');
 
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8085;
@@ -292,17 +293,25 @@ const postBackboneIngress = async function (bsid, req, res) {
     const form = new formidable.IncomingForm();
     try {
         const [fields, files] = await form.parse(req);
+        const norm = util.ValidateAndNormalizeFields(fields, {
+            'manage_host'  : {type: 'string', optional: false},
+            'manage_port'  : {type: 'number', optional: false},
+            'peer_host'    : {type: 'string', optional: true, default: null},
+            'peer_port'    : {type: 'number', optional: true, default: null},
+        });
+
         let count = 0;
-        if (typeof fields.ingresses == 'object') {
-            for (const [key, obj] of Object.entries(fields.ingresses)) {
-                count += await exports.AddHostToAccessPoint(bsid, key, obj.host, obj.port);
-            }
+        if (norm.manage_host) {
+            count += await exports.AddHostToAccessPoint(bsid, 'ingress/manage', norm.manage_host, norm.manage_port);
+        }
+        if (norm.peer_host) {
+            count += await exports.AddHostToAccessPoint(bsid, 'ingress/peer', norm.peer_host, norm.peer_port);
         }
 
         res.status(returnStatus).json({ processed: count });
     } catch (error) {
         returnStatus = 400;
-        res.status(returnStatus).send(err.message);
+        res.status(returnStatus).send(error.message);
     }
 
     return returnStatus;

@@ -35,15 +35,8 @@ var api;
 
 const getHostnames = function(res) {
     let ingress_bundle = ingress.GetIngressBundle();
-    if (ingress_bundle.ready) {
-        res.send(JSON.stringify(ingress_bundle));
-        res.status(200).end();
-        return 200;
-    } else {
-        res.send('Ingress content is not yet available');
-        res.status(204).end();
-        return 204;
-    }
+    res.status(200).json(ingress_bundle);
+    return 200;
 }
 
 const getSiteStatus = function(res) {

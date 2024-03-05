@@ -213,18 +213,13 @@ exports.GetInitialConfig = async function() {
 }
 
 exports.GetIngressBundle = function() {
-    let bundle = {
-        siteId    : SITE_ID,
-        ready     : true,
-        ingresses : {},
-    };
+    let bundle = {};
 
-    for (const [key, value] of Object.entries(ingressState)) {
+    for (const key of ['manage', 'peer']) {
+        const value = ingressState[key];
         if (value.hash) {
-            bundle.ingresses['ingress/' + key] = {
-                host : value.data.host,
-                port : value.data.port,
-            }
+            bundle[`${key}_host`] = value.data.host;
+            bundle[`${key}_port`] = value.data.port;
         }
     }
 
