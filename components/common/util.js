@@ -112,10 +112,16 @@ exports.ValidateAndNormalizeFields = function(fields, table) {
             break;
 
         case 'number' :
-            if (typeof value != 'string' || isNaN(value)) {
-                throw(Error(`Expected numeric string for key ${key}`));
+            if (typeof value == 'string') {
+                if (isNaN(value)) {
+                    throw(Error(`String value is not numeric for key ${key}`));
+                }
+                normalized[key] = parseInt(value);
+            } else if (typeof value == 'number') {
+                normalized[key] = value;
+            } else {
+                throw(Error(`Expected a number or numeric string for key ${key}`));
             }
-            normalized[key] = parseInt(value);
             break;
 
         case 'timestampz' :
