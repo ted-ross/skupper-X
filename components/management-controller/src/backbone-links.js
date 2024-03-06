@@ -58,8 +58,8 @@ const createConnection = async function(bbid, row) {
 }
 
 const deleteConnection = async function(bbid) {
-    let conn = bbConnections[bbid];
-    conn.close();
+    let conn = bbConnections[bbid].conn;
+    amqp.CloseConnection(conn);
     delete bbConnections[bbid];
 
     for (const reg of registrations) {
