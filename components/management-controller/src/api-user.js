@@ -69,11 +69,11 @@ const createVan = async function(bid, req, res) {
             // Create the application network
             //
             const result = await client.query(`INSERT INTO ApplicationNetworks(Name, Backbone${extraCols}) VALUES ($1, $2${extraVals}) RETURNING Id`, [norm.name, bid]);
-            const siteId = result.rows[0].id;
+            const vanId = result.rows[0].id;
             await client.query("COMMIT");
 
             returnStatus = 201;
-            res.status(returnStatus).json({id: siteId});
+            res.status(returnStatus).json({id: vanId});
         } catch (error) {
             await client.query("ROLLBACK");
             returnStatus = 500
@@ -128,14 +128,14 @@ const createInvitation = async function(vid, req, res) {
             //
             // Create the application network
             //
-            const result = await client.query(`INSERT INTO MemberInvitations(Name, MemberOf, ClaimAccess, Interactive${extraCols}) ` +
+            const result = await client.query(`INSERT INTO MemberInvitations(Name, MemberOf, ClaimAccess, InteractiveClaim${extraCols}) ` +
                                               `VALUES ($1, $2, $3, $4${extraVals}) RETURNING Id`, [norm.name, vid, norm.claimaccess, norm.interactive]);
             const invitationId = result.rows[0].id;
 
-            await client.query("INSERT INTO EdgeLinks(AccessPoint, EdgeToken, Priority) VALUES ($1, $2, 1)", [norn.primaryaccess, invitationId]);
+            await client.query("INSERT INTO EdgeLinks(AccessPoint, EdgeToken, Priority) VALUES ($1, $2, 1)", [norm.primaryaccess, invitationId]);
 
             if (norm.secondaryaccess) {
-                await client.query("INSERT INTO EdgeLinks(AccessPoint, EdgeToken, Priority) VALUES ($1, $2, 2)", [norn.secondaryaccess, invitationId]);
+                await client.query("INSERT INTO EdgeLinks(AccessPoint, EdgeToken, Priority) VALUES ($1, $2, 2)", [norm.secondaryaccess, invitationId]);
             }
             await client.query("COMMIT");
 
@@ -312,6 +312,30 @@ const expireInvitation = async function(res, iid) {
 const evictMember = async function(mid, req, res) {
 }
 
+const listClaimAccessPoints = async function(res, bid, ref) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        const result = await client.query("SELECT BackboneAccessPoints.Name as accessname, BackboneAccessPoints.Id as accessid FROM InteriorSites " +
+                                          `JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = InteriorSites.${ref} ` +
+                                          "WHERE InteriorSites.Backbone = $1", [bid]);
+        let data = [];
+        for (const row of result.rows) {
+            data.push({
+                id   : row.accessid,
+                name : row.accessname
+            });
+        }
+        res.status(returnStatus).json(data);
+    } catch (error) {
+        returnStatus = 500
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+}
+
 const apiLog = function(req, status) {
     Log(`UserAPI: ${req.ip} - (${status}) ${req.method} ${req.originalUrl}`);
 }
@@ -389,5 +413,19 @@ exports.Initialize = async function(api) {
     // COMMANDS
     api.put(API_PREFIX + 'member/:mid/evict', async (req, res) => {
         apiLog(req, await evictMember(req.params.mid, req, res));
+    });
+
+    //========================================
+    // Queries for filling forms
+    //========================================
+
+    // Claim Access Points
+    api.get(API_PREFIX + 'backbone/:bid/access/claim', async (req, res) => {
+        apiLog(req, await listClaimAccessPoints(res, req.params.bid, 'ClaimAccess'));
+    });
+
+    // Member Access Points
+    api.get(API_PREFIX + 'backbone/:bid/access/member', async (req, res) => {
+        apiLog(req, await listClaimAccessPoints(res, req.params.bid, 'MemberAccess'));
     });
 }

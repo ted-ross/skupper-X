@@ -54,6 +54,7 @@
  - Add a shell command in one of the site containers that extracts the host info for bootstrap-deployment
  - Use router names that are more descriptive and derived from the backbone site name
  - Return an error on the ingress-post (during bootstrap) if the input is not validated
+ - Delete orphaned TlsCertificate records when their owners are deleted
 
 ## VAN Feature Tasks
  - ~~Create non-backbone mode for the site-controller - disable ingress and other backbone-specific functions~~
