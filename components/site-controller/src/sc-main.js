@@ -31,6 +31,7 @@ const router      = require('./common/router.js');
 const links       = require('./links.js');
 const ingress     = require('./ingress.js');
 const claim       = require('./claim.js');
+const memberapi   = require('./api-member.js');
 const Log         = require('./common/log.js').Log;
 const Flush       = require('./common/log.js').Flush;
 
@@ -64,6 +65,7 @@ exports.Main = async function() {
             // restarts of this controller after claim acceptance, the following function is effectively a no-op.
             //
             await claim.Start();
+            await memberapi.Start();
         }
 
         let conn = amqp.OpenConnection('LocalRouter');

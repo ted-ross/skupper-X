@@ -28,6 +28,7 @@ const claim      = require('./claim.js');
 const kube       = require('./common/kube.js');
 const util       = require('./common/util.js');
 const Log        = require('./common/log.js').Log;
+const memberapi  = require('./api-member.js');
 
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8086;
@@ -92,6 +93,8 @@ exports.Start = async function(backboneMode) {
             apiLog(req, await startClaim(req, res));
         });
     }
+
+    memberapi.Initialize(api);
 
     let server = api.listen(API_PORT, () => {
         let host = server.address().address;

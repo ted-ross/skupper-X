@@ -160,7 +160,7 @@ const readVan = async function(res, vid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT ApplicationNetworks.Name, ApplicationNetworks.LifeCycle, ApplicationNetworks.Failure, Backbones.Name as backbonename, StartTime, EndTime, DeleteDelay FROM ApplicationNetworks " +
+        const result = await client.query("SELECT ApplicationNetworks.Name, ApplicationNetworks.LifeCycle, ApplicationNetworks.Failure, Backbones.Id as backboneid, Backbones.Name as backbonename, StartTime, EndTime, DeleteDelay FROM ApplicationNetworks " +
                                           "JOIN Backbones ON ApplicationNetworks.Backbone = Backbones.Id WHERE ApplicationNetworks.Id = $1", [vid]);
         if (result.rowCount == 1) {
             res.status(returnStatus).json(result.rows[0]);
