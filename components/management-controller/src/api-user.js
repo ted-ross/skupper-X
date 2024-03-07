@@ -234,6 +234,21 @@ const listVans = async function(res, bid) {
     return returnStatus;
 }
 
+const listAllVans = async function(res, bid) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        const result = await client.query("SELECT Id, Backbone, Name, LifeCycle, Failure, StartTime, EndTime, DeleteDelay FROM ApplicationNetworks");
+        res.status(returnStatus).json(result.rows);
+    } catch (error) {
+        returnStatus = 500
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+}
+
 const listInvitations = async function(res, vid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
@@ -265,6 +280,35 @@ const listVanMembers = async function(res, vid) {
 }
 
 const deleteVan = async function(res, vid) {
+    var returnStatus = 204;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT Id FROM MemberSites WHERE MemberOf = $1 LIMIT 1", [vid]);
+        if (result.rowCount == 0) {
+            const delResult = await client.query("DELETE FROM ApplicationNetworks WHERE Id = $1 RETURNING Certificate", [vid]);
+            if (delResult.rowCount == 1) {
+                if (delResult.certificate) {
+                    await client.query("DELETE FROM TlsCertificates WHERE Id = $1", [delResult.certificate]);
+                }
+                res.status(returnStatus).send("Application network deleted");
+            } else {
+                returnStatus = 404;
+                res.status(returnStatus).send("Application network not found");
+            }
+        } else {
+            returnStatus = 400;
+            res.status(returnStatus).send('Cannot delete application network because is still has members');
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
 }
 
 const deleteInvitation = async function(res, iid) {
@@ -274,7 +318,13 @@ const deleteInvitation = async function(res, iid) {
         await client.query("BEGIN");
         const result = await client.query("SELECT id FROM MemberSites WHERE Invitation = $1 LIMIT 1", [iid]);
         if (result.rowCount == 0) {
-            await client.query("DELETE FROM MemberInvitations WHERE Id = $1", [iid]);
+            const invResult = await client.query("DELETE FROM MemberInvitations WHERE Id = $1 RETURNING Certificate", [iid]);
+            if (invResult.rowCount == 1) {
+                const row = invResult.rows[0];
+                if (row.certificate) {
+                    await client.query("DELETE FROM TlsCertificates WHERE Id = $1", [row.certificate]);
+                }
+            }
             res.status(returnStatus).end();
         } else {
             returnStatus = 400;
@@ -310,6 +360,9 @@ const expireInvitation = async function(res, iid) {
 }
 
 const evictMember = async function(mid, req, res) {
+}
+
+const evictVan = async function(vid, req, res) {
 }
 
 const listClaimAccessPoints = async function(res, bid, ref) {
@@ -362,9 +415,19 @@ exports.Initialize = async function(api) {
         apiLog(req, await listVans(res, req.params.bid));
     });
 
+    // LIST ALL
+    api.get(API_PREFIX + 'vans', async (req, res) => {
+        apiLog(req, await listAllVans(res));
+    });
+
     // DELETE
     api.delete(API_PREFIX + 'van/:vid', async (req, res) => {
         apiLog(req, await deleteVan(res, req.params.vid));
+    });
+
+    // COMMANDS
+    api.put(API_PREFIX + 'van/:vid/evict', async (req, res) => {
+        apiLog(req, await evictVan(req.params.vid, req, res));
     });
 
     //========================================

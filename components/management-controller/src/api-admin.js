@@ -196,7 +196,13 @@ const updateBackboneSite = async function(sid, req, res) {
                         //
                         // Update asked to remove this ingress and there is one currently in place
                         //
-                        await client.query("DELETE FROM BackboneAccessPoints WHERE Id = $1", [site[`${ingress}access`]]);
+                        const acResult = await client.query("DELETE FROM BackboneAccessPoints WHERE Id = $1 RETURNING Certificate", [site[`${ingress}access`]]);
+                        if (acResult.rowCount == 1) {
+                            const row = acResult.rows[0];
+                            if (row.certificate) {
+                                await client.query("DELETE FROM TlsCertificates WHERE Id = $1", [row.certificate]);
+                            }
+                        }
                         await client.query(`UPDATE InteriorSites SET ${ingress}Access = NULL WHERE Id = $1`, [sid]);
                         accessChanged = true;
                         if (ingress = 'manage') {
@@ -390,15 +396,21 @@ const deleteBackbone = async function(res, bid) {
             throw(Error('Backbone-Id is not a valid uuid'));
         }
 
-        const vanResult = await client.query("SELECT Id FROM ApplicationNetworks WHERE Backbone = $1 and LifeCycle = 'ready'", [bid]);
+        const vanResult = await client.query("SELECT Id FROM ApplicationNetworks WHERE Backbone = $1 and LifeCycle = 'ready' LIMIT 1", [bid]);
         if (vanResult.rowCount > 0) {
             throw(Error('Cannot delete a backbone with active application networks'));
         }
-        const siteResult = await client.query("SELECT Id FROM InteriorSites WHERE Backbone = $1", [bid]);
+        const siteResult = await client.query("SELECT Id FROM InteriorSites WHERE Backbone = $1 LIMIT 1", [bid]);
         if (siteResult.rowCount > 0) {
             throw(Error('Cannot delete a backbone with interior sites'));
         }
-        await client.query("DELETE FROM Backbones WHERE Id = $1", [bid]);
+        const bbResult = await client.query("DELETE FROM Backbones WHERE Id = $1 RETURNING Certificate", [bid]);
+        if (bbResult.rowCount == 1) {
+            const row = bbResult.rows[0];
+            if (row.certificate) {
+                await client.query("DELETE FROM TlsCertificates WHERE Id = $1", [row.certificate]);
+            }
+        }
         await client.query("COMMIT");
 
         res.status(returnStatus).end();
@@ -422,7 +434,7 @@ const deleteBackboneSite = async function(res, sid) {
             throw(Error('Site-Id is not a valid uuid'));
         }
 
-        const result = await client.query("SELECT ClaimAccess, PeerAccess, MemberAccess, ManageAccess from InteriorSites WHERE Id = $1", [sid]);
+        const result = await client.query("SELECT ClaimAccess, PeerAccess, MemberAccess, ManageAccess, Certificate from InteriorSites WHERE Id = $1", [sid]);
         if (result.rowCount == 1) {
             const row = result.rows[0];
 
@@ -432,8 +444,21 @@ const deleteBackboneSite = async function(res, sid) {
             for (const ingress of INGRESS_LIST) {
                 const colName = `${ingress}access`;
                 if (row[colName]) {
-                    await client.query("DELETE FROM BackboneAccessPoints WHERE Id = $1", [row[colName]]);
+                    const apResult = await client.query("DELETE FROM BackboneAccessPoints WHERE Id = $1 Returning Certificate", [row[colName]]);
+                    if (apResult.rowCount == 1) {
+                        const row = apResult.rows[0];
+                        if (row.certificate) {
+                            await client.query("DELETE FROM TlsCertificates WHERE Id = $1", [row.certificate]);
+                        }
+                    }
                 }
+            }
+
+            //
+            // Delete the TLS certificate
+            //
+            if (row.certificate) {
+                await client.query("DELETE FROM TlsCertificates WHERE Id = $1", [row.certificate])
             }
 
             //
