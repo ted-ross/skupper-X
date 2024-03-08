@@ -238,7 +238,8 @@ const listAllVans = async function(res, bid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT Id, Backbone, Name, LifeCycle, Failure, StartTime, EndTime, DeleteDelay FROM ApplicationNetworks");
+        const result = await client.query("SELECT ApplicationNetworks.Id, Backbone, Backbones.Name as backbonename, ApplicationNetworks.Name, ApplicationNetworks.LifeCycle, ApplicationNetworks.Failure, StartTime, EndTime, DeleteDelay FROM ApplicationNetworks " +
+                                          "JOIN Backbones ON Backbones.Id = Backbone");
         res.status(returnStatus).json(result.rows);
     } catch (error) {
         returnStatus = 500
