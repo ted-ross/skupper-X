@@ -141,6 +141,7 @@ const checkClaimState = async function() {
             }
 
             Log('Claim already processed in an earlier run');
+            claimState.status = 'joined';
         } else if (claimConfigMap) {
             //
             // If there is no link config-map but there is a claim config-map, we may begin the claim process.

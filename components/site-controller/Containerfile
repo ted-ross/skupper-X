@@ -18,13 +18,16 @@
 ##
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
-RUN microdnf -y install nodejs shadow-utils
+RUN microdnf -y install nodejs shadow-utils jq
 WORKDIR /usr/src/app
 COPY package*.json ./
 RUN npm ci --only=production
 COPY app/index.js ./
 COPY app/src/*.js ./src/
 COPY app/src/common/*.js ./src/common/
+COPY scripts/skxstatus /usr/local/bin
+COPY scripts/skxstart /usr/local/bin
+COPY scripts/skxhosts /usr/local/bin
 RUN useradd --uid 10000 runner
 USER 10000
 EXPOSE 8085
