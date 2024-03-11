@@ -44,6 +44,7 @@
  - ~~Consider adding a "metadata" field to the interiorsites table to store opaque (JSON) data from the front-end~~
  - ~~Provide guidance in the deployment of backbone sites - bootstrapping the first site; indicating which sites can be deployed in sequence - deployment-state~~
  - ~~Simplify the JSON fields in the bootstrap process to remove unneeded fields and depth~~
+ - ~~Add a shell command in one of the site containers that extracts the host info for bootstrap-deployment~~
  - Clean up the async structure of the "prune" module
  - Add an entry point in the "prune" module to clean things up after objects are deleted
  - When creating a link and there is no "peer" ingress on the listening site, either error out or create a peer ingress as a side effect
@@ -51,7 +52,6 @@
  - Consider replacing the boolean ingress indication with "no-ingress", "any", or ingress-style suggestions
  - Add a PUT to allow backbones to be renamed
  - Add a "platform" column for sites - probably enumerated for formality
- - Add a shell command in one of the site containers that extracts the host info for bootstrap-deployment
  - Use router names that are more descriptive and derived from the backbone site name
  - Return an error on the ingress-post (during bootstrap) if the input is not validated
  - Delete orphaned TlsCertificate records when their owners are deleted
