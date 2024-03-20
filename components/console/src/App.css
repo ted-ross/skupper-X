@@ -1,0 +1,22 @@
+body,
+html {
+  height: 100%;
+  font-size: 16px;
+}
+
+#app {
+  height: 100%;
+}
+
+.sk-capitalize {
+  text-transform: capitalize;
+}
+
+.color-box {
+  display: inline-block;
+  height: 18px;
+  width: 18px;
+  border: var(--pf-v5-global--BorderWidth--sm) solid var(--pf-v5-global--BorderColor--200);
+  border-radius: var(--pf-v5-global--BorderRadius--lg);
+  vertical-align: middle;
+}

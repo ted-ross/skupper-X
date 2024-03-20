@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "paths": {
+      "@core/*": ["core/*"],
+      "@config/*": ["config/*"],
+      "@layout/*": ["layout/*"],
+      "@assets/*": ["assets/*"],
+      "@pages/*": ["pages/*"],
+      "@utils/*": ["utils/*"],
+      "@API/*": ["API/*"],
+      "@mocks/*": ["../mocks/*"]
+    }
+  }
+}
