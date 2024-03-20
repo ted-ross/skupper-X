@@ -1,0 +1,112 @@
+{
+  "name": "skupper-x-webconsole",
+  "version": "1.0.0",
+  "description": "Skupper X prototype",
+  "license": "Apache-2.0",
+  "keywords": [
+    "skupper",
+    "skupper-x",
+    "console",
+    "monitoring",
+    "observability",
+    "connectivity",
+    "openshift"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skupperproject/skupper-console.git"
+  },
+  "bugs": {
+    "url": "https://github.com/skupperproject/skupper-console/issues"
+  },
+  "private": true,
+  "scripts": {
+    "start": "webpack serve --config webpack.dev.js",
+    "build": "webpack --config webpack.prod.js",
+    "test": "ENABLE_MOCK_SERVER=true jest --config jest.config.ts",
+    "coverage": "yarn test --coverage --collectCoverageFrom='src/**/*.{tsx,ts}'",
+    "lint": "eslint src --ext .ts,.tsx --cache",
+    "lint-fix": "yarn lint --fix",
+    "format": "prettier --write 'src/**/*.{ts,tsx,json,css}'",
+    "bundle-report": "STATS=server yarn build",
+    "find-deadcode": "ts-prune",
+    "prepare": "husky",
+    "commit": "git-cz"
+  },
+  "dependencies": {
+    "@antv/g6": "^4.8.24",
+    "@patternfly/patternfly": "^5.2.0",
+    "@patternfly/react-charts": "^7.2.0",
+    "@patternfly/react-code-editor": "^5.2.0",
+    "@patternfly/react-core": "^5.2.0",
+    "@patternfly/react-icons": "^5.2.0",
+    "@patternfly/react-table": "^5.2.0",
+    "@tanstack/react-query": "^5.18.1",
+    "axios": "^1.6.7",
+    "date-fns": "^3.3.1",
+    "framer-motion": "^11.0.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-error-boundary": "^4.0.12",
+    "react-router-dom": "^6.22.0"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^18.6.0",
+    "@commitlint/config-conventional": "^18.6.0",
+    "@testing-library/dom": "^9.3.4",
+    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/react": "^14.2.1",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/jest": "^29.5.12",
+    "@typescript-eslint/eslint-plugin": "^6.20.0",
+    "@typescript-eslint/parser": "^6.20.0",
+    "circular-dependency-plugin": "^5.2.2",
+    "commitizen": "^4.3.0",
+    "copy-webpack-plugin": "^12.0.2",
+    "css-loader": "^6.10.0",
+    "css-minimizer-webpack-plugin": "^6.0.0",
+    "cz-git": "^1.8.0",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-import-resolver-typescript": "^3.6.1",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-jest": "^27.6.3",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "html-webpack-plugin": "^5.6.0",
+    "husky": "^9.0.10",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "mini-css-extract-plugin": "^2.8.0",
+    "miragejs": "^0.1.48",
+    "prettier": "^3.2.5",
+    "start-server-and-test": "^2.0.3",
+    "style-loader": "^3.3.4",
+    "terser-webpack-plugin": "^5.3.10",
+    "ts-jest": "^29.1.2",
+    "ts-loader": "^9.5.1",
+    "ts-node": "^10.9.2",
+    "ts-prune": "^0.10.3",
+    "tsconfig-paths-webpack-plugin": "^4.1.0",
+    "typescript": "^5.3.3",
+    "webpack": "^5.90.1",
+    "webpack-bundle-analyzer": "^4.10.1",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1",
+    "webpack-merge": "^5.10.0"
+  },
+  "engines": {
+    "node": ">=18.17.1",
+    "yarn": ">=1.22.10"
+  },
+  "config": {
+    "commitizen": {
+      "path": "node_modules/cz-git"
+    }
+  },
+  "browserslist": [
+    ">10%",
+    "last 2 versions",
+    "not ie <= 11"
+  ]
+}

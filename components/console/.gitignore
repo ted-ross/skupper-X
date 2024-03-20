@@ -1,0 +1,24 @@
+# Javascript builds
+.DS_Store
+build
+node_modules
+coverage
+
+# package managers
+npm-debug.log*
+yarn-error.log*
+package-lock.json
+
+.eslintcache
+# IDEs and editors
+.idea
+.project
+.classpath
+.c9
+*.launch
+.settings
+*.sublime-workspace
+.history
+.vscode
+# For vim
+*.swp

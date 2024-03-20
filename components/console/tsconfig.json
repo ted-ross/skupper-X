@@ -1,0 +1,31 @@
+{
+  "extends": "./tsconfig.paths.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "es2022"],
+    "module": "es2022",
+    "moduleResolution": "node",
+    "jsx": "react-jsx",
+    "typeRoots": ["node_modules/@types"],
+    "baseUrl": "src",
+    "sourceMap": true,
+    "allowJs": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "downlevelIteration": true,
+    "strictNullChecks": true,
+    "noImplicitReturns": true,
+    "strictFunctionTypes": true,
+    "noUnusedParameters": false,
+    "noUnusedLocals": false,
+    "strictPropertyInitialization": true
+  },
+  "include": ["src", "jest.config.ts", "mocks/*.ts"],
+  // cypress.config.ts -> https://github.com/cypress-io/cypress/issues/22059
+  "exclude": ["node_modules", "build", "cypress.config.ts"]
+}
