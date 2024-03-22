@@ -455,16 +455,16 @@ const deleteBackboneSite = async function(res, sid) {
             }
 
             //
+            // Delete the site.  Note that involved inter-router links will be automatically deleted by the database.
+            //
+            await client.query("DELETE FROM InteriorSites WHERE Id = $1", [sid]);
+
+            //
             // Delete the TLS certificate
             //
             if (row.certificate) {
                 await client.query("DELETE FROM TlsCertificates WHERE Id = $1", [row.certificate])
             }
-
-            //
-            // Delete the site.  Note that involved inter-router links will be automatically deleted by the database.
-            //
-            await client.query("DELETE FROM InteriorSites WHERE Id = $1", [sid]);
         }
         await client.query("COMMIT");
 
