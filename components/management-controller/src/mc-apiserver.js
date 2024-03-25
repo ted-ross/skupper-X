@@ -33,6 +33,8 @@ const sync       = require('./manage-sync.js');
 const adminApi   = require('./api-admin.js');
 const userApi    = require('./api-user.js');
 const util       = require('./common/util.js');
+const path       = require('path');
+const fs         = require('fs');
 
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8085;
@@ -325,6 +327,17 @@ exports.Start = async function() {
     Log('[API Server module started]');
     api = express();
     api.use(cors());
+
+
+    // Serve the frontend build from the './console' directory
+    const consoleBuildPath = path.join(__dirname, 'console');
+  
+    if (fs.existsSync(consoleBuildPath)) {
+      console.error("Console loaded");
+      api.use(express.static(consoleBuildPath));
+    } else {
+      console.error("The specified path does not exist");
+    }
 
     api.get(API_PREFIX + 'invitation/:iid/kube', async (req, res) => {
         apiLog(req, await fetchInvitationKube(req.params.iid, res));
