@@ -370,13 +370,19 @@ const Backbone = function () {
                         type: 'site',
                         link: `${RoutesPaths.App}/sites/${bname}@${bid}/${props.data.name}@${props.data.id}`
                       }),
-                    DateCell: (props: LinkCellProps<SiteResponse>) => (
-                      <Timestamp
-                        date={new Date(props.value || '')}
-                        dateFormat={TimestampFormat.medium}
-                        timeFormat={TimestampFormat.medium}
-                      />
-                    ),
+                    DateCell: (props: LinkCellProps<SiteResponse>) => {
+                      if (props.value) {
+                        return (
+                          <Timestamp
+                            date={new Date(props.value)}
+                            dateFormat={TimestampFormat.medium}
+                            timeFormat={TimestampFormat.medium}
+                          />
+                        );
+                      } else {
+                        return '-';
+                      }
+                    },
                     actions: ({ data }: { data: SiteResponse }) => (
                       <OverflowMenu breakpoint="lg">
                         <OverflowMenuContent>

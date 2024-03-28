@@ -652,7 +652,7 @@ const apiLog = function(req, status) {
     Log(`AdminAPI: ${req.ip} - (${status}) ${req.method} ${req.originalUrl}`);
 }
 
-exports.Initialize = async function(api) {
+exports.Initialize = async function(api, keycloak) {
     Log('[API Admin interface starting]');
 
     //========================================
@@ -660,27 +660,27 @@ exports.Initialize = async function(api) {
     //========================================
 
     // CREATE
-    api.post(API_PREFIX + 'backbones', async (req, res) => {
+    api.post(API_PREFIX + 'backbones', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await createBackbone(req, res));
     });
 
     // READ
-    api.get(API_PREFIX + 'backbone/:bid', async (req, res) => {
+    api.get(API_PREFIX + 'backbone/:bid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await listBackbones(res, req.params.bid));
     });
 
     // LIST
-    api.get(API_PREFIX + 'backbones', async (req, res) => {
+    api.get(API_PREFIX + 'backbones', keycloak.protect(), async (req, res) => {
         apiLog(req, await listBackbones(res));
     });
 
     // DELETE
-    api.delete(API_PREFIX + 'backbone/:bid', async (req, res) => {
+    api.delete(API_PREFIX + 'backbone/:bid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await deleteBackbone(res, req.params.bid));
     });
 
     // COMMANDS
-    api.put(API_PREFIX + 'backbone/:bid/activate', async (req, res) => {
+    api.put(API_PREFIX + 'backbone/:bid/activate', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await activateBackbone(res, req.params.bid));
     });
 
@@ -689,27 +689,27 @@ exports.Initialize = async function(api) {
     //========================================
 
     // CREATE
-    api.post(API_PREFIX + 'backbone/:bid/sites', async (req, res) => {
+    api.post(API_PREFIX + 'backbone/:bid/sites', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await createBackboneSite(req.params.bid, req, res));
     });
 
     // READ
-    api.get(API_PREFIX + 'backbonesite/:sid', async (req, res) => {
+    api.get(API_PREFIX + 'backbonesite/:sid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await listBackboneSites(req.params.sid, res, false));
     });
 
     // LIST
-    api.get(API_PREFIX + 'backbone/:bid/sites', async (req, res) => {
+    api.get(API_PREFIX + 'backbone/:bid/sites', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await listBackboneSites(req.params.bid, res, true));
     });
 
     // UPDATE
-    api.put(API_PREFIX + 'backbonesite/:sid', async (req, res) => {
+    api.put(API_PREFIX + 'backbonesite/:sid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await updateBackboneSite(req.params.sid, req, res));
     });
 
     // DELETE
-    api.delete(API_PREFIX + 'backbonesite/:sid', async (req, res) => {
+    api.delete(API_PREFIX + 'backbonesite/:sid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await deleteBackboneSite(res, req.params.sid));
     });
 
@@ -718,33 +718,33 @@ exports.Initialize = async function(api) {
     //========================================
 
     // CREATE
-    api.post(API_PREFIX + 'backbone/:bid/links', async (req, res) => {
+    api.post(API_PREFIX + 'backbone/:bid/links', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await createBackboneLink(req.params.bid, req, res));
     });
 
     // LIST
-    api.get(API_PREFIX + 'backbone/:bid/links', async (req, res) => {
+    api.get(API_PREFIX + 'backbone/:bid/links', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await listBackboneLinks(req.params.bid, res));
     });
 
     // UPDATE
-    api.put(API_PREFIX + 'backbonelink/:lid', async (req, res) => {
+    api.put(API_PREFIX + 'backbonelink/:lid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await updateBackboneLink(req.params.lid, req, res));
     });
 
     // DELETE
-    api.delete(API_PREFIX + 'backbonelink/:lid', async (req, res) => {
+    api.delete(API_PREFIX + 'backbonelink/:lid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await deleteBackboneLink(req.params.lid, res));
     });
 
     //========================================
     // Backbone Access Points
     //========================================
-    api.get(API_PREFIX + 'backbonesite/:sid/ingresses', async (req, res) => {
+    api.get(API_PREFIX + 'backbonesite/:sid/ingresses', keycloak.protect(), async (req, res) => {
         apiLog(req, await listSiteIngresses(req.params.sid, res));
     });
 
-    api.get(API_PREFIX + 'invitations', async (req, res) => {
+    api.get(API_PREFIX + 'invitations', keycloak.protect(), async (req, res) => {
         apiLog(req, await listInvitations(res));
     });
 }

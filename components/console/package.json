@@ -45,6 +45,7 @@
     "axios": "^1.6.7",
     "date-fns": "^3.3.1",
     "framer-motion": "^11.0.3",
+    "node": "^21.7.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-error-boundary": "^4.0.12",

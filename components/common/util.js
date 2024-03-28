@@ -104,6 +104,12 @@ exports.ValidateAndNormalizeFields = function(fields, table) {
             normalized[key] = value;
             break;
 
+        case 'dnsname' :
+            throw(Error('dnsname field type not implemented'));
+
+        case 'kubeselector' :
+            throw(Error('kubeselector field type not implemented'));
+
         case 'bool' :
             if (typeof value != 'string' || (value != 'true' && value != 'false')) {
                 throw(Error(`Expected boolean string for key ${key}`));

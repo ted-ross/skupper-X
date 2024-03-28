@@ -26,12 +26,88 @@ const kube       = require('./common/kube.js');
 
 const API_PREFIX = '/api/v1alpha1/';
 
+const listenerObject = function(name, routingKey, host, port) {
+    const cm = {
+        apiVersion : 'v1',
+        kind       : 'ConfigMap',
+        metadata   : {
+            name   : name,
+            labels : {
+                'skupper.io/type' : 'listener',
+            },
+        },
+        data: {
+            'routing-key' : routingKey,
+            host          : host,
+            port          : port,
+        },
+    };
+
+    return cm;
+}
+
+const connectorObject = function(name, routingKey, port, selector) {
+    const cm = {
+        apiVersion : 'v1',
+        kind       : 'ConfigMap',
+        metadata   : {
+            name   : name,
+            labels : {
+                'skupper.io/type' : 'connector',
+            },
+        },
+        data: {
+            'routing-key' : routingKey,
+            port          : port,
+            selector      : selector,
+        },
+    };
+
+    return cm;
+}
+
 const createListener = async function(req, res) {
-    res.status(400).send('Not Implemented');
+    var returnStatus = 201;
+    const form = new formidable.IncomingForm();
+    try {
+        const [fields, files] = await form.parse(req)
+        const norm = util.ValidateAndNormalizeFields(fields, {
+            'name'       : {type: 'string', optional: false},
+            'routingkey' : {type: 'string', optional: false},
+            'host'       : {type: 'string', optional: false},
+            'port'       : {type: 'string', optional: false},
+        });
+
+        const listener = listenerObject(norm.name, norm.routingkey, norm.host, norm.port);
+        await kube.ApplyObject(listener);
+        res.status(returnStatus).end();
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).json({ message: error.message });
+    }
+    return returnStatus;
 }
 
 const createConnector = async function(req, res) {
-    res.status(400).send('Not Implemented');
+    var returnStatus = 201;
+    const form = new formidable.IncomingForm();
+    try {
+        const [fields, files] = await form.parse(req)
+        const norm = util.ValidateAndNormalizeFields(fields, {
+            'name'       : {type: 'string', optional: false},
+            'routingkey' : {type: 'string', optional: false},
+            'port'       : {type: 'string', optional: false},
+            'selector'   : {type: 'string', optional: false},
+        });
+
+        const connector = connectorObject(norm.name, norm.routingkey, norm.port, norm.selector);
+        await kube.ApplyObject(connector);
+        res.status(returnStatus).end();
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).json({ message: error.message });
+    }
+    return returnStatus;
 }
 
 const readListener = async function(res, lid) {

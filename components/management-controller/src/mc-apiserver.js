@@ -20,6 +20,8 @@
 "use strict";
 
 const express    = require('express');
+const session    = require('express-session');
+const kcConnect  = require('keycloak-connect');
 const cors       = require('cors');
 const formidable = require('formidable');
 const yaml       = require('js-yaml');
@@ -27,7 +29,6 @@ const crypto     = require('crypto');
 const db         = require('./db.js');
 const siteTemplates = require('./site-templates.js');
 const kube       = require('./common/kube.js');
-const { isObject } = require('util');
 const Log        = require('./common/log.js').Log;
 const sync       = require('./manage-sync.js');
 const adminApi   = require('./api-admin.js');
@@ -38,7 +39,17 @@ const fs         = require('fs');
 
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8085;
-var api;
+const app = express();
+const memoryStore = new session.MemoryStore();
+app.use(
+    session({
+      secret: 'mySecret',
+      resave: false,
+      saveUninitialized: true,
+      store: memoryStore,
+    })
+  );
+const keycloak    = new kcConnect({store: memoryStore});
 
 const link_config_map_yaml = function(name, data) {
     let configMap = {
@@ -325,44 +336,50 @@ const apiLog = function(req, status) {
 
 exports.Start = async function() {
     Log('[API Server module started]');
-    api = express();
-    api.use(cors());
+    //app.use(cors());
+    app.set('trust proxy', true );
+    app.use(keycloak.middleware());
 
+    app.get('/', keycloak.protect('realm:van-owner'));
 
     // Serve the frontend build from the './console' directory
     const consoleBuildPath = path.join(__dirname, 'console');
   
     if (fs.existsSync(consoleBuildPath)) {
-      console.error("Console loaded");
-      api.use(express.static(consoleBuildPath));
+        Log("Console loaded");
+        app.use(express.static(consoleBuildPath));
     } else {
-      console.error("The specified path does not exist");
+        Log("The console path does not exist");
     }
 
-    api.get(API_PREFIX + 'invitation/:iid/kube', async (req, res) => {
+    app.get(API_PREFIX + 'invitation/:iid/kube', async (req, res) => {
         apiLog(req, await fetchInvitationKube(req.params.iid, res));
     });
 
-    api.get(API_PREFIX + 'backbonesite/:bsid/kube', async (req, res) => {
+    app.get(API_PREFIX + 'backbonesite/:bsid/kube', async (req, res) => {
         apiLog(req, await fetchBackboneSiteKube(req.params.bsid, res));
     });
 
-    api.get(API_PREFIX + 'backbonesite/:bsid/links/incoming/kube', async (req, res) => {
+    app.get(API_PREFIX + 'backbonesite/:bsid/links/incoming/kube', async (req, res) => {
         apiLog(req, await fetchBackboneLinksIncomingKube(req.params.bsid, res));
     });
 
-    api.get(API_PREFIX + 'backbonesite/:bsid/links/outgoing/kube', async (req, res) => {
+    app.get(API_PREFIX + 'backbonesite/:bsid/links/outgoing/kube', async (req, res) => {
         apiLog(req, await fetchBackboneLinksOutgoingKube(req.params.bsid, res));
     });
 
-    api.post(API_PREFIX + 'backbonesite/:bsid/ingress', async (req, res) => {
+    app.post(API_PREFIX + 'backbonesite/:bsid/ingress', async (req, res) => {
         apiLog(req, await postBackboneIngress(req.params.bsid, req, res));
     });
 
-    adminApi.Initialize(api);
-    userApi.Initialize(api);
+    adminApi.Initialize(app, keycloak);
+    userApi.Initialize(app, keycloak);
 
-    let server = api.listen(API_PORT, () => {
+    app.use("*", (req, res) => {
+        apiLog(req, 404);
+    });
+
+    let server = app.listen(API_PORT, () => {
         let host = server.address().address;
         let port = server.address().port;
         if (host[0] == ':') {

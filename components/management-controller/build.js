@@ -1,6 +1,6 @@
 const fs = require('fs').promises;
+const fs_sync = require('fs');
 const path = require('path');
-const uglify = require('uglify-js');
 
 // Define directory paths
 const currentDir = __dirname;
@@ -54,43 +54,6 @@ async function createDirectories() {
   await fs.mkdir(appCommonSrcDir);
 }
 
-// Function to minify a single file
-async function minifyFile(inputFile, outputFile) {
-  const code = await fs.readFile(inputFile, 'utf8');
-  const minifiedCode = uglify.minify(code, {
-    compress: true,
-    mangle: true,
-  }).code;
-
-  await fs.writeFile(outputFile, minifiedCode, 'utf8');
-}
-
-// Function to minify all module files concurrently
-async function minifyFiles() {
-  const moduleTasks = modules.map((module) =>
-    minifyFile(`${srcDir}/${module}.js`, `${appSrcDir}/${module}.js`)
-  );
-
-  const commonModuleTasks = commonModules.map((module) =>
-    minifyFile(
-      `${commonSourceDir}/${module}.js`,
-      `${appCommonSrcDir}/${module}.js`
-    )
-  );
-  await Promise.all([...moduleTasks, ...commonModuleTasks]);
-}
-
-// Function to minify index.js and move it to the application directory
-async function minifyIndex() {
-  const code = await fs.readFile(entryPoint, 'utf8');
-  const minifiedCode = uglify.minify(code, {
-    compress: true,
-    mangle: true,
-  }).code;
-
-  await fs.writeFile(appEntryPoint, minifiedCode, 'utf8');
-}
-
 // Function to copy files from source directory to destination directory concurrently
 async function copyFiles(files, sourceDir, destinationDir) {
   await Promise.all(
@@ -98,6 +61,23 @@ async function copyFiles(files, sourceDir, destinationDir) {
       fs.copyFile(path.join(sourceDir, file), path.join(destinationDir, file))
     )
   );
+}
+
+async function copyTop() {
+    let files = ['index.js'];
+    const extras = ['keycloak.json'];
+
+    for (const extra of extras) {
+        if (fs_sync.existsSync(extra)) {
+            files.push(extra);
+        }
+    }
+
+    await copyFiles(
+        files,
+        currentDir,
+        appDir
+    );
 }
 
 // Function to copy modules to the application directory
@@ -156,8 +136,7 @@ async function build() {
     await cleanupPreviousBuild();
     await createDirectories();
 
-    await Promise.all([copyModules(), copyCommonModules()]);
-    await Promise.all([minifyIndex(), minifyFiles()]);
+    await Promise.all([copyModules(), copyCommonModules(), copyTop()]);
 
     await copyConsoleBuild();
   } catch (error) {

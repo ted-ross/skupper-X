@@ -16,13 +16,14 @@
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
     "express": "^4.17.1",
+    "express-session": "^1.18.0",
     "formidable": "^3.5.1",
     "fs": "^0.0.1-security",
     "js-yaml": "^4.1.0",
+    "keycloak-connect": "^24.0.2",
     "net": "^1.0.2",
     "pg": "^8.11.3",
     "rhea": "^2.0.4",
-    "uglify-js": "^3.17.4",
     "yaml": ">=2.2.2"
   }
 }
