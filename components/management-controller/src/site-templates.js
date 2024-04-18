@@ -271,7 +271,7 @@ spec:
           name: router-config
         - mountPath: /etc/skupper-router-certs
           name: skupper-router-certs
-      - image: ${config.BackboneControllerImage()}
+      - image: ${config.SiteControllerImage()}
         imagePullPolicy: Always
         name: controller
         env:

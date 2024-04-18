@@ -30,8 +30,6 @@ exports.DefaultCaExpiration     = () => config.defaultcaexpiration;
 exports.DefaultCertExpiration   = () => config.defaultcertexpiration;
 exports.BackboneExpiration      = () => config.backbonecaexpiration;
 exports.SiteDataplaneImage      = () => config.sitedataplaneimage;
-exports.BackboneControllerImage = () => config.backbonecontrollerimage;
-exports.ConfigSyncImage         = () => config.configsyncimage;
 exports.SiteControllerImage     = () => config.sitecontrollerimage;
 
 const updateConfiguration = function() {

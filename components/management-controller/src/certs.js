@@ -333,7 +333,6 @@ const processNewCertificateRequests = async function() {
                     issuer = row.issuer;
                     usage  = 'client auth';
                     extra_annotations['skupper.io/skx-dataplane-image']  = config.SiteDataplaneImage();
-                    extra_annotations['skupper.io/skx-configsync-image'] = config.ConfigSyncImage();
                     extra_annotations['skupper.io/skx-controller-image'] = config.SiteControllerImage();
                     // TODO - Add annotations for valid and expiration times for this claim
                     break;
