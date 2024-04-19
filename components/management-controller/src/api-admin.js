@@ -26,7 +26,7 @@ const Log        = require('./common/log.js').Log;
 const deployment = require('./site-deployment-state.js');
 const util       = require('./common/util.js');
 
-const API_PREFIX   = '/api/v1alpha1/';
+const API_PREFIX   = '/api/v1alpha2/';
 const INGRESS_LIST = ['claim', 'peer', 'member', 'manage'];
 
 const createBackbone = async function(req, res) {
@@ -74,31 +74,13 @@ const createBackboneSite = async function(bid, req, res) {
         const norm = util.ValidateAndNormalizeFields(fields, {
             'name'     : {type: 'string', optional: false},
             'metadata' : {type: 'string', optional: true, default: null},
-            'claim'    : {type: 'bool',   optional: true, default: true},
-            'peer'     : {type: 'bool',   optional: true, default: false},
-            'member'   : {type: 'bool',   optional: true, default: true},
-            'manage'   : {type: 'bool',   optional: true, default: false},
         });
 
         const client = await db.ClientFromPool();
         try {
             await client.query("BEGIN");
-
-            //
-            // Create a BackboneAccessPoint object for each called-for ingress on this site.
-            //
-            var accessIds = {};
             var extraCols = "";
             var extraVals = "";
-            for (const ingress of INGRESS_LIST) {
-                if (norm[ingress]) {
-                    const apResult = await client.query("INSERT INTO BackboneAccessPoints(Name, Kind, Backbone) VALUES ($1, $2, $3) RETURNING Id", [`${norm.name}-${ingress}`, ingress, bid]);
-                    const apId = apResult.rows[0].id;
-                    accessIds[ingress] = apId
-                    extraCols += `, ${ingress}Access`;
-                    extraVals += `, '${apId}'`;
-                }
-            }
 
             //
             // Handle the optional metadata
@@ -109,7 +91,7 @@ const createBackboneSite = async function(bid, req, res) {
             }
 
             //
-            // Create the site referencing the above created access points.
+            // Create the site
             //
             const result = await client.query(`INSERT INTO InteriorSites(Name, Backbone${extraCols}) VALUES ($1, $2${extraVals}) RETURNING Id`, [norm.name, bid]);
             const siteId = result.rows[0].id;
@@ -144,19 +126,12 @@ const updateBackboneSite = async function(sid, req, res) {
         const norm = util.ValidateAndNormalizeFields(fields, {
             'name'     : {type: 'string', optional: true, default: null},
             'metadata' : {type: 'string', optional: true, default: null},
-            'claim'    : {type: 'bool',   optional: true, default: null},
-            'peer'     : {type: 'bool',   optional: true, default: null},
-            'member'   : {type: 'bool',   optional: true, default: null},
-            'manage'   : {type: 'bool',   optional: true, default: null},
         });
     
         const client = await db.ClientFromPool();
         try {
             await client.query("BEGIN");
             let nameChanged   = false;
-            let accessChanged = false;
-            let manageAdded   = false;
-            let manageDeleted = false;
             const siteResult = await client.query("SELECT * FROM InteriorSites WHERE Id = $1", [sid]);
             if (siteResult.rowCount == 1) {
                 const site = siteResult.rows[0];
@@ -177,67 +152,87 @@ const updateBackboneSite = async function(sid, req, res) {
                 if (norm.metadata != null && norm.metadata != site.metadata) {
                     await client.query("UPDATE InteriorSites SET Metadata = $1 WHERE Id = $2", [norm.metadata, sid]);
                 }
-
-                //
-                // Check the site's access points to see if they need to be added/deleted or have their names changed
-                //
-                for (const ingress of INGRESS_LIST) {
-                    if (norm[ingress] === true && !site[`${ingress}access`]) {
-                        //
-                        // Update asked to add this ingress and there isn't one currently in place
-                        //
-                        const apResult = await client.query("INSERT INTO BackboneAccessPoints(Name, Kind, Backbone) VALUES ($1, $2, $3) RETURNING Id", [`${siteName}-${ingress}`, ingress, site.backbone]);
-                        await client.query(`UPDATE InteriorSites SET ${ingress}Access = $1 WHERE Id = $2`, [apResult.rows[0].id, sid]);
-                        accessChanged = true;
-                        if (ingress = 'manage') {
-                            manageAdded = true;
-                        }
-                    } else if (norm[ingress] === false && site[`${ingress}access`]) {
-                        //
-                        // Update asked to remove this ingress and there is one currently in place
-                        //
-                        const acResult = await client.query("DELETE FROM BackboneAccessPoints WHERE Id = $1 RETURNING Certificate", [site[`${ingress}access`]]);
-                        if (acResult.rowCount == 1) {
-                            const row = acResult.rows[0];
-                            if (row.certificate) {
-                                await client.query("DELETE FROM TlsCertificates WHERE Id = $1", [row.certificate]);
-                            }
-                        }
-                        await client.query(`UPDATE InteriorSites SET ${ingress}Access = NULL WHERE Id = $1`, [sid]);
-                        accessChanged = true;
-                        if (ingress = 'manage') {
-                            manageDeleted = true;
-                        }
-                    } else if ((norm[ingress] === true || norm[ingress] === null) && site[`${ingress}access`] && nameChanged) {
-                        //
-                        // There exists an ingress, it will stay in place, and the site name has changed
-                        //
-                        await client.query("UPDATE BackboneAccessPoints SET Name = $1 WHERE Id = $2", [`${siteName}-${ingress}`, site[`${ingress}access`]]);
-                    }
-                }
             }
             await client.query("COMMIT");
-
-            //
-            // Alert the sync module that an access point changed on a site
-            //
-            if (accessChanged) {
-                await sync.SiteIngressChanged(sid);
-            }
-
-            //
-            // Alert the deployment-state module if a change was made to the "manage" access
-            //
-            if (manageAdded) {
-                await deployment.ManageIngressAdded(sid);
-            } else if (manageDeleted) {
-                await deployment.ManageIngressDeleted(sid);
-            }
 
             res.status(returnStatus).end();
         } catch (error) {
             await client.query("ROLLBACK");
             returnStatus = 500;
+            res.status(returnStatus).send(error.message);
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).json({ message: error.message });
+    }
+
+    return returnStatus;
+}
+
+const createAccessPoint = async function(sid, req, res) {
+    var returnStatus;
+    const form = new formidable.IncomingForm();
+    try {
+        if (!util.IsValidUuid(sid)) {
+            throw(Error('Site-Id is not a valid uuid'));
+        }
+
+        const [fields, files] = await form.parse(req)
+        const norm = util.ValidateAndNormalizeFields(fields, {
+            'name'     : {type: 'string',     optional: true, default: null},
+            'kind'     : {type: 'accesskind', optional: false},
+            'bindhost' : {type: 'dnsname',    optional: true, default: null},
+        });
+
+        const client = await db.ClientFromPool();
+        try {
+            await client.query("BEGIN");
+
+            const siteResult = await client.query("SELECT Name from InteriorSites WHERE Id = $1", [sid]);
+            if (siteResult.rowCount == 0) {
+                throw(Error(`Referenced interior site not found: ${sid}`));
+            }
+
+            var extraCols = "";
+            var extraVals = "";
+            const name = norm.name || siteResult.rows[0].name + "-" + norm.kind;
+
+            // TODO - If name will collide with another access point on the same site, add a differentiation number to the end
+
+            //
+            // Handle the optional bind host
+            //
+            if (norm.bindhost) {
+                extraCols += ', BindHost';
+                extraVals += `, '${norm.bindhost}'`;
+            }
+
+            //
+            // Create the access point
+            //
+            const result = await client.query(`INSERT INTO BackboneAccessPoints(Name, Kind, InteriorSite${extraCols}) VALUES ($1, $2, $3${extraVals}) RETURNING Id`, [name, norm.kind, sid]);
+            const apId = result.rows[0].id;
+            await client.query("COMMIT");
+
+            returnStatus = 201;
+            res.status(returnStatus).json({id: apId});
+
+            //
+            // Alert the sync module that an access point changed on a site
+            //
+            await sync.SiteIngressChanged(sid);
+
+            //
+            // Alert the deployment-state module if a change was made to the "manage" access
+            //
+            if (norm.kind == 'manage') {
+                await deployment.ManageIngressAdded(sid);
+            }
+        } catch (error) {
+            await client.query("ROLLBACK");
+            returnStatus = 500
             res.status(returnStatus).send(error.message);
         } finally {
             client.release();
@@ -260,7 +255,7 @@ const createBackboneLink = async function(bid, req, res) {
 
         const [fields, files] = await form.parse(req);
         const norm = util.ValidateAndNormalizeFields(fields, {
-            'listeningsite'  : {type: 'uuid',   optional: false},
+            'accesspoint'    : {type: 'uuid',   optional: false},
             'connectingsite' : {type: 'uuid',   optional: false},
             'cost'           : {type: 'number', optional: true, default: 1},
         });
@@ -270,41 +265,76 @@ const createBackboneLink = async function(bid, req, res) {
             await client.query("BEGIN");
 
             //
-            // Ensure that the referenced sites are in the specified backbone network
+            // Get the referenced access point for validation
             //
-            const siteResult = await client.query("SELECT Backbone FROM InteriorSites WHERE Id = $1 OR Id = $2", [norm.listeningsite, norm.connectingsite]);
-            if (siteResult.rowCount == 2 && siteResult.rows[0].backbone == bid && siteResult.rows[1].backbone == bid) {
-                const linkResult = await client.query("INSERT INTO InterRouterLinks(ListeningInteriorSite, ConnectingInteriorSite, Cost) VALUES ($1, $2, $3) RETURNING Id", [norm.listeningsite, norm.connectingsite, norm.cost]);
-                const linkId = linkResult.rows[0].id;
-                await client.query("COMMIT");
-                returnStatus = 201;
-                res.status(returnStatus).json({id: linkId});
+            const accessResult = await client.query("SELECT Kind, InteriorSite, InteriorSites.Id as siteId, InteriorSites.Backbone FROM BackboneAccessPoints " +
+                                                    "JOIN InteriorSites ON InteriorSites.Id = InteriorSite " +
+                                                    "WHERE BackboneAccessPoints.Id = $1", [norm.accesspoint]);
 
-                //
-                // Alert the sync and deployment-state modules that a new backbone link was added for the connecting site
-                //
-                try {
-                    await deployment.LinkAddedOrDeleted(norm.connectingsite, norm.listeningsite);
-                    await sync.LinkChanged(norm.connectingsite);
-                } catch (error) {
-                    Log(`Exception createBackboneLink module notifications: ${error.message}`);
-                    Log(error.stack);
-                }
-            } else {
-                returnStatus = 400;
-                res.status(returnStatus).send('Sites are the same, not found, or are not in the specified backbone');
-                await client.query("ROLLBACK");
+            //
+            // Validate that the referenced access point exists
+            //
+            if (accessResult.rowCount == 0) {
+                throw(Error(`Referenced access point not found: ${norm.accesspoint}`));
+            }
+            const accessPoint = accessResult.rows[0];
+
+            //
+            // Validate that the referenced access point is for a site in the correct backbone
+            //
+            if (accessPoint.backbone != bid) {
+                throw(Error(`Referenced access point is not in the expected backbone`));
+            }
+
+            //
+            // Validate that the referenced access point is of kind 'peer'
+            //
+            if (accessPoint.kind != 'peer') {
+                throw(Error(`Referenced access point must be 'peer', found '${accessPoint.kind}'`));
+            }
+
+            //
+            // Validate that the referenced site is in the specified backbone network
+            //
+            const siteResult = await client.query("SELECT Backbone FROM InteriorSites WHERE Id = $1", [norm.connectingsite]);
+            if (siteResult.rowCount == 0) {
+                throw(Error(`Referenced connecting site not found: ${norm.connectingsite}`));
+            }
+
+            if (siteResult.rows[0].backbone != bid) {
+                throw(Error(`Referenced connecting site is not in the expected backbone`));
+            }
+
+            //
+            // Create the new link
+            //
+            const linkResult = await client.query("INSERT INTO InterRouterLinks(AccessPoint, ConnectingInteriorSite, Cost) VALUES ($1, $2, $3) RETURNING Id", [norm.accesspoint, norm.connectingsite, norm.cost]);
+            const linkId = linkResult.rows[0].id;
+
+            await client.query("COMMIT");
+            returnStatus = 201;
+            res.status(returnStatus).json({id: linkId});
+
+            //
+            // Alert the sync and deployment-state modules that a new backbone link was added for the connecting site
+            //
+            try {
+                await deployment.LinkAddedOrDeleted(norm.connectingsite, accessPoint.siteId);
+                await sync.LinkChanged(norm.connectingsite);
+            } catch (error) {
+                Log(`Exception createBackboneLink module notifications: ${error.message}`);
+                Log(error.stack);
             }
         } catch (error) {
             await client.query("ROLLBACK");
-            returnStatus = 500;
-            res.status(returnStatus).send(error.stack);
+            returnStatus = 400;
+            res.status(returnStatus).send(error.message);
         } finally {
             client.release();
         }
     } catch (error) {
         returnStatus = 400;
-        res.status(returnStatus).json({ message: error.message });
+        res.status(returnStatus).send(error.message);
     }
 
     return returnStatus;
@@ -480,6 +510,13 @@ const deleteBackboneSite = async function(res, sid) {
     return returnStatus;
 }
 
+const deleteAccessPoint = async function(apid, res) {
+    // TODO
+
+    // Post COMMIT
+    await deployment.ManageIngressDeleted(sid);
+}
+
 const deleteBackboneLink = async function(lid, res) {
     var returnStatus = 204;
     const client = await db.ClientFromPool();
@@ -577,6 +614,18 @@ const listBackboneSites = async function(id, res, byBackbone) {
     return returnStatus;
 }
 
+const listAccessPointsBackbone = async function(bid, res) {
+    // TODO
+}
+
+const listAccessPointsSite = async function(sid, res) {
+    // TODO
+}
+
+const readAccessPoint = async function(apid, res) {
+    // TODO
+}
+
 const listBackboneLinks = async function(bid, res) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
@@ -652,7 +701,7 @@ const apiLog = function(req, status) {
     Log(`AdminAPI: ${req.ip} - (${status}) ${req.method} ${req.originalUrl}`);
 }
 
-exports.Initialize = async function(api, keycloak) {
+exports.Initialize = async function(app, keycloak) {
     Log('[API Admin interface starting]');
 
     //========================================
@@ -660,27 +709,27 @@ exports.Initialize = async function(api, keycloak) {
     //========================================
 
     // CREATE
-    api.post(API_PREFIX + 'backbones', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+    app.post(API_PREFIX + 'backbones', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await createBackbone(req, res));
     });
 
     // READ
-    api.get(API_PREFIX + 'backbone/:bid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+    app.get(API_PREFIX + 'backbone/:bid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await listBackbones(res, req.params.bid));
     });
 
     // LIST
-    api.get(API_PREFIX + 'backbones', keycloak.protect(), async (req, res) => {
+    app.get(API_PREFIX + 'backbones', keycloak.protect(), async (req, res) => {
         apiLog(req, await listBackbones(res));
     });
 
     // DELETE
-    api.delete(API_PREFIX + 'backbone/:bid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+    app.delete(API_PREFIX + 'backbone/:bid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await deleteBackbone(res, req.params.bid));
     });
 
     // COMMANDS
-    api.put(API_PREFIX + 'backbone/:bid/activate', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+    app.put(API_PREFIX + 'backbone/:bid/activate', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await activateBackbone(res, req.params.bid));
     });
 
@@ -689,28 +738,56 @@ exports.Initialize = async function(api, keycloak) {
     //========================================
 
     // CREATE
-    api.post(API_PREFIX + 'backbone/:bid/sites', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+    app.post(API_PREFIX + 'backbone/:bid/sites', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await createBackboneSite(req.params.bid, req, res));
     });
 
     // READ
-    api.get(API_PREFIX + 'backbonesite/:sid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+    app.get(API_PREFIX + 'backbonesite/:sid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await listBackboneSites(req.params.sid, res, false));
     });
 
     // LIST
-    api.get(API_PREFIX + 'backbone/:bid/sites', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+    app.get(API_PREFIX + 'backbone/:bid/sites', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await listBackboneSites(req.params.bid, res, true));
     });
 
     // UPDATE
-    api.put(API_PREFIX + 'backbonesite/:sid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+    app.put(API_PREFIX + 'backbonesite/:sid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await updateBackboneSite(req.params.sid, req, res));
     });
 
     // DELETE
-    api.delete(API_PREFIX + 'backbonesite/:sid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+    app.delete(API_PREFIX + 'backbonesite/:sid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await deleteBackboneSite(res, req.params.sid));
+    });
+
+    //========================================
+    // Interior Access Points
+    //========================================
+
+    // CREATE
+    app.post(API_PREFIX + 'backbonesite/:sid/accesspoints', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+        apiLog(req, await createAccessPoint(req.params.sid, req, res));
+    });
+
+    // READ
+    app.get(API_PREFIX + 'accesspoint/:apid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+        apiLog(req, await readAccessPoint(req.params.apid, res));
+    });
+
+    // LIST
+    app.get(API_PREFIX + 'backbone/:bid/accesspoints', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+        apiLog(req, await listAccessPointsBackbone(req.params.bid, res));
+    });
+
+    app.get(API_PREFIX + 'backbonesite/:sid/accesspoints', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+        apiLog(req, await listAccessPointsSite(req.params.sid, res));
+    });
+
+    // DELETE
+    app.put(API_PREFIX + 'accesspoint/:apid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+        apiLog(req, await deleteAccessPoint(req.params.apid, res));
     });
 
     //========================================
@@ -718,33 +795,33 @@ exports.Initialize = async function(api, keycloak) {
     //========================================
 
     // CREATE
-    api.post(API_PREFIX + 'backbone/:bid/links', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+    app.post(API_PREFIX + 'backbone/:bid/links', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await createBackboneLink(req.params.bid, req, res));
     });
 
     // LIST
-    api.get(API_PREFIX + 'backbone/:bid/links', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+    app.get(API_PREFIX + 'backbone/:bid/links', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await listBackboneLinks(req.params.bid, res));
     });
 
     // UPDATE
-    api.put(API_PREFIX + 'backbonelink/:lid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+    app.put(API_PREFIX + 'backbonelink/:lid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await updateBackboneLink(req.params.lid, req, res));
     });
 
     // DELETE
-    api.delete(API_PREFIX + 'backbonelink/:lid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+    app.delete(API_PREFIX + 'backbonelink/:lid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await deleteBackboneLink(req.params.lid, res));
     });
 
     //========================================
     // Backbone Access Points
     //========================================
-    api.get(API_PREFIX + 'backbonesite/:sid/ingresses', keycloak.protect(), async (req, res) => {
+    app.get(API_PREFIX + 'backbonesite/:sid/ingresses', keycloak.protect(), async (req, res) => {
         apiLog(req, await listSiteIngresses(req.params.sid, res));
     });
 
-    api.get(API_PREFIX + 'invitations', keycloak.protect(), async (req, res) => {
+    app.get(API_PREFIX + 'invitations', keycloak.protect(), async (req, res) => {
         apiLog(req, await listInvitations(res));
     });
 }

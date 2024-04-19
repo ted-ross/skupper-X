@@ -103,8 +103,9 @@ const processNewAccessPoints = async function() {
     try {
         await client.query('BEGIN');
         const result = await client.query(
-            "SELECT BackboneAccessPoints.*, Backbones.Lifecycle as bblc, Backbones.Certificate as bbca FROM BackboneAccessPoints " + 
-            "JOIN Backbones ON BackboneAccessPoints.Backbone = Backbones.Id WHERE BackboneAccessPoints.Lifecycle = 'new' and Backbones.Lifecycle = 'ready' LIMIT 1"
+            "SELECT BackboneAccessPoints.*, Backbones.Lifecycle as bblc, Backbones.Certificate as bbca FROM BackboneAccessPoints " +
+            "JOIN InteriorSites ON BackboneAccessPoints.InteriorSite = InteriorSites.Id " +
+            "JOIN Backbones ON InteriorSites.Backbone = Backbones.Id WHERE BackboneAccessPoints.Lifecycle = 'new' and Backbones.Lifecycle = 'ready' LIMIT 1"
         );
         if (result.rowCount == 1) {
             const row = result.rows[0];

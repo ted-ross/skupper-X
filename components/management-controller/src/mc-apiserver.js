@@ -39,16 +39,19 @@ const path       = require('path');
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8085;
 const app = express();
-const memoryStore = new session.MemoryStore();
-app.use(
-    session({
-      secret: 'mySecret',
-      resave: false,
-      saveUninitialized: true,
-      store: memoryStore,
-    })
-  );
-const keycloak    = new kcConnect({store: memoryStore});
+//const memoryStore = new session.MemoryStore();
+//app.use(
+//    session({
+//      secret: 'mySecret',
+//      resave: false,
+//      saveUninitialized: true,
+//      store: memoryStore,
+//    })
+//  );
+//const keycloak    = new kcConnect({store: memoryStore});
+const keycloak = {
+    protect : function(arg) { return (req, res, next) => { next(); } }
+};
 
 const link_config_map_yaml = function(name, data) {
     let configMap = {
@@ -335,9 +338,9 @@ const apiLog = function(req, status) {
 
 exports.Start = async function() {
     Log('[API Server module started]');
-    //app.use(cors());
-    app.set('trust proxy', true );
-    app.use(keycloak.middleware());
+    app.use(cors());
+    //app.set('trust proxy', true );
+    //app.use(keycloak.middleware());
 
     app.get('/', keycloak.protect('realm:van-owner'));
 

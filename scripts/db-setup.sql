@@ -159,25 +159,6 @@ CREATE TABLE Backbones (
 );
 
 --
--- Access URL for a subset of the interior routers in a backbone network.
--- This is either simply an ingress-spec for backbone listeners or it can be
--- used to configure global-DNS configuration for backbone access.
---
-CREATE TABLE BackboneAccessPoints (
-    Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    Name text,
-    Lifecycle LifecycleType DEFAULT 'partial',
-    Failure text,
-    Certificate UUID REFERENCES TlsCertificates,
-    Hostname text,
-    Port text,
-
-    Kind AccessPointType,
-    Backbone UUID REFERENCES Backbones,
-    GlobalAccess UUID REFERENCES BackboneAccessPoints
-);
-
---
 -- Sites that form the interior transit backbone
 --
 -- The site's certificate is used as a client-auth certificate for outgoing inter-router links.
@@ -196,11 +177,27 @@ CREATE TABLE InteriorSites (
     FirstActiveTime timestamptz,
     LastHeartbeat timestamptz,
 
-    Backbone UUID REFERENCES Backbones,
-    ClaimAccess UUID REFERENCES BackboneAccessPoints ON DELETE SET NULL,
-    PeerAccess UUID REFERENCES BackboneAccessPoints ON DELETE SET NULL,
-    MemberAccess UUID REFERENCES BackboneAccessPoints ON DELETE SET NULL,
-    ManageAccess UUID REFERENCES BackboneAccessPoints ON DELETE SET NULL
+    Backbone UUID REFERENCES Backbones
+);
+
+--
+-- Access URL for a subset of the interior routers in a backbone network.
+-- This is either simply an ingress-spec for backbone listeners or it can be
+-- used to configure global-DNS configuration for backbone access.
+--
+CREATE TABLE BackboneAccessPoints (
+    Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    Name text,
+    Lifecycle LifecycleType DEFAULT 'partial',
+    Failure text,
+    Certificate UUID REFERENCES TlsCertificates,
+    Hostname text,
+    Port text,
+
+    Kind AccessPointType,
+    BindHost text default '',
+    InteriorSite UUID REFERENCES InteriorSites ON DELETE CASCADE,
+    GlobalAccess UUID REFERENCES BackboneAccessPoints
 );
 
 --
@@ -208,7 +205,7 @@ CREATE TABLE InteriorSites (
 --
 CREATE TABLE InterRouterLinks (
     Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    ListeningInteriorSite UUID REFERENCES InteriorSites ON DELETE CASCADE,
+    AccessPoint UUID REFERENCES BackboneAccessPoints ON DELETE CASCADE,
     ConnectingInteriorSite UUID REFERENCES InteriorSites ON DELETE CASCADE,
     Cost integer DEFAULT 1
 );

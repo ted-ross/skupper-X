@@ -75,6 +75,7 @@ exports.allSettled = function(plist) {
 }
 
 const uuidRegex = RegExp("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+const dnsRegex  = RegExp("^((?!-)[A-Za-z0-9-]{1,63}(?<!-)\\.)+[A-Za-z]{2,6}$");
 
 exports.IsValidUuid = function(text) {
     return uuidRegex.test(text);
@@ -105,14 +106,27 @@ exports.ValidateAndNormalizeFields = function(fields, table) {
             break;
 
         case 'dnsname' :
-            throw(Error('dnsname field type not implemented'));
+            if (dnsRegex.test(value)) {
+                normalized[key] = value;
+            } else {
+                throw(Error(`Expected valid DNS name for key ${key}`));
+            }
+            break;
+
+        case 'accesskind' :
+            if (value == 'claim' || value == 'peer' || value == 'member' || value == 'manage') {
+                normalized[key] = value;
+            } else {
+                throw(Error(`Expected [claim, peer, member, manage] for key ${key}`));
+            }
+            break;
 
         case 'kubeselector' :
             throw(Error('kubeselector field type not implemented'));
 
         case 'bool' :
             if (typeof value != 'string' || (value != 'true' && value != 'false')) {
-                throw(Error(`Expected boolean string for key ${key}`));
+                throw(Error(`Expected [true, false] for key ${key}`));
             }
             normalized[key] = value == 'true';
             break;
