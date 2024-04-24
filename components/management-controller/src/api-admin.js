@@ -56,7 +56,7 @@ const createBackbone = async function(req, res) {
         }
     } catch (error) {
         returnStatus = 400;
-        res.status(returnStatus).json({ message: error.message });
+        res.status(returnStatus).send(error.message);
     }
 
     return returnStatus;

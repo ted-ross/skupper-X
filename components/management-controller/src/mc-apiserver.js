@@ -342,7 +342,7 @@ exports.Start = async function() {
     //app.set('trust proxy', true );
     //app.use(keycloak.middleware());
 
-    app.get('/', keycloak.protect('realm:van-owner'));
+    //app.get('/', keycloak.protect('realm:van-owner'));
 
     // Serve the frontend build from the './console' directory
     const consoleBuildPath = path.join(__dirname, 'console');
@@ -372,6 +372,7 @@ exports.Start = async function() {
     userApi.Initialize(app, keycloak);
 
     app.use("*", (req, res) => {
+        res.status(404).send('invalid path');
         apiLog(req, 404);
     });
 
