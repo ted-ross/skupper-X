@@ -366,7 +366,7 @@ class Sorter:
 URL     = os.getenv('SKXURL', 'localhost:8085')
 SCHEME  = 'http'
 
-def apiquery(method, path, json=None):
+def apiquery(method, path, json=None, text=None):
     if VERBOSE:
         print('%s %s %r' % (method, SCHEME + '://' + URL + path, json))
     result = requests.request(method, SCHEME + '://' + URL + path, json=json)
@@ -376,79 +376,94 @@ def apiquery(method, path, json=None):
     return result
 
 
-VERBS = {
-    'use'      : 0,
-    'create'   : 1,
-    'delete'   : 2,
-    'update'   : 3,
-    'list'     : 4,
-    'status'   : 5,
-    'deploy'   : 6,
-    'activate' : 7,
-    'expire'   : 8,
-    'evict'    : 9
-    }
-
-DISPATCH = {}   # {object : {verb : ([positional], [options], METHOD, URI, output-style, title, [columns])}}
-
-def setup_dispatch():
+DISPATCH = {   # {object : {verb : ([positional], [options], METHOD, URI, data-format, title, [columns])}}
     ##
     ## Backbone
     ##
-    DISPATCH['backbone'] = {
+    'backbone' : {
         'create' : (['name'], ['multitenant'], 'POST',   '/api/v1alpha2/backbones'),
         'delete' : (['backboneid'], [],        'DELETE', '/api/v1alpha2/backbone/${backboneid}'),
-        'list'   : ([],       [],              'GET',    '/api/v1alpha2/backbones', 'Table', 'Backbone Networks',
-                    ['id', 'name', ('tls', None, 'lifecycle'), 'failure', ('multitenant', 'YN')]),
-        'activate' : (['id'],   [],              'PUT',    '/api/v1alpha2/backbone/${id}/activate'),
-    }
+        'list'   : ([], [],                    'GET',    '/api/v1alpha2/backbones', 'Table', 'Backbone Networks',
+                    ['id', 'name', ('stat', None, 'lifecycle'), 'failure', ('multitenant', 'YN')]),
+        'activate' : (['id'], [],              'PUT',    '/api/v1alpha2/backbone/${id}/activate'),
+    },
 
     ##
     ## Backbone-Site
     ##
-    DISPATCH['site'] = {
+    'site' : {
         'create' : (['name'], ['backbone'], 'POST',   '/api/v1alpha2/backbone/${backbone}/sites'),
         'delete' : (['siteid'], [],         'DELETE', '/api/v1alpha2/backbonesite/${siteid}'),
         'list'   : ([],       ['backbone'], 'GET',    '/api/v1alpha2/backbone/${backbone}/sites', 'Table', 'Backbone Sites',
-                    ['id', 'name', ('tls', None, 'lifecycle'), 'failure', ('deploy', None, 'deploymentstate'), ('since', None, 'firstactivetime'), ('last', None, 'lastheartbeat')]),
+                    ['id', 'name', ('stat', None, 'lifecycle'), 'failure', ('deploy', None, 'deploymentstate'), ('since', None, 'firstactivetime'), ('last', None, 'lastheartbeat')]),
         'deploy' : (['siteid', 'outfile'], ['format'], 'GET', '/api/v1alpha1/backbonesite/${siteid}/${format}', 'File'),
-    }
+    },
+
+    ##
+    ## Bootstrapping Site
+    ##
+    'boot-site' : {
+        'ingress' : (['siteid', 'infile'], [], 'POST', '/api/v1alpha1/backbonesite/${siteid}/ingress', 'File'),                   ## TODO - make this work
+        'finish'  : (['siteid'], ['format'],   'GET',  '/api/v1alpha1/backbonesite/${siteid}/links/incoming/${format}', 'File'),
+    },
 
     ##
     ## Access Point
     ##
-    DISPATCH['access-point'] = {
+    'access-point' : {
         'create' : (['siteid', 'kind'], ['bindhost'], 'POST',   '/api/v1alpha2/backbonesite/${siteid}/accesspoints'),
         'delete' : (['apid'],           [],           'DELETE', '/api/v1alpha2/accesspoint/${apid}'),
         'list'   : (['siteid'],         [],           'GET',    '/api/v1alpha2/backbonesite/${siteid}/accesspoints', 'Table', 'Backbone Access Points',
-                    ['id', 'name', ('tls', None, 'lifecycle'), 'failure', 'kind', 'bindhost']),
-    }
+                    ['id', 'name', ('stat', None, 'lifecycle'), 'failure', 'kind', 'bindhost']),
+    },
 
     ##
     ## Link
     ##
-    DISPATCH['link'] = {
+    'link' : {
         'create' : (['accesspoint', 'connectingsite'], ['cost'], 'POST', '/api/v1alpha2/accesspoint/${accesspoint}/links'),
         'delete' : (['linkid'], [], 'DELETE', '/api/v1alpha2/backbonelink/${linkid}'),
         'list'   : ([], ['backbone'], 'GET', '/api/v1alpha2/backbone/${backbone}/links', 'Table', 'Backbone Links',
                     ['id', ('access-point', 'APNAME', 'accesspoint'), ('lSite', 'APSITENAME', 'accesspoint'), ('cSite', 'SITENAME', 'connectinginteriorsite'), ('cost', 'NUM', 'cost')]),
-    }
+    },
 
     ##
     ## VAN
     ##
+    'van' : {
+        'create' : (['name'], ['backbone'], 'POST',   '/api/v1alpha1/backbone/${backbone}/vans'),
+        'delete' : (['vanid'], [],          'DELETE', '/api/v1alpha1/van/${vanid}'),
+        'list'   : ([], [],                 'GET',    '/api/v1alpha1/vans', 'Table', 'Application Networks',
+                        ['id', ('backbone', None, 'backbonename'), 'name', ('stat', None, 'lifecycle'), 'failure', ('start', None, 'starttime'), ('end', None, 'endtime')]),
+        'evict'  : (['vanid'], [],          'PUT',    '/api/v1alpha1/van/${vanid}/evict')
+    },
 
     ##
     ## Invitation
     ##
+    'invite' : {
+        'create' : (['vanid', 'name', 'claimaccess', 'primaryaccess'], ['interactive'], 'POST', '/api/v1alpha1/van/${vanid}/invitations'),
+        'delete' : (['inviteid'], [], 'DELETE', '/api/v1alpha1/invitation/${inviteid}'),
+        'list'   : (['vanid'], [],    'GET',    '/api/v1alpha1/van/${vanid}/invitations', 'Table', 'Application Network Invitations',
+                        ['id', 'name', ('stat', None, 'lifecycle'), 'failure', ('limit', 'NUM', 'instancelimit'), ('count', 'NUM', 'instancecount'), ('interactive', 'YN', 'interactive'), ('deadline', None, 'joindeadline')]),
+        'deploy' : (['inviteid', 'outfile'], ['format'], 'GET', '/api/v1alpha1/invitation/${inviteid}/${format}', 'File'),
+        'expire' : (['inviteid'], [], 'PUT',    '/api/v1alpha1/invitation/${inviteid}/expire')
+    },
 
     ##
     ## Member
     ##
+    'member' : {
+        'list'  : (['vanid'], [], 'GET', '/api/v1alpha1/van/${vanid}/members', 'Table', 'Application Network Members',
+                    ['id', 'name', ('stat', None, 'lifecycle'), 'failure', ('joined', None, 'firstactivetime'), ('last', None, 'lastheartbeat'), ('invite', 'INVITENAME', 'invitation')]),
+        'evict' : (['memberid'], [], 'PUT', '/api/v1alpha1/member/${memberid}/evict'),
+    },
 
     ##
     ## Member-Class
     ##
+}
+
 
 def substitute(uri, data):
     remove_keys = []
@@ -518,6 +533,8 @@ def process(desc, data):
                         val = TimeShort(obj[attrname])
                     elif typetag == 'NUM':
                         val = str(obj[attrname])
+                        if val == 'None':
+                            val = '-'
                     elif typetag == 'SITENAME':
                         val = apiquery('GET', '/api/v1alpha2/backbonesite/%s' % obj[attrname]).json()['name']
                     elif typetag == 'APNAME':
@@ -525,22 +542,26 @@ def process(desc, data):
                     elif typetag == 'APSITENAME':
                         siteId = apiquery('GET', '/api/v1alpha2/accesspoint/%s' % obj[attrname]).json()['interiorsite']
                         val    = apiquery('GET', '/api/v1alpha2/backbonesite/%s' % siteId).json()['name']
+                    elif typetag == 'INVITENAME':
+                        val = apiquery('GET', '/api/v1alpha1/invitation/%s' % obj[attrname]).json()['name']
                     row.append(val)
                 rows.append(row)
             disp.formattedTable(title, heads, rows)
+            if len(rows) == 0:
+                print("  ==== None Found ====")
 
 
 def main():
     parser = argparse.ArgumentParser(prog = "skx", description = "Skupper-X Command Line Utility")
     parser.add_argument('pos', type=str, nargs='*')
-    parser.add_argument('--verbose', action='store_true', required=False)
+    parser.add_argument('-v', '--verbose', action='store_true', required=False)
     parser.add_argument('--no-multitenant', dest='multitenant', action='store_false', required=False)
     parser.add_argument('--backbone', action='store', required=False)
     parser.add_argument('--bindhost', action='store', required=False)
     parser.add_argument('--cost',     action='store', required=False, default='1')
     parser.add_argument('--format',   action='store', required=False, default='kube')
+    parser.add_argument('--interactive', action='store_true', required=False)
     args   = parser.parse_args()
-    setup_dispatch()
     object = args.pos[0]
     verb   = args.pos[1]
     global VERBOSE

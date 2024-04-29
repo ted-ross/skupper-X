@@ -69,6 +69,7 @@
  - Design the member API
    - ~~Site status and site activation~~
    - Active and inactive application state
+ - Bug: Invitation can be created with a primary access that is not a 'member' access-point
 
 ## Application Definition Tasks
  - Define the data structures to support Skupper-v2 equivalent functionality

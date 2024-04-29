@@ -361,9 +361,15 @@ const expireInvitation = async function(res, iid) {
 }
 
 const evictMember = async function(mid, req, res) {
+    var returnStatus = 501;
+    res.status(returnStatus).send("Not Implemented");
+    return returnStatus;
 }
 
 const evictVan = async function(vid, req, res) {
+    var returnStatus = 501;
+    res.status(returnStatus).send("Not Implemented");
+    return returnStatus;
 }
 
 const listClaimAccessPoints = async function(res, bid, ref) {
