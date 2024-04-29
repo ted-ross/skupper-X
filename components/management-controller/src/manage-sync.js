@@ -159,28 +159,30 @@ const checkSiteHashset = async function(backboneId, siteId, hashSet, address) {
     }
 
     const client = await db.ClientFromPool();
+    let notify = false;
     try {
+        let notify_on_commit = false;
+        await client.query("BEGIN");
         const result = await client.query("SELECT Lifecycle FROM InteriorSites WHERE Id = $1", [siteId]);
         if (result.rowCount == 1) {
-            let notify = false;
-            await client.query("BEGIN");
             const row = result.rows[0];
             if (row.lifecycle == 'ready') {
                 await client.query("UPDATE InteriorSites SET Lifecycle = 'active', FirstActiveTime = CURRENT_TIMESTAMP WHERE Id = $1", [siteId]);
-                notify = true;
+                notify_on_commit = true;
             }
             await client.query("UPDATE InteriorSites SET LastHeartbeat = CURRENT_TIMESTAMP WHERE Id = $1", [siteId]);
             await client.query("COMMIT");
-
-            if (notify) {
-                await deployment.SiteLifecycleChanged(siteId, 'active');
-            }
+            notify = notify_on_commit;
         }
     } catch (error) {
         Log(`Exception in heartbeat update: ${error.message}`);
         await client.query("ROLLBACK");
     } finally {
         client.release();
+    }
+
+    if (notify) {
+        await deployment.SiteLifecycleChanged(siteId, 'active');
     }
 }
 
@@ -345,8 +347,7 @@ const getLinksIncoming = async function(siteId) {
 exports.GetBackboneConnectors_TX = async function (client, siteId) {
     const result = await client.query(
         'SELECT *, BackboneAccessPoints.Hostname, BackboneAccessPoints.Port FROM InterRouterLinks ' +
-        'JOIN InteriorSites ON InteriorSites.Id = ListeningInteriorSite ' +
-        'JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = InteriorSites.PeerAccess ' +
+        'JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = InterRouterLinks.AccessPoint ' +
         'WHERE ConnectingInteriorSite = $1', [siteId]);
     let outgoing = {};
     for (const connection of result.rows) {

@@ -23,6 +23,7 @@ import requests
 
 
 from time import strftime, gmtime
+VERBOSE = False
 
 
 def UNICODE(text):
@@ -366,23 +367,14 @@ URL     = os.getenv('SKXURL', 'localhost:8085')
 SCHEME  = 'http'
 
 def apiquery(method, path, json=None):
+    if VERBOSE:
+        print('%s %s %r' % (method, SCHEME + '://' + URL + path, json))
     result = requests.request(method, SCHEME + '://' + URL + path, json=json)
     if (result.status_code > 299):
         print("Error: (%d) %s" % (result.status_code, result.text))
         exit(1)
     return result
 
-
-OBJECTS = {
-    'backbone'      : 0,
-    'site'          : 1,
-    'access-point'  : 2,
-    'link'          : 3,
-    'van'           : 4,
-    'invitation'    : 5,
-    'member'        : 6,
-    'member-class'  : 7
-    }
 
 VERBS = {
     'use'      : 0,
@@ -391,44 +383,56 @@ VERBS = {
     'update'   : 3,
     'list'     : 4,
     'status'   : 5,
-    'activate' : 6,
-    'expire'   : 7,
-    'evict'    : 8
+    'deploy'   : 6,
+    'activate' : 7,
+    'expire'   : 8,
+    'evict'    : 9
     }
 
-DISPATCH = {}   # {object : {verb : ([positional], [options], METHOD, URI, title, [columns])}}
+DISPATCH = {}   # {object : {verb : ([positional], [options], METHOD, URI, output-style, title, [columns])}}
 
 def setup_dispatch():
     ##
     ## Backbone
     ##
-    DISPATCH[0] = {
-        1 : (['name'], ['multitenant'], 'POST',   '/api/v1alpha2/backbones'),                 ## create
-        2 : (['id'],   [],              'DELETE', '/api/v1alpha2/backbone/${id}'),            ## delete
-        4 : ([],       [],              'GET',    '/api/v1alpha2/backbones',                  ## list
-                                    'Backbone Networks',
-                                    ['id', 'name', ('tls', None, 'lifecycle'), 'failure', ('multitenant', 'YN')]),
-        6 : (['id'],   [],              'PUT',    '/api/v1alpha2/backbone/${id}/activate'),   ## activate
+    DISPATCH['backbone'] = {
+        'create' : (['name'], ['multitenant'], 'POST',   '/api/v1alpha2/backbones'),
+        'delete' : (['backboneid'], [],        'DELETE', '/api/v1alpha2/backbone/${backboneid}'),
+        'list'   : ([],       [],              'GET',    '/api/v1alpha2/backbones', 'Table', 'Backbone Networks',
+                    ['id', 'name', ('tls', None, 'lifecycle'), 'failure', ('multitenant', 'YN')]),
+        'activate' : (['id'],   [],              'PUT',    '/api/v1alpha2/backbone/${id}/activate'),
     }
 
     ##
     ## Backbone-Site
     ##
-    DISPATCH[1] = {
-        1 : (['name'], ['backbone'], 'POST',   '/api/v1alpha2/backbone/${backbone}/sites'),
-        2 : (['id'],   [],           'DELETE', '/api/v1alpha2/backbonesite/$id'),
-        4 : ([],       ['backbone'], 'GET',    '/api/v1alpha2/backbone/${backbone}/sites',
-                'Backbone Sites',
-                ['id', 'name', ('tls', None, 'lifecycle'), 'failure', ('deploy', None, 'deploymentstate'), ('since', 'TL', 'firstactivetime'), ('last', 'TS', 'lastheartbeat')]),
+    DISPATCH['site'] = {
+        'create' : (['name'], ['backbone'], 'POST',   '/api/v1alpha2/backbone/${backbone}/sites'),
+        'delete' : (['siteid'], [],         'DELETE', '/api/v1alpha2/backbonesite/${siteid}'),
+        'list'   : ([],       ['backbone'], 'GET',    '/api/v1alpha2/backbone/${backbone}/sites', 'Table', 'Backbone Sites',
+                    ['id', 'name', ('tls', None, 'lifecycle'), 'failure', ('deploy', None, 'deploymentstate'), ('since', None, 'firstactivetime'), ('last', None, 'lastheartbeat')]),
+        'deploy' : (['siteid', 'outfile'], ['format'], 'GET', '/api/v1alpha1/backbonesite/${siteid}/${format}', 'File'),
     }
 
     ##
     ## Access Point
     ##
+    DISPATCH['access-point'] = {
+        'create' : (['siteid', 'kind'], ['bindhost'], 'POST',   '/api/v1alpha2/backbonesite/${siteid}/accesspoints'),
+        'delete' : (['apid'],           [],           'DELETE', '/api/v1alpha2/accesspoint/${apid}'),
+        'list'   : (['siteid'],         [],           'GET',    '/api/v1alpha2/backbonesite/${siteid}/accesspoints', 'Table', 'Backbone Access Points',
+                    ['id', 'name', ('tls', None, 'lifecycle'), 'failure', 'kind', 'bindhost']),
+    }
 
     ##
     ## Link
     ##
+    DISPATCH['link'] = {
+        'create' : (['accesspoint', 'connectingsite'], ['cost'], 'POST', '/api/v1alpha2/accesspoint/${accesspoint}/links'),
+        'delete' : (['linkid'], [], 'DELETE', '/api/v1alpha2/backbonelink/${linkid}'),
+        'list'   : ([], ['backbone'], 'GET', '/api/v1alpha2/backbone/${backbone}/links', 'Table', 'Backbone Links',
+                    ['id', ('access-point', 'APNAME', 'accesspoint'), ('lSite', 'APSITENAME', 'accesspoint'), ('cSite', 'SITENAME', 'connectinginteriorsite'), ('cost', 'NUM', 'cost')]),
+    }
 
     ##
     ## VAN
@@ -481,53 +485,79 @@ def process(desc, data):
     uri, data = substitute(desc[3], data)
     result = apiquery(method, uri, data)
 
-    if len(desc) >= 6:
-        objlist = result.json()
-        title = desc[4]
-        table = normalize_desc_table(desc[5])
-        disp = Display()
-        heads = []
-        rows  = []
-        for e in table:
-            heads.append(Header(e[0]))
-        for obj in objlist:
-            row = []
+    if len(desc) > 4:
+        style = desc[4]
+
+        if style == 'Text':
+            print(result.text)
+        elif style == 'File':
+            with open(data['outfile'], "w") as outfile:
+                outfile.write(result.text)
+        elif style == 'Table':
+            objlist = result.json()
+            title = desc[5]
+            table = normalize_desc_table(desc[6])
+            disp = Display()
+            heads = []
+            rows  = []
             for e in table:
-                typetag = e[1]
-                attrname = e[2]
-                val = None
-                if typetag == None:
-                    val = obj[attrname] or '-'
-                elif typetag == 'YN':
-                    val = YN(obj[attrname])
-                row.append(val)
-            rows.append(row)
-        disp.formattedTable(title, heads, rows)
+                heads.append(Header(e[0]))
+            for obj in objlist:
+                row = []
+                for e in table:
+                    typetag = e[1]
+                    attrname = e[2]
+                    val = None
+                    if typetag == None:
+                        val = obj[attrname] or '-'
+                    elif typetag == 'YN':
+                        val = YN(obj[attrname])
+                    elif typetag == 'TL':
+                        val = TimeLong(obj[attrname])
+                    elif typetag == 'TS':
+                        val = TimeShort(obj[attrname])
+                    elif typetag == 'NUM':
+                        val = str(obj[attrname])
+                    elif typetag == 'SITENAME':
+                        val = apiquery('GET', '/api/v1alpha2/backbonesite/%s' % obj[attrname]).json()['name']
+                    elif typetag == 'APNAME':
+                        val = apiquery('GET', '/api/v1alpha2/accesspoint/%s' % obj[attrname]).json()['name']
+                    elif typetag == 'APSITENAME':
+                        siteId = apiquery('GET', '/api/v1alpha2/accesspoint/%s' % obj[attrname]).json()['interiorsite']
+                        val    = apiquery('GET', '/api/v1alpha2/backbonesite/%s' % siteId).json()['name']
+                    row.append(val)
+                rows.append(row)
+            disp.formattedTable(title, heads, rows)
 
 
 def main():
     parser = argparse.ArgumentParser(prog = "skx", description = "Skupper-X Command Line Utility")
     parser.add_argument('pos', type=str, nargs='*')
+    parser.add_argument('--verbose', action='store_true', required=False)
     parser.add_argument('--no-multitenant', dest='multitenant', action='store_false', required=False)
     parser.add_argument('--backbone', action='store', required=False)
+    parser.add_argument('--bindhost', action='store', required=False)
+    parser.add_argument('--cost',     action='store', required=False, default='1')
+    parser.add_argument('--format',   action='store', required=False, default='kube')
     args   = parser.parse_args()
     setup_dispatch()
     object = args.pos[0]
     verb   = args.pos[1]
+    global VERBOSE
+    VERBOSE = args.verbose
 
-    object_index = OBJECTS.get(object, -1)
-    verb_index   = VERBS.get(verb, -1)
-
-    if object_index == -1:
-        print("Object '%s' unknown" % object)
+    object_line = DISPATCH.get(object, None)
+    if object_line == None:
+        print("Object '%s' unknown.  Try:" % object)
+        for o in DISPATCH.keys():
+            print("    %s" % o)
         exit(1)
-    if verb_index == -1:
-        print("Verb '%s' unknown" % verb)
-        exit(1)
 
-    desc = DISPATCH[object_index].get(verb_index, None)
+    desc = object_line.get(verb, None)
     if desc == None:
-        print("Verb '%s' is not applicable to object '%s'" % (verb, object))
+        print("Verb '%s' is not applicable to object '%s'.  Try:" % (verb, object))
+        for v in object_line.keys():
+            print("    %s" % v)
         exit(1)
 
     data = {}
@@ -543,7 +573,8 @@ def main():
         val = args.__getattribute__(option_name)
         if val.__class__ == bool:
             val = 'true' if val else 'false'
-        data[option_name] = val
+        if val != None:
+            data[option_name] = val
 
     process(desc, data)
 

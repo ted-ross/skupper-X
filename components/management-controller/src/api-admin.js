@@ -239,23 +239,22 @@ const createAccessPoint = async function(sid, req, res) {
         }
     } catch (error) {
         returnStatus = 400;
-        res.status(returnStatus).json({ message: error.message });
+        res.status(returnStatus).send(error.message);
     }
 
     return returnStatus;
 }
 
-const createBackboneLink = async function(bid, req, res) {
+const createBackboneLink = async function(apid, req, res) {
     var returnStatus;
     const form = new formidable.IncomingForm();
     try {
-        if (!util.IsValidUuid(bid)) {
-            throw(Error('Backbone-Id is not a valid uuid'));
+        if (!util.IsValidUuid(apid)) {
+            throw(Error('AccessPoint-Id is not a valid uuid'));
         }
 
         const [fields, files] = await form.parse(req);
         const norm = util.ValidateAndNormalizeFields(fields, {
-            'accesspoint'    : {type: 'uuid',   optional: false},
             'connectingsite' : {type: 'uuid',   optional: false},
             'cost'           : {type: 'number', optional: true, default: 1},
         });
@@ -269,22 +268,15 @@ const createBackboneLink = async function(bid, req, res) {
             //
             const accessResult = await client.query("SELECT Kind, InteriorSite, InteriorSites.Id as siteId, InteriorSites.Backbone FROM BackboneAccessPoints " +
                                                     "JOIN InteriorSites ON InteriorSites.Id = InteriorSite " +
-                                                    "WHERE BackboneAccessPoints.Id = $1", [norm.accesspoint]);
+                                                    "WHERE BackboneAccessPoints.Id = $1", [apid]);
 
             //
             // Validate that the referenced access point exists
             //
             if (accessResult.rowCount == 0) {
-                throw(Error(`Referenced access point not found: ${norm.accesspoint}`));
+                throw(Error(`Referenced access point not found: ${apid}`));
             }
             const accessPoint = accessResult.rows[0];
-
-            //
-            // Validate that the referenced access point is for a site in the correct backbone
-            //
-            if (accessPoint.backbone != bid) {
-                throw(Error(`Referenced access point is not in the expected backbone`));
-            }
 
             //
             // Validate that the referenced access point is of kind 'peer'
@@ -301,14 +293,14 @@ const createBackboneLink = async function(bid, req, res) {
                 throw(Error(`Referenced connecting site not found: ${norm.connectingsite}`));
             }
 
-            if (siteResult.rows[0].backbone != bid) {
-                throw(Error(`Referenced connecting site is not in the expected backbone`));
+            if (siteResult.rows[0].backbone != accessPoint.backbone) {
+                throw(Error(`Referenced connecting site is not in the same backbone network as the access-point`));
             }
 
             //
             // Create the new link
             //
-            const linkResult = await client.query("INSERT INTO InterRouterLinks(AccessPoint, ConnectingInteriorSite, Cost) VALUES ($1, $2, $3) RETURNING Id", [norm.accesspoint, norm.connectingsite, norm.cost]);
+            const linkResult = await client.query("INSERT INTO InterRouterLinks(AccessPoint, ConnectingInteriorSite, Cost) VALUES ($1, $2, $3) RETURNING Id", [apid, norm.connectingsite, norm.cost]);
             const linkId = linkResult.rows[0].id;
 
             await client.query("COMMIT");
@@ -511,10 +503,40 @@ const deleteBackboneSite = async function(res, sid) {
 }
 
 const deleteAccessPoint = async function(apid, res) {
-    // TODO
+    var returnStatus = 204;
+    var siteId = undefined;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        if (!util.IsValidUuid(apid)) {
+            throw(Error('AccessPoint-Id is not a valid uuid'));
+        }
 
-    // Post COMMIT
-    await deployment.ManageIngressDeleted(sid);
+        const apResult = await client.query("DELETE FROM BackboneAccessPoints WHERE Id = $1 Returning Certificate, Kind, InteriorSite", [apid]);
+        if (apResult.rowCount == 1) {
+            const row = apResult.rows[0];
+            if (row.certificate) {
+                await client.query("DELETE FROM TlsCertificates WHERE Id = $1", [row.certificate]);
+            }
+            if (row.kind == 'manage') {
+                siteId = row.interiorsite;
+            }
+        }
+        await client.query("COMMIT");
+        res.status(returnStatus).end();
+    } catch (error) {
+        await client.query("ROLLBACK");
+        returnStatus = 400;
+        res.status(returnStatus).send(error.stack);
+    } finally {
+        client.release();
+    }
+
+    if (siteId) {
+        await deployment.ManageIngressDeleted(siteId);
+    }
+
+    return returnStatus;
 }
 
 const deleteBackboneLink = async function(lid, res) {
@@ -522,16 +544,16 @@ const deleteBackboneLink = async function(lid, res) {
     const client = await db.ClientFromPool();
     try {
         var connectingSite = null;
-        var listeningSite  = null;
+        var accessPoint    = null;
         await client.query("BEGIN");
         if (!util.IsValidUuid(lid)) {
             throw(Error('Link-Id is not a valid uuid'));
         }
 
-        const result = await client.query("DELETE FROM InterRouterLinks WHERE Id = $1 RETURNING ConnectingInteriorSite, ListeningInteriorSite", [lid]);
+        const result = await client.query("DELETE FROM InterRouterLinks WHERE Id = $1 RETURNING ConnectingInteriorSite, AccessPoint", [lid]);
         if (result.rowCount == 1) {
             connectingSite = result.rows[0].connectinginteriorsite;
-            listeningSite  = result.rows[0].listeninginteriorsite;
+            accessPoint    = result.rows[0].accesspoint;
         }
         await client.query("COMMIT");
         res.status(returnStatus).end();
@@ -541,7 +563,7 @@ const deleteBackboneLink = async function(lid, res) {
         //
         if (connectingSite) {
             try {
-                await deployment.LinkAddedOrDeleted(connectingSite, listeningSite);
+                await deployment.LinkAddedOrDeleted(connectingSite, accessPoint);
                 await sync.LinkChanged(connectingSite);
             } catch (error) {
                 Log(`Exception deleteBackboneLink module notifications: ${error.message}`);
@@ -551,7 +573,7 @@ const deleteBackboneLink = async function(lid, res) {
     } catch (error) {
         await client.query("ROLLBACK");
         returnStatus = 400;
-        res.status(returnStatus).send(error.message);
+        res.status(returnStatus).send(error.stack);
     } finally {
         client.release();
     }
@@ -598,6 +620,41 @@ const listBackboneSites = async function(id, res, byBackbone) {
         }
 
         const result = await client.query(`SELECT Id, Name, Lifecycle, Failure, Metadata, DeploymentState, FirstActiveTime, LastHeartbeat FROM InteriorSites WHERE ${byBackbone ? 'Backbone' : 'Id'} = $1`, [id]);
+
+        if (byBackbone) {
+            var list = [];
+            result.rows.forEach(row => {
+                list.push(row);
+            });
+            res.json(list);
+        } else {
+            if (result.rowCount == 0) {
+                throw(Error('Not found'));
+            }
+            res.json(result.rows[0]);
+        }
+        res.status(returnStatus).end();
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+
+    return returnStatus;
+}
+
+const listAccessPointsBackbone = async function(bid, res) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        if (!util.IsValidUuid(bid)) {
+            throw(Error('Id is not a valid uuid'));
+        }
+
+        const result = await client.query("SELECT BackboneAccessPoints.Id, BackboneAccessPoints.Name, BackboneAccessPoints.Lifecycle, BackboneAccessPoints.Failure, Hostname, Port, Kind, Bindhost, InteriorSites.Name as sitename FROM BackboneAccessPoints " +
+                                          "JOIN InteriorSites ON InteriorSites.Id = InteriorSite " +
+                                          "WHERE InteriorSites.Backbone = $1", [bid]);
         var list = [];
         result.rows.forEach(row => {
             list.push(row);
@@ -614,16 +671,56 @@ const listBackboneSites = async function(id, res, byBackbone) {
     return returnStatus;
 }
 
-const listAccessPointsBackbone = async function(bid, res) {
-    // TODO
-}
-
 const listAccessPointsSite = async function(sid, res) {
-    // TODO
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        if (!util.IsValidUuid(sid)) {
+            throw(Error('Id is not a valid uuid'));
+        }
+
+        const result = await client.query("SELECT Id, Name, Lifecycle, Failure, Hostname, Port, Kind, Bindhost FROM BackboneAccessPoints " +
+                                          "WHERE InteriorSite = $1", [sid]);
+        var list = [];
+        result.rows.forEach(row => {
+            list.push(row);
+        });
+        res.json(list);
+        res.status(returnStatus).end();
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+
+    return returnStatus;
 }
 
 const readAccessPoint = async function(apid, res) {
-    // TODO
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        if (!util.IsValidUuid(apid)) {
+            throw(Error('Id is not a valid uuid'));
+        }
+
+        const result = await client.query("SELECT Id, Name, Lifecycle, Failure, Hostname, Port, Kind, Bindhost, InteriorSite FROM BackboneAccessPoints " +
+                                          "WHERE Id = $1", [apid]);
+        if (result.rowCount == 0) {
+            throw(Error("Not found"));
+        }
+
+        res.json(result.rows[0]);
+        res.status(returnStatus).end();
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+
+    return returnStatus;
 }
 
 const listBackboneLinks = async function(bid, res) {
@@ -634,7 +731,7 @@ const listBackboneLinks = async function(bid, res) {
             throw(Error('Backbone-Id is not a valid uuid'));
         }
 
-        const result = await client.query("SELECT InterRouterLinks.* FROM InterRouterLinks JOIN InteriorSites ON InterRouterLinks.ListeningInteriorSite = InteriorSites.Id WHERE InteriorSites.Backbone = $1", [bid]);
+        const result = await client.query("SELECT InterRouterLinks.* FROM InterRouterLinks JOIN InteriorSites ON InterRouterLinks.ConnectingInteriorSite = InteriorSites.Id WHERE InteriorSites.Backbone = $1", [bid]);
         var list = [];
         result.rows.forEach(row => {
             list.push(row);
@@ -786,7 +883,7 @@ exports.Initialize = async function(app, keycloak) {
     });
 
     // DELETE
-    app.put(API_PREFIX + 'accesspoint/:apid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+    app.delete(API_PREFIX + 'accesspoint/:apid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
         apiLog(req, await deleteAccessPoint(req.params.apid, res));
     });
 
@@ -795,8 +892,8 @@ exports.Initialize = async function(app, keycloak) {
     //========================================
 
     // CREATE
-    app.post(API_PREFIX + 'backbone/:bid/links', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await createBackboneLink(req.params.bid, req, res));
+    app.post(API_PREFIX + 'accesspoint/:apid/links', keycloak.protect('realm:backbone-admin'), async (req, res) => {
+        apiLog(req, await createBackboneLink(req.params.apid, req, res));
     });
 
     // LIST

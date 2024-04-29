@@ -114,8 +114,7 @@ const fetchInvitationKube = async function (iid, res) {
             text += siteTemplates.SecretYaml(secret, 'claim', false);
             text += claim_config_map_yaml(row.id, row.hostname, row.port, row.interactiveclaim);
 
-            res.send(text);
-            res.status(returnStatus).end();
+            res.status(returnStatus).send(text);
         } else {
             throw(Error('Valid invitation not found'));
         }
@@ -159,8 +158,7 @@ const fetchBackboneSiteKube = async function (siteId, res) {
             const incoming = await sync.GetBackboneIngresses_TX(client, siteId, true);
             text += "---\n" + link_config_map_yaml('skupperx-links-incoming', incoming)
 
-            res.send(text);
-            res.status(returnStatus).end();
+            res.status(returnStatus).send(text);
         } else {
             throw Error('Site secret not found');
         }
@@ -168,8 +166,7 @@ const fetchBackboneSiteKube = async function (siteId, res) {
     } catch (err) {
         await client.query('ROLLBACK');
         returnStatus = 400;
-        res.send(err.message);
-        res.status(returnStatus).end();
+        res.status(returnStatus).send(err.message);
     } finally {
         client.release();
     }
@@ -219,8 +216,7 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
 
             text += "---\n" + link_config_map_yaml('skupperx-incoming', incoming);
 
-            res.send(text);
-            res.status(returnStatus).end();
+            res.status(returnStatus).send(text);
         } else {
             throw Error('Site not found');
         }
@@ -242,14 +238,12 @@ const fetchBackboneLinksOutgoingKube = async function (bsid, res) {
     try {
         await client.query('BEGIN');
         const outgoing = await sync.GetBackboneConnectors_TX(client, bsid);
-        res.send(link_config_map_yaml('skupperx-outgoing', outgoing));
-        res.status(returnStatus).end();
+        res.status(returnStatus).send(link_config_map_yaml('skupperx-outgoing', outgoing));
         await client.query('COMMIT');
     } catch (err) {
         await client.query('ROLLBACK');
-        resutnStatus = 400;
-        res.send(err.message);
-        res.status(returnStatus).end();
+        returnStatus = 400;
+        res.status(returnStatus).send(err.message);
     } finally {
         client.release();
     }
