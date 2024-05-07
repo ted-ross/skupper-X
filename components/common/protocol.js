@@ -19,15 +19,14 @@
 
 "use strict";
 
-//const Log = require('./log.js').Log;
-
-const OP_HEARTBEAT         = 'HB';
-const OP_SOLICIT_HEARTBEAT = 'SH';
-const OP_GET               = 'GET';
-const OP_CLAIM             = 'CLAIM';
+const VERSION      = 1;
+const OP_HEARTBEAT = 'HB';
+const OP_GET       = 'GET';
+const OP_CLAIM     = 'CLAIM';
 
 exports.Heartbeat = function(fromSite, hashSet, address="") {
     return {
+        version : VERSION,
         op      : OP_HEARTBEAT,
         site    : fromSite,
         hashset : hashSet,
@@ -35,15 +34,9 @@ exports.Heartbeat = function(fromSite, hashSet, address="") {
     };
 }
 
-exports.SolicitHeartbeat = function(fromSite) {
-    return {
-        op   : OP_SOLICIT_HEARTBEAT,
-        site : fromSite,
-    };
-}
-
 exports.GetObject = function(fromSite, objectName) {
     return {
+        version    : VERSION,
         op         : OP_GET,
         site       : fromSite,
         objectname : objectName,
@@ -62,9 +55,10 @@ exports.GetObjectResponseSuccess = function(objectName, hash, data) {
 
 exports.AssertClaim = function(claimId, name) {
     return {
-        op    : OP_CLAIM,
-        claim : claimId,
-        name  : name,
+        version : VERSION,
+        op      : OP_CLAIM,
+        claim   : claimId,
+        name    : name,
     };
 }
 
@@ -85,11 +79,14 @@ exports.ReponseFailure = function(code, description) {
 }
 
 exports.DispatchMessage = function(body, onHeartbeat, onSolicit, onGet, onClaim) {
+    if (body.version != VERSION) {
+        throw Error(`Unsupported protocol version ${body.version}`);
+    }
+
     switch (body.op) {
-    case OP_HEARTBEAT         : onHeartbeat(body.site, body.hashset, body.address);  break;
-    case OP_SOLICIT_HEARTBEAT : onSolicit(body.site);                                break;
-    case OP_GET               : onGet(body.site, body.objectname);                   break;
-    case OP_CLAIM             : onClaim(body.claim, body.name);                      break;
+    case OP_HEARTBEAT : onHeartbeat(body.site, body.hashset, body.address);  break;
+    case OP_GET       : onGet(body.site, body.objectname);                   break;
+    case OP_CLAIM     : onClaim(body.claim, body.name);                      break;
     default:
         throw Error(`Unknown op-code ${body.op}`);
     }

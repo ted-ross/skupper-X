@@ -58,7 +58,7 @@ var activeBackboneSites = {};   // { siteId: { heartbeatTimer: <>, lastPingTime:
 var openLinks = {};             // { backboneId: { conn, apiSender, apiReceiver } }
 var memberCompletions = {};     // { memberId: completion-function }
 
-const timerDelaySeconds = function(floor) {
+const timerDelayMsec = function(floor) {
     return (Math.floor(Math.random() * (HEARTBEAT_WINDOW_SECONDS + 1) + floor)) * 1000;
 }
 
@@ -76,7 +76,7 @@ const sendHeartbeat = function(siteId) {
             amqp.SendMessage(link.apiSender, protocol.Heartbeat('manage', hashSet), {}, site.address);
         }
 
-        site.heartbeatTimer = setTimeout(sendHeartbeat, timerDelaySeconds(HEARTBEAT_PERIOD_SECONDS), siteId);
+        site.heartbeatTimer = setTimeout(sendHeartbeat, timerDelayMsec(HEARTBEAT_PERIOD_SECONDS), siteId);
     } catch (error) {
         Log(`Exception during heartbeat send: ${error.message}`);
     }
@@ -291,30 +291,20 @@ const getAccessCert = async function(siteId, kind) {
     return [hash, data];
 }
 
+//
+// Ingress config-map:  { access-point-id : JSON( { kind : [manage,peer,member,claim], bindhost : <bind-host-string> } )}
+//
 exports.GetBackboneIngresses_TX = async function(client, siteId, initialOnly = false) {
     let data = {};
     const result = await client.query(
-        'SELECT * FROM InteriorSites WHERE Id = $1', [siteId]);
-    if (result.rowCount == 1) {
-        const site = result.rows[0];
-        const apRefs = {
-            manage : site.manageaccess,
-            peer   : site.peeraccess,
-            member : initialOnly ? null : site.memberaccess,
-            claim  : initialOnly ? null : site.claimaccess,
-        };
-
-        for (const [profile, apRef] of Object.entries(apRefs)) {
-            data[profile] = 'false';
-            if (apRef) {
-                const apResult = await client.query('SELECT Lifecycle FROM BackboneAccessPoints WHERE BackboneAccessPoints.Id = $1', [apRef]);
-                if (apResult.rowCount == 1) {
-                    data[profile] = 'true';
-                }
-            }
+        'SELECT Id, Kind, BindHost FROM BackboneAccessPoints WHERE InteriorSite = $1', [siteId]);
+    for (const ap of result.rows) {
+        if (!initialOnly || (ap.kind == 'manage' || ap.kind == 'peer')) {
+            data[ap.id] = JSON.stringify({
+                kind     : ap.kind,
+                bindhost : ap.bindhost ? ap.bindhost : "",
+            });
         }
-    } else {
-        throw (Error(`Unknown site: ${siteId}`));
     }
     return data;
 }
@@ -603,7 +593,7 @@ const onLinkDeleted = async function(backboneId) {
 const accelerateSiteHeartbeat = function(siteId) {
     var site = activeBackboneSites[siteId];
     clearTimeout(site.heartbeatTimer);
-    site.heartbeatTimer = setTimeout(sendHeartbeat, timerDelaySeconds(0), siteId);
+    site.heartbeatTimer = setTimeout(sendHeartbeat, timerDelayMsec(0), siteId);
 }
 
 //================================================================================

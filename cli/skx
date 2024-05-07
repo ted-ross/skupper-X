@@ -376,43 +376,51 @@ def apiquery(method, path, json=None, text=None):
     return result
 
 
-DISPATCH = {   # {object : {verb : ([positional], [options], METHOD, URI, data-format, title, [columns])}}
+def postfile(path, filename):
+    if VERBOSE:
+        print('POST %s' % SCHEME + '://' + URL + path)
+    with open(filename, "r") as infile:
+        filetext = infile.read()
+        print(filename)
+        print(filetext)
+    result = requests.request('POST', SCHEME + '://' + URL + path, data=filetext, headers={'Content-Type':'application/json'})
+    if (result.status_code > 299):
+        print("Error: (%d) %s" % (result.status_code, result.text))
+        exit(1)
+    return result
+
+
+DISPATCH = {   # {object : {verb : ([positional], [options], METHOD, URI, data-format, title, [columns])}
     ##
     ## Backbone
     ##
     'backbone' : {
-        'create' : (['name'], ['multitenant'], 'POST',   '/api/v1alpha2/backbones'),
-        'delete' : (['backboneid'], [],        'DELETE', '/api/v1alpha2/backbone/${backboneid}'),
+        'create' : (['name'], ['multitenant'], 'POST',   '/api/v1alpha2/backbones', 'CreateResult'),
+        'delete' : (['backboneid'], [],        'DELETE', '/api/v1alpha2/backbone/${backboneid}', 'Result'),
         'list'   : ([], [],                    'GET',    '/api/v1alpha2/backbones', 'Table', 'Backbone Networks',
                     ['id', 'name', ('stat', None, 'lifecycle'), 'failure', ('multitenant', 'YN')]),
-        'activate' : (['id'], [],              'PUT',    '/api/v1alpha2/backbone/${id}/activate'),
+        'activate' : (['id'], [],              'PUT',    '/api/v1alpha2/backbone/${id}/activate', 'Result'),
     },
 
     ##
     ## Backbone-Site
     ##
     'site' : {
-        'create' : (['name'], ['backbone'], 'POST',   '/api/v1alpha2/backbone/${backbone}/sites'),
-        'delete' : (['siteid'], [],         'DELETE', '/api/v1alpha2/backbonesite/${siteid}'),
+        'create' : (['name'], ['backbone'], 'POST',   '/api/v1alpha2/backbone/${backbone}/sites', 'CreateResult'),
+        'delete' : (['siteid'], [],         'DELETE', '/api/v1alpha2/backbonesite/${siteid}', 'Result'),
         'list'   : ([],       ['backbone'], 'GET',    '/api/v1alpha2/backbone/${backbone}/sites', 'Table', 'Backbone Sites',
                     ['id', 'name', ('stat', None, 'lifecycle'), 'failure', ('deploy', None, 'deploymentstate'), ('since', None, 'firstactivetime'), ('last', None, 'lastheartbeat')]),
         'deploy' : (['siteid', 'outfile'], ['format'], 'GET', '/api/v1alpha1/backbonesite/${siteid}/${format}', 'File'),
-    },
-
-    ##
-    ## Bootstrapping Site
-    ##
-    'boot-site' : {
-        'ingress' : (['siteid', 'infile'], [], 'POST', '/api/v1alpha1/backbonesite/${siteid}/ingress', 'File'),                   ## TODO - make this work
-        'finish'  : (['siteid'], ['format'],   'GET',  '/api/v1alpha1/backbonesite/${siteid}/links/incoming/${format}', 'File'),
+        'boot-ingress' : (['siteid', 'infile'], [], 'POST', '/api/v1alpha1/backbonesite/${siteid}/ingress', 'SendFile'),
+        'boot-finish'  : (['siteid'], ['format'],   'GET',  '/api/v1alpha1/backbonesite/${siteid}/links/incoming/${format}', 'File'),
     },
 
     ##
     ## Access Point
     ##
     'access-point' : {
-        'create' : (['siteid', 'kind'], ['bindhost'], 'POST',   '/api/v1alpha2/backbonesite/${siteid}/accesspoints'),
-        'delete' : (['apid'],           [],           'DELETE', '/api/v1alpha2/accesspoint/${apid}'),
+        'create' : (['siteid', 'kind'], ['bindhost'], 'POST',   '/api/v1alpha2/backbonesite/${siteid}/accesspoints', 'CreateResult'),
+        'delete' : (['apid'],           [],           'DELETE', '/api/v1alpha2/accesspoint/${apid}', 'Result'),
         'list'   : (['siteid'],         [],           'GET',    '/api/v1alpha2/backbonesite/${siteid}/accesspoints', 'Table', 'Backbone Access Points',
                     ['id', 'name', ('stat', None, 'lifecycle'), 'failure', 'kind', 'bindhost']),
     },
@@ -421,8 +429,8 @@ DISPATCH = {   # {object : {verb : ([positional], [options], METHOD, URI, data-f
     ## Link
     ##
     'link' : {
-        'create' : (['accesspoint', 'connectingsite'], ['cost'], 'POST', '/api/v1alpha2/accesspoint/${accesspoint}/links'),
-        'delete' : (['linkid'], [], 'DELETE', '/api/v1alpha2/backbonelink/${linkid}'),
+        'create' : (['accesspoint', 'connectingsite'], ['cost'], 'POST', '/api/v1alpha2/accesspoint/${accesspoint}/links', 'CreateResult'),
+        'delete' : (['linkid'], [], 'DELETE', '/api/v1alpha2/backbonelink/${linkid}', 'Result'),
         'list'   : ([], ['backbone'], 'GET', '/api/v1alpha2/backbone/${backbone}/links', 'Table', 'Backbone Links',
                     ['id', ('access-point', 'APNAME', 'accesspoint'), ('lSite', 'APSITENAME', 'accesspoint'), ('cSite', 'SITENAME', 'connectinginteriorsite'), ('cost', 'NUM', 'cost')]),
     },
@@ -431,23 +439,23 @@ DISPATCH = {   # {object : {verb : ([positional], [options], METHOD, URI, data-f
     ## VAN
     ##
     'van' : {
-        'create' : (['name'], ['backbone'], 'POST',   '/api/v1alpha1/backbone/${backbone}/vans'),
-        'delete' : (['vanid'], [],          'DELETE', '/api/v1alpha1/van/${vanid}'),
+        'create' : (['name'], ['backbone'], 'POST',   '/api/v1alpha1/backbone/${backbone}/vans', 'CreateResult'),
+        'delete' : (['vanid'], [],          'DELETE', '/api/v1alpha1/van/${vanid}', 'Result'),
         'list'   : ([], [],                 'GET',    '/api/v1alpha1/vans', 'Table', 'Application Networks',
                         ['id', ('backbone', None, 'backbonename'), 'name', ('stat', None, 'lifecycle'), 'failure', ('start', None, 'starttime'), ('end', None, 'endtime')]),
-        'evict'  : (['vanid'], [],          'PUT',    '/api/v1alpha1/van/${vanid}/evict')
+        'evict'  : (['vanid'], [],          'PUT',    '/api/v1alpha1/van/${vanid}/evict', 'Result')
     },
 
     ##
     ## Invitation
     ##
     'invite' : {
-        'create' : (['vanid', 'name', 'claimaccess', 'primaryaccess'], ['interactive'], 'POST', '/api/v1alpha1/van/${vanid}/invitations'),
-        'delete' : (['inviteid'], [], 'DELETE', '/api/v1alpha1/invitation/${inviteid}'),
+        'create' : (['vanid', 'name', 'claimaccess', 'primaryaccess'], ['interactive'], 'POST', '/api/v1alpha1/van/${vanid}/invitations', 'CreateResult'),
+        'delete' : (['inviteid'], [], 'DELETE', '/api/v1alpha1/invitation/${inviteid}', 'Result'),
         'list'   : (['vanid'], [],    'GET',    '/api/v1alpha1/van/${vanid}/invitations', 'Table', 'Application Network Invitations',
                         ['id', 'name', ('stat', None, 'lifecycle'), 'failure', ('limit', 'NUM', 'instancelimit'), ('count', 'NUM', 'instancecount'), ('interactive', 'YN', 'interactive'), ('deadline', None, 'joindeadline')]),
         'deploy' : (['inviteid', 'outfile'], ['format'], 'GET', '/api/v1alpha1/invitation/${inviteid}/${format}', 'File'),
-        'expire' : (['inviteid'], [], 'PUT',    '/api/v1alpha1/invitation/${inviteid}/expire')
+        'expire' : (['inviteid'], [], 'PUT',    '/api/v1alpha1/invitation/${inviteid}/expire', 'Result')
     },
 
     ##
@@ -456,7 +464,7 @@ DISPATCH = {   # {object : {verb : ([positional], [options], METHOD, URI, data-f
     'member' : {
         'list'  : (['vanid'], [], 'GET', '/api/v1alpha1/van/${vanid}/members', 'Table', 'Application Network Members',
                     ['id', 'name', ('stat', None, 'lifecycle'), 'failure', ('joined', None, 'firstactivetime'), ('last', None, 'lastheartbeat'), ('invite', 'INVITENAME', 'invitation')]),
-        'evict' : (['memberid'], [], 'PUT', '/api/v1alpha1/member/${memberid}/evict'),
+        'evict' : (['memberid'], [], 'PUT', '/api/v1alpha1/member/${memberid}/evict', 'Result'),
     },
 
     ##
@@ -496,15 +504,27 @@ def normalize_desc_table(desc):
 
 
 def process(desc, data):
-    method = desc[2]
-    uri, data = substitute(desc[3], data)
-    result = apiquery(method, uri, data)
+    if len(desc) > 4 and desc[4] == 'SendFile':
+        filename = data.get('infile', None)
+        if filename == None:
+            print('Missing argument: infile')
+            exit(1)
+        uri, data = substitute(desc[3], data)
+        result = postfile(uri, filename)
+    else:
+        method = desc[2]
+        uri, data = substitute(desc[3], data)
+        result = apiquery(method, uri, data)
 
     if len(desc) > 4:
         style = desc[4]
 
         if style == 'Text':
             print(result.text)
+        elif style == 'Result':
+            print('Result code: %d' % result.status_code)
+        elif style == 'CreateResult':
+            print('Id of created object: %s' % result.json()['id'])
         elif style == 'File':
             with open(data['outfile'], "w") as outfile:
                 outfile.write(result.text)

@@ -103,34 +103,34 @@ const sync_listeners = async function(router_listeners, config_listeners_in) {
         //
         // Get a list of the injected SslProfiles so we can avoid creating listeners that reference a nonexistent profile.
         //
-        let sslProfiles = [];
+        let sslProfileNames = [];
         const profileList = await router.ListSslProfiles();
         for (const profile of profileList) {
-            sslProfiles.push(profile.name);
+            sslProfileNames.push(profile.name);
         }
 
         //
-        // Decode the JSON-strings in the config
+        // Build a map of listeners that have ssl-profiles and their JSON-decoded contents
         //
-        var config_listeners = [];
+        var config_listeners = {};
         for (const [key, value] of Object.entries(config_listeners_in)) {
-            if (value == 'true' && sslProfiles.indexOf(`${key}-server`) >= 0) {
-                config_listeners.push(key);
+            if (sslProfileNames.indexOf(`${key}-server`) >= 0) {
+                config_listeners[key] = JSON.parse(value);
             }
         }
 
-        for (const key of config_listeners) {
-            const lname = 'listener_' + key;
+        for (const [key, value] of Object.entries(config_listeners)) {
+            const lname = `listener_${value.kind}_${key}`;
             if (lname in listener_map) {
                 delete listener_map[lname];
             } else {
                 Log(`Creating router listener ${lname}`);
-                var host = '';  // Any address v4 or v6
+                var host = value.bindhost;
                 var port;
                 var role;
                 var profile;
                 var strip = 'both';
-                switch (key) {
+                switch (value.kind) {
                 case 'manage':
                     port    = MANAGE_PORT;
                     role    = 'normal';
@@ -158,7 +158,7 @@ const sync_listeners = async function(router_listeners, config_listeners_in) {
                     break;
 
                 default:
-                    throw(Error(`Unknown listener type ${_lnam}`));
+                    throw(Error(`Unknown listener type ${value.kind}`));
                 }
 
                 await router.CreateListener(lname, {

@@ -147,10 +147,10 @@ const sync_kube_service = async function() {
     }
 }
 
-const sync_route = async function(name, socket) {
+const sync_route = async function(name, kind) {
     let routes  = await kube.GetRoutes();
     let found   = false;
-    let desired = true;
+    let desired = false;
     routes.forEach(route => {
         if (route.metadata.name == name) {
             if (!route.metadata.annotations || route.metadata.annotations['skupper.io/skx-controlled'] != 'true') {
@@ -162,15 +162,18 @@ const sync_route = async function(name, socket) {
 
     try {
         const incoming = await kube.LoadConfigmap(INCOMING_CONFIG_MAP_NAME);
-        if (!incoming.data[socket] || incoming.data[socket] != 'true') {
-            desired = false;
+        for (const [key, value_json] of Object.entries(incoming.data)) {
+            const value = JSON.parse(value_json);
+            if (value.kind == kind) {
+                desired = true;
+            }
         }
     } catch (error) {
         desired = false;
     }
 
     if (desired && !found) {
-        let route = backbone_route(name, socket);
+        let route = backbone_route(name, kind);
         await kube.ApplyObject(route);
     }
 
