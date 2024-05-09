@@ -27,7 +27,7 @@ const kube         = require('./common/kube.js');
 const amqp         = require('./common/amqp.js');
 const apiserver    = require('./sc-apiserver.js');
 const siteSync     = require('./site-sync.js');
-const syncBackbone = require('./sync-backbone.js');
+const syncBackboneKube = require('./sync-backbone-kube.js');
 const syncMember   = require('./sync-member.js');
 const router       = require('./common/router.js');
 const links        = require('./links.js');
@@ -77,7 +77,7 @@ exports.Main = async function() {
             await ingress.Start(SITE_ID);
             //await siteSync.Start(BACKBONE_MODE, SITE_ID, conn);
             if (BACKBONE_MODE) {
-                await syncBackbone.Start(SITE_ID, conn);
+                await syncBackboneKube.Start(SITE_ID, conn);
             } else {
                 await syncMember.Start(SITE_ID);
             }

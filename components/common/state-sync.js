@@ -160,9 +160,9 @@ exports.DeleteConnection = async function(backboneId) {
 //     _id      : The ID of the local controller
 //     _address : The AMQP address on which this node receives heartbeats.  If undefined, a dynamic address will be used.
 //   Callbacks:
-//     _onNewPeer(peerId, peerClass) => LocalStateHash for the peer
+//     _onNewPeer(peerId, peerClass) => [LocalStateHash, RemoteStateHash] for the peer
 //     _onPeerLost(peerId)
-//     _onStateChange(peerId, stateKey, hash, data)
+//     _onStateChange(peerId, stateKey, hash, data)   If hash == null, stateKey should be deleted, else updated
 //     _onStateRequest(peerId, stateKey) => [hash, data]
 //
 exports.Start = async function(_class, _id, _address, _onNewPeer, _onPeerLost, _onStateChange, _onStateRequest) {
