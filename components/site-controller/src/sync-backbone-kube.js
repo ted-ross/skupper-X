@@ -33,11 +33,10 @@
 //   - Access Points
 //
 
-const Log      = require('./common/log.js').Log;
-const common   = require('./common/common.js');
-const kube     = require('./common/kube.js');
-const ingress  = require('./ingress.js');
-const sync     = require('./common/state-sync.js');
+const Log    = require('./common/log.js').Log;
+const common = require('./common/common.js');
+const kube   = require('./common/kube.js');
+const sync   = require('./common/state-sync.js');
 
 var connectedToPeer = false;
 var peerId;

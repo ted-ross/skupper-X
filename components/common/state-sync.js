@@ -39,9 +39,11 @@ exports.CLASS_MANAGEMENT = 'management';
 exports.CLASS_BACKBONE   = 'backbone';
 exports.CLASS_MEMBER     = 'member';
 
+const HEARTBEAT_PERIOD_SECONDS = 10;  // TODO - make this much longer
+
 var localClass;
 var localId;
-var address;
+var localAddress;
 var addressToUse;
 var onNewPeer;
 var onPeerLost;
@@ -62,13 +64,97 @@ var onStateRequest;
 //   RemoteState   - The remote state that is intended to be synchronized FROM a peer.
 //
 
-var connections    = {};  // {connectionKey: conn-record}
-var peers          = {};  // {peerId: {peerClass: <class>, localHashState: {stateKey: hash}}}
+var extraTargets = [];
+var connections  = {};  // {connectionKey: conn-record}
+var peers        = {};  // {peerId: {connectionKey: <key>, peerClass: <class>, localHashState: {stateKey: hash}}}
 
-const onHeartbeat = async function() {
+
+const sendHeartbeat = function(peerId) {
+    let peer = peers[peerId];
+    if (!!peer) {
+        const sender = connections[peer.connectionKey].apiSender;
+        amqp.SendMessage(sender, protocol.Heartbeat(localId, localClass, sender.localState, peer.address));
+        peer.hbTimer = setTimeout(sendHeartbeat, HEARTBEAT_PERIOD_SECONDS * 1000, peerId);
+    }
+}
+
+const onHeartbeat = async function(connectionKey, peerClass, peerId, hashset, address) {
+    var localState;
+    var remoteState;
+
+    //
+    // If this heartbeat comes from a peer we are not tracking, consider this a new-peer.
+    //
+    if (!peers[peerId]) {
+        [localState, remoteState] = await onNewPeer(peerId, peerClass);
+        peers[peerId] = {
+            connectionKey : connectionKey,
+            peerClass     : peerClass,
+            address       : address,
+            localState    : localState,
+            remoteState   : remoteState,
+        };
+
+        //
+        // Send a heartbeat back to the newly discovered peer with the local hash-state.
+        //
+        sendHeartbeat(peerId);
+    }
+
+    //
+    // If the hashset is not present in the heartbeat, there is no synchronization to be done.
+    //
+    if (!!hashset) {
+        //
+        // Reconcile the existing remote state against the advertized remote state.
+        //
+        let toRequestStateKeys = [];
+        let toDeleteStateKeys = {};
+        for (const [key, hash] of Object.entries(peers[peerId].remoteState)) {
+            toDeleteStateKeys[key] = true;
+        }
+        for (const [key, hash] of Object.entries(hashset)) {
+            toDeleteStateKeys[key] = false;
+            if (hash != peers[peerId].remoteState[key]) {
+                toRequestStateKeys.push(key);
+            }
+        }
+
+        //
+        // Delete the no-longer-relevant states
+        //
+        for (const [key, value] of Object.entries(toDeleteStateKeys)) {
+            try {
+                if (value) {
+                    await onStateChange(peerId, key, null, null);
+                }
+            } catch (error) {
+                Log(`Exception in state reconciliation for deletion of ${key}: ${error.message}`);
+            }
+        }
+
+        //
+        // Request updates from the peer for changed hashes
+        //
+        const sender = connections[connectionKey].apiSender;
+        for (const key of toRequestStateKeys) {
+            try {
+                const [ap, body] = await amqp.Request(sender, protocol.GetState(localId, key));
+                if (body.statusCode == 200) {
+                    await onStateChange(peerId, key, body.hash, body.data);
+                    peers[peerId].remoteState[key] = body.hash;
+                } else {
+                    throw (Error(`Protocol error on GetState: (${body.statusCode}) ${body.statusDescription}`));
+                }
+            } catch (error) {
+                Log(`Exception in state reconciliation for ${key}: ${error.message}`);
+            }
+        }
+    }
 }
 
 const onSendable = function(connectionKey) {
+    // TODO - Send a null-hash heartbeat to the added target addresses
 }
 
 const onAddress = function(connectionKey, address) {
@@ -78,12 +164,14 @@ const onAddress = function(connectionKey, address) {
 const onMessage = function(connectionKey, application_properties, body, onReply) {
     try {
         protocol.DispatchMessage(body,
-            async (site, hashset, address) => { // onHeartbeat
-                await onHeartbeat(connectionKey, site, hashset, address);
+            async (sclass, site, hashset, address) => { // onHeartbeat
+                await onHeartbeat(connectionKey, sclass, site, hashset, address);
             },
-            async (site, objectname) => {       // onGet
+            async (site, statekey) => {                 // onGet
+                const [hash, data] = await onStateRequest(site, statekey);
+                onReply({}, protocol.GetStateResponseSuccess(statekey, hash, data));
             },
-            async (claimId, name) => {          // onClaim
+            async (claimId, name) => {                  // onClaim
             }
         );
     } catch (error) {
@@ -105,6 +193,7 @@ exports.UpdateLocalState = async function(peerId, stateKey, stateHash) {
 // by the management controller, which automatically detects sites.
 //
 exports.AddTarget = async function(targetAddress) {
+    extraTargets.push(targetAddress);
 }
 
 //
@@ -121,7 +210,7 @@ exports.AddConnection = async function(backboneId, conn) {
     // throw an error.  This is an unintended use of this module.  If there is a dynamic local address, there shall
     // be no more than one connection in place at a time.
     //
-    if (!!backboneId && !address) {
+    if (!!backboneId && !localAddress) {
         const error = 'Illegal adding of a backbone connection when no local address has been established';
         Log(`state-sync.AddConnection: ${error}`);
         throw(Error(error));
@@ -133,8 +222,9 @@ exports.AddConnection = async function(backboneId, conn) {
         apiReceiver : null,
     };
 
-    if (!!address) {
-        connRecord.apiReceiver = amqp.OpenReceiver(conn, address, onMessage, connectionKey);
+    if (!!localAddress) {
+        connRecord.apiReceiver = amqp.OpenReceiver(conn, localAddress, onMessage, connectionKey);
+        addressToUse = localAddress;
     } else {
         connRecord.apiReceiver = amqp.OpenDynamicReceiver(conn, onMessage, onAddress, connectionKey);
     }
@@ -169,7 +259,7 @@ exports.Start = async function(_class, _id, _address, _onNewPeer, _onPeerLost, _
     Log(`State-Sync Module starting: class=${_class}, id=${_id}, address=${_address || '<dynamic>'}`);
     localClass     = _class;
     localId        = _id;
-    address        = _address;
+    localAddress   = _address;
     onNewPeer      = _onNewPeer;
     onPeerLost     = _onPeerLost;
     onStateChange  = _onStateChange;

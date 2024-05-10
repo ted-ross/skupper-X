@@ -24,30 +24,36 @@ const OP_HEARTBEAT = 'HB';
 const OP_GET       = 'GET';
 const OP_CLAIM     = 'CLAIM';
 
-exports.Heartbeat = function(fromSite, hashSet, address="") {
-    return {
+exports.Heartbeat = function(fromSite, fromClass, hashSet, address="") {
+    let body = {
         version : VERSION,
         op      : OP_HEARTBEAT,
         site    : fromSite,
-        hashset : hashSet,
+        sclass  : fromClass,
         address : address,
     };
+
+    if (!!hashSet) {
+        body.hashset = hashSet;
+    }
+
+    return body;
 }
 
-exports.GetObject = function(fromSite, objectName) {
+exports.GetState = function(fromSite, stateKey) {
     return {
-        version    : VERSION,
-        op         : OP_GET,
-        site       : fromSite,
-        objectname : objectName,
+        version  : VERSION,
+        op       : OP_GET,
+        site     : fromSite,
+        statekey : stateKey,
     };
 }
 
-exports.GetObjectResponseSuccess = function(objectName, hash, data) {
+exports.GetStateResponseSuccess = function(stateKey, hash, data) {
     return {
         statusCode        : 200,
         statusDescription : 'OK',
-        objectName        : objectName,
+        statekey          : stateKey,
         hash              : hash,
         data              : data,
     };
@@ -84,9 +90,9 @@ exports.DispatchMessage = function(body, onHeartbeat, onSolicit, onGet, onClaim)
     }
 
     switch (body.op) {
-    case OP_HEARTBEAT : onHeartbeat(body.site, body.hashset, body.address);  break;
-    case OP_GET       : onGet(body.site, body.objectname);                   break;
-    case OP_CLAIM     : onClaim(body.claim, body.name);                      break;
+    case OP_HEARTBEAT : onHeartbeat(body.sclass, body.site, body.hashset, body.address);  break;
+    case OP_GET       : onGet(body.site, body.statekey);  break;
+    case OP_CLAIM     : onClaim(body.claim, body.name);     break;
     default:
         throw Error(`Unknown op-code ${body.op}`);
     }
