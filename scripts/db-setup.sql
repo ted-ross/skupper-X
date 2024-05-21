@@ -195,7 +195,7 @@ CREATE TABLE BackboneAccessPoints (
     Port text,
 
     Kind AccessPointType,
-    BindHost text default '',
+    BindHost text DEFAULT '',
     InteriorSite UUID REFERENCES InteriorSites ON DELETE CASCADE,
     GlobalAccess UUID REFERENCES BackboneAccessPoints
 );

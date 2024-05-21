@@ -159,6 +159,10 @@ const onStateRequest = async function(peerId, stateKey) {
     return [null, null];
 }
 
+const onPing = async function(siteId) {
+    // This function intentionally left blank
+}
+
 const onConfigMapWatch = async function(action, obj) {
     if (connectedToPeer) {
         const stateKey  = obj.metadata.annotations['skupper.io/skx-state-key'];
@@ -176,7 +180,7 @@ const onConfigMapWatch = async function(action, obj) {
 
 exports.Start = async function(siteId, conn) {
     kube.WatchConfigMaps(onConfigMapWatch);
-    await sync.Start(sync.CLASS_BACKBONE, siteId, undefined, onNewPeer, onPeerLost, onStateChange, onStateRequest);
+    await sync.Start(sync.CLASS_BACKBONE, siteId, undefined, onNewPeer, onPeerLost, onStateChange, onStateRequest, onPing);
     await sync.AddTarget(common.API_CONTROLLER_ADDRESS);
     await sync.AddConnection(undefined, conn);
 }

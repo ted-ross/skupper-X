@@ -49,14 +49,15 @@ var onNewPeer;
 var onPeerLost;
 var onStateChange;
 var onStateRequest;
+var onPing;
 
 //
 // Concepts:
 //
 //   Class         - Describes the peer endpoint as a management-controller, a backbone-controller, or a member-controller
-//   PeerId        - Either 'mc' for the management-controller or the UUID identifier of the site
+//   PeerId        - Either 'mc' for the management-controller or the UUID identifier of the site (backbone or member)
 //   ConnectionKey - Either 'net' for the site's network or the backbone-id (UUID).  Identifies a connection to a network
-//   State         - A unit of configuration that will be synchronized between peers.
+//   State         - A unit of configuration that will be synchronized between peers in one direction.
 //   StateKey      - A string identifier that uniquely identifies a unit of state.
 //   StateHash     - A hash value computed on the content of a unit of state.
 //   HashState     - A map {StateKey : StateHash} that describes all of the state being synchronized to or from a peer.
@@ -66,7 +67,7 @@ var onStateRequest;
 
 var extraTargets = [];
 var connections  = {};  // {connectionKey: conn-record}
-var peers        = {};  // {peerId: {connectionKey: <key>, peerClass: <class>, localHashState: {stateKey: hash}}}
+var peers        = {};  // {peerId: {connectionKey: <key>, peerClass: <class>, localState: {stateKey: hash}, remoteState: {stateKey: hash}}}
 
 
 const sendHeartbeat = function(peerId) {
@@ -74,7 +75,7 @@ const sendHeartbeat = function(peerId) {
     if (!!peer) {
         const sender = connections[peer.connectionKey].apiSender;
         amqp.SendMessage(sender, protocol.Heartbeat(localId, localClass, sender.localState, peer.address));
-        peer.hbTimer = setTimeout(sendHeartbeat, HEARTBEAT_PERIOD_SECONDS * 1000, peerId);
+        peers[peerId].hbTimer = setTimeout(sendHeartbeat, HEARTBEAT_PERIOD_SECONDS * 1000, peerId);
     }
 }
 
@@ -93,6 +94,7 @@ const onHeartbeat = async function(connectionKey, peerClass, peerId, hashset, ad
             address       : address,
             localState    : localState,
             remoteState   : remoteState,
+            hbTimer       : null,
         };
 
         //
@@ -183,6 +185,17 @@ const onMessage = function(connectionKey, application_properties, body, onReply)
 // Notify a peer that state being synchronized to it has changed.
 //
 exports.UpdateLocalState = async function(peerId, stateKey, stateHash) {
+    if (!peers[peerId]) {
+        Log(`UpdateLocalState on nonexisting peerId: ${peerId}`);
+    } else {
+        if (stateHash) {
+            peers[peerId].localState[stateKey] = stateHash;
+        } else {
+            delete peers[peerId].localState[stateKey];
+        }
+
+        sendHeartbeat(peerId);
+    }
 }
 
 //
@@ -254,8 +267,9 @@ exports.DeleteConnection = async function(backboneId) {
 //     _onPeerLost(peerId)
 //     _onStateChange(peerId, stateKey, hash, data)   If hash == null, stateKey should be deleted, else updated
 //     _onStateRequest(peerId, stateKey) => [hash, data]
+//     _onPing(peerId)  Invoked whenever we hear from the peer
 //
-exports.Start = async function(_class, _id, _address, _onNewPeer, _onPeerLost, _onStateChange, _onStateRequest) {
+exports.Start = async function(_class, _id, _address, _onNewPeer, _onPeerLost, _onStateChange, _onStateRequest, _onPing) {
     Log(`State-Sync Module starting: class=${_class}, id=${_id}, address=${_address || '<dynamic>'}`);
     localClass     = _class;
     localId        = _id;
@@ -264,4 +278,5 @@ exports.Start = async function(_class, _id, _address, _onNewPeer, _onPeerLost, _
     onPeerLost     = _onPeerLost;
     onStateChange  = _onStateChange;
     onStateRequest = _onStateRequest;
+    onPing         = _onPing;
 }
