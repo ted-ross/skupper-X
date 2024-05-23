@@ -222,7 +222,7 @@ const createAccessPoint = async function(sid, req, res) {
             //
             // Alert the sync module that an access point changed on a site
             //
-            await sync.SiteIngressChanged(sid);
+            await sync.SiteIngressChanged(sid, apId);
 
             //
             // Alert the deployment-state module if a change was made to the "manage" access
@@ -312,7 +312,7 @@ const createBackboneLink = async function(apid, req, res) {
             //
             try {
                 await deployment.LinkAddedOrDeleted(norm.connectingsite, accessPoint.siteId);
-                await sync.LinkChanged(norm.connectingsite);
+                await sync.LinkChanged(norm.connectingsite, linkId);
             } catch (error) {
                 Log(`Exception createBackboneLink module notifications: ${error.message}`);
                 Log(error.stack);
@@ -369,7 +369,7 @@ const updateBackboneLink = async function(lid, req, res) {
             // Alert the sync module that a backbone link was modified for the connecting site
             //
             if (linkChanged) {
-                await sync.LinkChanged(linkChanged);
+                await sync.LinkChanged(linkChanged, lid);
             }
         } catch (error) {
             await client.query("ROLLBACK");
@@ -564,7 +564,7 @@ const deleteBackboneLink = async function(lid, res) {
         if (connectingSite) {
             try {
                 await deployment.LinkAddedOrDeleted(connectingSite, accessPoint);
-                await sync.LinkChanged(connectingSite);
+                await sync.LinkChanged(connectingSite, lid);
             } catch (error) {
                 Log(`Exception deleteBackboneLink module notifications: ${error.message}`);
                 Log(error.stack);

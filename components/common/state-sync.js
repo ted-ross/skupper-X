@@ -40,6 +40,7 @@ exports.CLASS_BACKBONE   = 'backbone';
 exports.CLASS_MEMBER     = 'member';
 
 const HEARTBEAT_PERIOD_SECONDS = 10;  // TODO - make this much longer
+const HEARTBEAT_WINDOW_SECONDS = 5;
 
 var localClass;
 var localId;
@@ -69,13 +70,19 @@ var extraTargets = [];
 var connections  = {};  // {connectionKey: conn-record}
 var peers        = {};  // {peerId: {connectionKey: <key>, peerClass: <class>, localState: {stateKey: hash}, remoteState: {stateKey: hash}}}
 
+const timerDelayMsec = function(floorSec) {
+    return (Math.floor(Math.random() * (HEARTBEAT_WINDOW_SECONDS + 1) + floorSec)) * 1000;
+}
 
 const sendHeartbeat = function(peerId) {
     let peer = peers[peerId];
     if (!!peer) {
+        if (peer.hbTimer) {
+            clearTimeout(peer.hbTimer);
+        }
         const sender = connections[peer.connectionKey].apiSender;
         amqp.SendMessage(sender, protocol.Heartbeat(localId, localClass, sender.localState, peer.address));
-        peers[peerId].hbTimer = setTimeout(sendHeartbeat, HEARTBEAT_PERIOD_SECONDS * 1000, peerId);
+        peers[peerId].hbTimer = setTimeout(sendHeartbeat, timerDelayMsec(HEARTBEAT_PERIOD_SECONDS), peerId);
     }
 }
 
@@ -193,7 +200,6 @@ exports.UpdateLocalState = async function(peerId, stateKey, stateHash) {
         } else {
             delete peers[peerId].localState[stateKey];
         }
-
         sendHeartbeat(peerId);
     }
 }

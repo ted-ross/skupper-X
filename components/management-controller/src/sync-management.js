@@ -96,7 +96,7 @@ const onNewBackbone = async function(peerId) {
                 bindhost : accessPoint.bindhost,
             };
             if (accessPoint.lifecycle == 'ready') {
-                ap.tls = accessPoint.certificate;
+                ap.tls = `tls-server-${accessPoint.certificate}`;
                 const tlsResult = await client.query("SELECT ObjectName FROM TlsCertificates WHERE Id = $1", [accessPoint.certificate]);
                 if (tlsResult.rowCount != 1) {
                     throw Error(`Access point in ready state does not have a TlsCertificate - ${accessPoint.id}`);
@@ -428,7 +428,142 @@ const onLinkDeleted = async function(backboneId) {
 //=========================================================================================================================
 // Database change notifications that affect local state
 //=========================================================================================================================
+exports.SiteCertificateChanged = async function(certId) {
+    //
+    // Update the tls-client-<id> hash for the one affected site
+    //
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT InteriorSites.Id, TlsCertificates.ObjectName FROM InteriorSites " +
+                                          "JOIN TlsCertificates ON TlsCertificates.Id = InteriorSites.Certificate " +
+                                          "WHERE Certificate = $1", [certId]);
+        if (result.rowCount == 1) {
+            const row = result.rows[0];
+            if (peers[row.id]) {
+                const hash = await hashOfSecret(row.objectname);
+                await sync.UpdateLocalState(row.id, `tls-client-${certId}`, hash);
+            }
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in SiteCertificateChanged: ${error.message}`);
+        await client.query("ROLLBACK");
+    } finally {
+        client.release();
+    }
+}
 
+exports.AccessCertificateChanged = async function(certId) {
+    //
+    // Update the tls-server-<id> hashes for the one affected site
+    //
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT InteriorSites.Id, TlsCertificates.ObjectName FROM BackboneAccessPoints " +
+                                          "JOIN InteriorSites ON InteriorSites.id = InteriorSite " +
+                                          "JOIN TlsCertificates ON TlsCertificates.Id = Certificate " +
+                                          "WHERE Certificate = $1", [certId]);
+        if (result.rowCount == 1) {
+            const row = result.rows[0];
+            if (peers[row.id]) {
+                const hash = await hashOfSecret(row.objectname);
+                await sync.UpdateLocalState(row.id, `tls-server-${certId}`, hash);
+            }
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in AccessCertificateChanged: ${error.message}`);
+        await client.query("ROLLBACK");
+    } finally {
+        client.release();
+    }
+}
+
+exports.SiteIngressChanged = async function(siteId, accessPointId) {
+    //
+    // Update the access-<id> hash for the one affected site
+    //
+    if (peers[siteId]) {
+        const client = await db.ClientFromPool();
+        try {
+            await client.query("BEGIN");
+            const result = await client.query("SELECT Kind, BindHost, Certificate, Lifecycle FROM BackboneAccessPoints WHERE Id = $1", [accessPointId]);
+            if (result.rowCount == 1) {
+                const row = result.rows[0];
+                var ap = {
+                    kind     : row.kind,
+                    bindhost : row.bindhost,
+                };
+                if (row.lifecycle == 'ready') {
+                    ap.tls = `tls-server-${row.certificate}`;
+                }
+                const hash = hashOfData(ap);
+                await sync.UpdateLocalState(siteId, `access-${accessPointId}`, hash);
+            }
+            await client.query("COMMIT");
+        } catch (error) {
+            Log(`Exception in SiteIngressChanged: ${error.message}`);
+            await client.query("ROLLBACK");
+        } finally {
+            client.release();
+        }
+    }
+}
+
+exports.LinkChanged = async function(connectingSiteId, linkId) {
+    //
+    // Update the link-<id> hash for the one affected connecting site
+    //
+    if (peers[connectingSiteId]) {
+        try {
+            let hash = null;
+            await client.query("BEGIN");
+            const result = await client.query("SELECT Cost, BackboneAccessPoints.Hostname, BackboneAccessPoints.Port FROM InterRouterLinks " +
+                                              "JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = AccessPoint " +
+                                              "WHERE Id = $1", [linkId]);
+            if (result.rowCount == 1) {
+                const row = result.rows[0];
+                var link = {
+                    host : row.hostname,
+                    port : row.port,
+                    cost : row.cost,
+                };
+                hash = hashOfData(link);
+            }
+            await sync.UpdateLocalState(connectingSiteId, `link-${linkId}`, hash);
+            await client.query("COMMIT");
+        } catch (error) {
+            Log(`Exception in SiteIngressChanged: ${error.message}`);
+            await client.query("ROLLBACK");
+        } finally {
+            client.release();
+        }
+    }
+}
+
+exports.NewIngressAvailable = async function(siteId) {
+    //
+    // Update the links/outgoing hash for each site that connects to the indicated site
+    //
+    const client = await db.ClientFromPool();
+    try {
+        const result = await client.query("SELECT ConnectingInteriorSite FROM InterRouterLinks WHERE ListeningInteriorSite = $1", [siteId]);
+        for (const row of result.rows) {
+            const connectingSiteId = row.id;
+            if (activeBackboneSites[connectingSiteId]) {
+                const [hash, data] = await getLinksOutgoing(connectingSiteId);
+                activeBackboneSites[connectingSiteId].bbHashSet[backboneHashKeys['links/outgoing']] = hash;
+                accelerateSiteHeartbeat(connectingSiteId);
+            }
+        }
+    } catch (error) {
+        Log(`Exception in NewIngressAvailable: ${error.message}`);
+    } finally {
+        client.release();
+    }
+}
 
 exports.Start = async function() {
     await sync.Start(sync.CLASS_MANAGEMENT, 'mc', common.API_CONTROLLER_ADDRESS, onNewPeer, onPeerLost, onStateChange, onStateRequest, onPing);
