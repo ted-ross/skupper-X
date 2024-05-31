@@ -28,6 +28,7 @@ const yaml       = require('js-yaml');
 const crypto     = require('crypto');
 const db         = require('./db.js');
 const siteTemplates = require('./site-templates.js');
+const crdTemplates  = require('./crd-templates.js');
 const kube       = require('./common/kube.js');
 const Log        = require('./common/log.js').Log;
 const sync       = require('./manage-sync.js');
@@ -157,6 +158,64 @@ const fetchBackboneSiteKube = async function (siteId, res) {
 
             const incoming = await sync.GetBackboneIngresses_TX(client, siteId, true);
             text += "---\n" + link_config_map_yaml('skupperx-links-incoming', incoming)
+
+            res.status(returnStatus).send(text);
+        } else {
+            throw Error('Site secret not found');
+        }
+        await client.query('COMMIT');
+    } catch (err) {
+        await client.query('ROLLBACK');
+        returnStatus = 400;
+        res.status(returnStatus).send(err.message);
+    } finally {
+        client.release();
+    }
+
+    return returnStatus;
+}
+
+const fetchBackboneSiteCrd = async function (siteId, res) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query('BEGIN');
+        const result = await client.query(
+            "SELECT Name, DeploymentState, Certificate, TlsCertificates.ObjectName FROM InteriorSites " +
+            "JOIN TlsCertificates ON Certificate = TlsCertificates.Id WHERE Interiorsites.Id = $1", [siteId]);
+        if (result.rowCount == 1) {
+            const site = result.rows[0];
+            if (site.deploymentstate == 'deployed') {
+                throw(Error("Not permitted, site already deployed"));
+            }
+            if (site.deploymentstate == 'not-ready') {
+                throw(Error("Not permitted, site not ready for deployment"));
+            }
+            const secret = await kube.LoadSecret(site.objectname);
+            let text = '';
+            text += siteTemplates.SecretYaml(secret, `tls-client-${site.certificate}`, false);
+            text += "---\n" + yaml.dump(crdTemplates.BackboneSite(site.name));
+
+            //
+            // Generate CRs for router access points
+            //
+            const accessResult = await client.query(
+                "SELECT Id, Lifecycle, Certificate, Kind, BindHost FROM BackboneAccessPoints " +
+                "WHERE InteriorSite = $1", [site.id]
+            );
+            for (const accessPoint of accessResult.rows) {
+                if (accessPoint.lifecycle == 'ready') {
+                    const tlsResult = await client.query("SELECT Id, ObjectName FROM TlsCertificates WHERE Id = $1", [accessPoint.certificate]);
+                    if (tlsResult.rowCount == 1) {
+                        const accessSecret = await kube.LoadSecret(tlsResult.rows[0].objectname);
+                        const tlsName = `tls-server-${tlsResult.rows[0].id}`;
+                        text += "---\n" + siteTemplates.SecretYaml(accessSecret, tlsName, false);
+                        text += "---\n" + yaml.dump(crdTemplates.RouterAccess(accessPoint, tlsName));
+                    } else {
+                        throw(Error(`Unexpected failure to find a TlsCertificate for AccessPoint ${accessPoint.id}`));
+                    }
+                }
+            }
 
             res.status(returnStatus).send(text);
         } else {
@@ -348,6 +407,10 @@ exports.Start = async function() {
 
     app.get(API_PREFIX + 'backbonesite/:bsid/kube', async (req, res) => {
         apiLog(req, await fetchBackboneSiteKube(req.params.bsid, res));
+    });
+
+    app.get(API_PREFIX + 'backbonesite/:bsid/crd', async (req, res) => {
+        apiLog(req, await fetchBackboneSiteCrd(req.params.bsid, res));
     });
 
     app.get(API_PREFIX + 'backbonesite/:bsid/links/incoming/kube', async (req, res) => {

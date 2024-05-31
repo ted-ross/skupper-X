@@ -19,4 +19,17 @@
 
 "use strict";
 
+//
+// AMQP addresses
+//
 exports.API_CONTROLLER_ADDRESS = 'skx/sync/mgmtcontroller';
+
+//
+// Kubernetes annotation keys
+//
+exports.META_ANNOTATION_SKUPPERX_CONTROLLED = 'skupper.io/skupperx-controlled';
+
+//
+// Skupper CRD constants
+//
+exports.CRD_API_VERSION = 'skupper.io/v1alpha1';
