@@ -279,6 +279,8 @@ spec:
           value: ${bsid}
         - name: SKX_BACKBONE
           value: "${backboneMode ? 'YES' : 'NO'}"
+        - name: NODE_ENV
+          value: production
         ports:
         - containerPort: 8086
           name: siteapi

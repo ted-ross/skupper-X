@@ -62,8 +62,9 @@ const createBackbone = async function(req, res) {
     return returnStatus;
 }
 
-const createBackboneSite = async function(bid, req, res) {
+const createBackboneSite = async function(req, res) {
     var returnStatus;
+    const bid = req.params.bid;
     const form = new formidable.IncomingForm();
     try {
         if (!util.IsValidUuid(bid)) {
@@ -114,8 +115,9 @@ const createBackboneSite = async function(bid, req, res) {
     return returnStatus;
 }
 
-const updateBackboneSite = async function(sid, req, res) {
+const updateBackboneSite = async function(req, res) {
     var returnStatus = 200;
+    const sid = req.params.sid;
     const form = new formidable.IncomingForm();
     try {
         if (!util.IsValidUuid(sid)) {
@@ -171,8 +173,9 @@ const updateBackboneSite = async function(sid, req, res) {
     return returnStatus;
 }
 
-const createAccessPoint = async function(sid, req, res) {
+const createAccessPoint = async function(req, res) {
     var returnStatus;
+    const sid = req.params.sid;
     const form = new formidable.IncomingForm();
     try {
         if (!util.IsValidUuid(sid)) {
@@ -245,8 +248,9 @@ const createAccessPoint = async function(sid, req, res) {
     return returnStatus;
 }
 
-const createBackboneLink = async function(apid, req, res) {
+const createBackboneLink = async function(req, res) {
     var returnStatus;
+    const apid = req.params.apid;
     const form = new formidable.IncomingForm();
     try {
         if (!util.IsValidUuid(apid)) {
@@ -332,8 +336,9 @@ const createBackboneLink = async function(apid, req, res) {
     return returnStatus;
 }
 
-const updateBackboneLink = async function(lid, req, res) {
+const updateBackboneLink = async function(req, res) {
     var returnStatus = 204;
+    const lid = req.params.lid;
     const form = new formidable.IncomingForm();
     try {
         if (!util.IsValidUuid(lid)) {
@@ -386,8 +391,9 @@ const updateBackboneLink = async function(lid, req, res) {
     return returnStatus;
 }
 
-const activateBackbone = async function(res, bid) {
+const activateBackbone = async function(req, res) {
     var returnStatus = 200;
+    const bid = req.params.bid;
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
@@ -409,8 +415,9 @@ const activateBackbone = async function(res, bid) {
     return returnStatus;
 }
 
-const deleteBackbone = async function(res, bid) {
+const deleteBackbone = async function(req, res) {
     var returnStatus = 204;
+    const bid = req.params.bid;
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
@@ -447,8 +454,9 @@ const deleteBackbone = async function(res, bid) {
     return returnStatus;
 }
 
-const deleteBackboneSite = async function(res, sid) {
+const deleteBackboneSite = async function(req, res) {
     var returnStatus = 204;
+    const sid = req.params.sid;
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
@@ -502,8 +510,9 @@ const deleteBackboneSite = async function(res, sid) {
     return returnStatus;
 }
 
-const deleteAccessPoint = async function(apid, res) {
+const deleteAccessPoint = async function(req, res) {
     var returnStatus = 204;
+    const apid = req.params.apid;
     var siteId = undefined;
     const client = await db.ClientFromPool();
     try {
@@ -539,8 +548,9 @@ const deleteAccessPoint = async function(apid, res) {
     return returnStatus;
 }
 
-const deleteBackboneLink = async function(lid, res) {
+const deleteBackboneLink = async function(req, res) {
     var returnStatus = 204;
+    const lid = req.params.lid;
     const client = await db.ClientFromPool();
     try {
         var connectingSite = null;
@@ -581,8 +591,9 @@ const deleteBackboneLink = async function(lid, res) {
     return returnStatus;
 }
 
-const listBackbones = async function(res, bid=null) {
+const listBackbones = async function(req, res) {
     var returnStatus = 200;
+    const bid = req.params.bid;
     const client = await db.ClientFromPool();
     try {
         var result;
@@ -607,16 +618,28 @@ const listBackbones = async function(res, bid=null) {
     } finally {
         client.release();
     }
-
-    return returnStatus;
 }
 
-const listBackboneSites = async function(id, res, byBackbone) {
+const listBackboneSites = async function(req, res) {
     var returnStatus = 200;
+    const bid = req.params.bid;
+    const sid = req.params.sid;
+    var byBackbone;
+    var id;
     const client = await db.ClientFromPool();
     try {
-        if (!util.IsValidUuid(id)) {
-            throw(Error('Id is not a valid uuid'));
+        if (bid) {
+            if (!util.IsValidUuid(bid)) {
+                throw(Error('Id is not a valid uuid'));
+            }
+            byBackbone = true;
+            id = bid;
+        } else if (sid) {
+            if (!util.IsValidUuid(sid)) {
+                throw(Error('Id is not a valid uuid'));
+            }
+            byBackbone = false;
+            id = sid;
         }
 
         const result = await client.query(`SELECT Id, Name, Lifecycle, Failure, Metadata, DeploymentState, FirstActiveTime, LastHeartbeat FROM InteriorSites WHERE ${byBackbone ? 'Backbone' : 'Id'} = $1`, [id]);
@@ -644,8 +667,9 @@ const listBackboneSites = async function(id, res, byBackbone) {
     return returnStatus;
 }
 
-const listAccessPointsBackbone = async function(bid, res) {
+const listAccessPointsBackbone = async function(req, res) {
     var returnStatus = 200;
+    const bid = req.params.bid;
     const client = await db.ClientFromPool();
     try {
         if (!util.IsValidUuid(bid)) {
@@ -671,8 +695,9 @@ const listAccessPointsBackbone = async function(bid, res) {
     return returnStatus;
 }
 
-const listAccessPointsSite = async function(sid, res) {
+const listAccessPointsSite = async function(req, res) {
     var returnStatus = 200;
+    const sid = req.params.sid;
     const client = await db.ClientFromPool();
     try {
         if (!util.IsValidUuid(sid)) {
@@ -697,8 +722,9 @@ const listAccessPointsSite = async function(sid, res) {
     return returnStatus;
 }
 
-const readAccessPoint = async function(apid, res) {
+const readAccessPoint = async function(req, res) {
     var returnStatus = 200;
+    const apid = req.params.apid;
     const client = await db.ClientFromPool();
     try {
         if (!util.IsValidUuid(apid)) {
@@ -723,8 +749,9 @@ const readAccessPoint = async function(apid, res) {
     return returnStatus;
 }
 
-const listBackboneLinks = async function(bid, res) {
+const listBackboneLinks = async function(req, res) {
     var returnStatus = 200;
+    const bid = req.params.bid;
     const client = await db.ClientFromPool();
     try {
         if (!util.IsValidUuid(bid)) {
@@ -794,10 +821,6 @@ const listInvitations = async function(res) {
     return returnStatus;
 }
 
-const apiLog = function(req, status) {
-    Log(`AdminAPI: ${req.ip} - (${status}) ${req.method} ${req.originalUrl}`);
-}
-
 exports.Initialize = async function(app, keycloak) {
     Log('[API Admin interface starting]');
 
@@ -805,120 +828,67 @@ exports.Initialize = async function(app, keycloak) {
     // Backbones
     //========================================
 
-    // CREATE
-    app.post(API_PREFIX + 'backbones', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await createBackbone(req, res));
-    });
+    app.route(API_PREFIX + 'backbones', keycloak.protect('realm:backbone-admin'))
+    .post(createBackbone)       // CREATE
+    .get(listBackbones);        // LIST
 
-    // READ
-    app.get(API_PREFIX + 'backbone/:bid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await listBackbones(res, req.params.bid));
-    });
+    app.route(API_PREFIX + 'backbone/:bid', keycloak.protect('realm:backbone-admin'))
+    .get(listBackbones)         // READ
+    .delete(deleteBackbone);    // DELETE
 
-    // LIST
-    app.get(API_PREFIX + 'backbones', keycloak.protect(), async (req, res) => {
-        apiLog(req, await listBackbones(res));
-    });
-
-    // DELETE
-    app.delete(API_PREFIX + 'backbone/:bid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await deleteBackbone(res, req.params.bid));
-    });
-
-    // COMMANDS
-    app.put(API_PREFIX + 'backbone/:bid/activate', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await activateBackbone(res, req.params.bid));
-    });
+    app.route(API_PREFIX + 'backbone/:bid/activate', keycloak.protect('realm:backbone-admin'))
+    .put(activateBackbone);     // ACTIVATE
 
     //========================================
     // Backbone/Interior Sites
     //========================================
 
-    // CREATE
-    app.post(API_PREFIX + 'backbone/:bid/sites', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await createBackboneSite(req.params.bid, req, res));
-    });
+    app.route(API_PREFIX + 'backbone/:bid/sites', keycloak.protect('realm:backbone-admin'))
+    .post(createBackboneSite)     // CREATE
+    .get(listBackboneSites);      // LIST
 
-    // READ
-    app.get(API_PREFIX + 'backbonesite/:sid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await listBackboneSites(req.params.sid, res, false));
-    });
-
-    // LIST
-    app.get(API_PREFIX + 'backbone/:bid/sites', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await listBackboneSites(req.params.bid, res, true));
-    });
-
-    // UPDATE
-    app.put(API_PREFIX + 'backbonesite/:sid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await updateBackboneSite(req.params.sid, req, res));
-    });
-
-    // DELETE
-    app.delete(API_PREFIX + 'backbonesite/:sid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await deleteBackboneSite(res, req.params.sid));
-    });
+    app.route(API_PREFIX + 'backbonesite/:sid', keycloak.protect('realm:backbone-admin'))
+    .get(listBackboneSites)       // READ
+    .put(updateBackboneSite)      // UPDATE
+    .delete(deleteBackboneSite);  // DELETE
 
     //========================================
     // Interior Access Points
     //========================================
 
-    // CREATE
-    app.post(API_PREFIX + 'backbonesite/:sid/accesspoints', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await createAccessPoint(req.params.sid, req, res));
-    });
+    app.route(API_PREFIX + 'backbonesite/:sid/accesspoints', keycloak.protect('realm:backbone-admin'))
+    .post(createAccessPoint)         // CREATE
+    .get(listAccessPointsSite);      // LIST for Site
 
-    // READ
-    app.get(API_PREFIX + 'accesspoint/:apid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await readAccessPoint(req.params.apid, res));
-    });
+    app.route(API_PREFIX + 'backbone/:bid/accesspoints', keycloak.protect('realm:backbone-admin'))
+    .get(listAccessPointsBackbone);  // LIST for Backbone
 
-    // LIST
-    app.get(API_PREFIX + 'backbone/:bid/accesspoints', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await listAccessPointsBackbone(req.params.bid, res));
-    });
-
-    app.get(API_PREFIX + 'backbonesite/:sid/accesspoints', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await listAccessPointsSite(req.params.sid, res));
-    });
-
-    // DELETE
-    app.delete(API_PREFIX + 'accesspoint/:apid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await deleteAccessPoint(req.params.apid, res));
-    });
+    app.route(API_PREFIX + 'accesspoint/:apid', keycloak.protect('realm:backbone-admin'))
+    .get(readAccessPoint)            // READ
+    .delete(deleteAccessPoint);      // DELETE
 
     //========================================
     // Interior Site Links
     //========================================
 
-    // CREATE
-    app.post(API_PREFIX + 'accesspoint/:apid/links', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await createBackboneLink(req.params.apid, req, res));
-    });
+    app.route(API_PREFIX + 'accesspoint/:apid/links', keycloak.protect('realm:backbone-admin'))
+    .post(createBackboneLink);
 
-    // LIST
-    app.get(API_PREFIX + 'backbone/:bid/links', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await listBackboneLinks(req.params.bid, res));
-    });
+    app.route(API_PREFIX + 'backbone/:bid/links', keycloak.protect('realm:backbone-admin'))
+    .get(listBackboneLinks);
 
-    // UPDATE
-    app.put(API_PREFIX + 'backbonelink/:lid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await updateBackboneLink(req.params.lid, req, res));
-    });
-
-    // DELETE
-    app.delete(API_PREFIX + 'backbonelink/:lid', keycloak.protect('realm:backbone-admin'), async (req, res) => {
-        apiLog(req, await deleteBackboneLink(req.params.lid, res));
-    });
+    app.route(API_PREFIX + 'backbonelink/:lid', keycloak.protect('realm:backbone-admin'))
+    .put(updateBackboneLink)
+    .delete(deleteBackboneLink);
 
     //========================================
     // Backbone Access Points
     //========================================
     app.get(API_PREFIX + 'backbonesite/:sid/ingresses', keycloak.protect(), async (req, res) => {
-        apiLog(req, await listSiteIngresses(req.params.sid, res));
+        await listSiteIngresses(req.params.sid, res);
     });
 
     app.get(API_PREFIX + 'invitations', keycloak.protect(), async (req, res) => {
-        apiLog(req, await listInvitations(res));
+        await listInvitations(res);
     });
 }

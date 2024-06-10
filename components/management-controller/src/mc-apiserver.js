@@ -20,6 +20,7 @@
 "use strict";
 
 const express    = require('express');
+const morgan     = require('morgan');
 const session    = require('express-session');
 const kcConnect  = require('keycloak-connect');
 const cors       = require('cors');
@@ -385,10 +386,6 @@ const postBackboneIngress = async function (bsid, req, res) {
     return returnStatus;
 }
 
-const apiLog = function(req, status) {
-    Log(`OperAPI: ${req.ip} - (${status}) ${req.method} ${req.originalUrl}`);
-}
-
 exports.Start = async function() {
     Log('[API Server module started]');
     app.use(cors());
@@ -401,34 +398,40 @@ exports.Start = async function() {
     const consoleBuildPath = path.join(__dirname, 'console');
     app.use(express.static(consoleBuildPath));
 
+    morgan.token('ts', (req, res) => {
+        return new Date().toISOString();
+    });
+
+    app.use(morgan(':ts :remote-addr :remote-user :method :url :status :res[content-length] :response-time ms'));
+
     app.get(API_PREFIX + 'invitation/:iid/kube', async (req, res) => {
-        apiLog(req, await fetchInvitationKube(req.params.iid, res));
+        await fetchInvitationKube(req.params.iid, res);
     });
 
     app.get(API_PREFIX + 'backbonesite/:bsid/kube', async (req, res) => {
-        apiLog(req, await fetchBackboneSiteKube(req.params.bsid, res));
+        await fetchBackboneSiteKube(req.params.bsid, res);
     });
 
     app.get(API_PREFIX + 'backbonesite/:bsid/crd', async (req, res) => {
-        apiLog(req, await fetchBackboneSiteCrd(req.params.bsid, res));
+        await fetchBackboneSiteCrd(req.params.bsid, res);
     });
 
     app.get(API_PREFIX + 'backbonesite/:bsid/links/incoming/kube', async (req, res) => {
-        apiLog(req, await fetchBackboneLinksIncomingKube(req.params.bsid, res));
+        await fetchBackboneLinksIncomingKube(req.params.bsid, res);
     });
 
     app.get(API_PREFIX + 'backbonesite/:bsid/links/outgoing/kube', async (req, res) => {
-        apiLog(req, await fetchBackboneLinksOutgoingKube(req.params.bsid, res));
+        await fetchBackboneLinksOutgoingKube(req.params.bsid, res);
     });
 
     app.post(API_PREFIX + 'backbonesite/:bsid/ingress', async (req, res) => {
-        apiLog(req, await postBackboneIngress(req.params.bsid, req, res));
+        await postBackboneIngress(req.params.bsid, req, res);
     });
 
     adminApi.Initialize(app, keycloak);
     userApi.Initialize(app, keycloak);
 
-    app.use("*", (req, res) => {
+    app.use((req, res) => {
         res.status(404).send('invalid path');
         apiLog(req, 404);
     });

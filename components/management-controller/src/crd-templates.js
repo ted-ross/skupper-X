@@ -31,6 +31,16 @@ exports.BackboneSite = function(name) {
         },
         spec : {
             linkAccess : 'none',
+            settings   : [
+                {
+                    name  : 'enable-skupperx-management',
+                    value : true,
+                },
+                {
+                    name  : 'skupperx-controller-version',
+                    value : '0.2.0',
+                },
+            ],
         },
     };
 }
@@ -66,3 +76,22 @@ exports.RouterAccess = function(accessPoint, tlsName) {
 
     return obj;
 }
+
+exports.BackboneRoleYaml = function() {
+    return `---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: skupperx-site
+  labels:
+    application: skupperx
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch", "create", "update", "delete", "patch"]
+- apiGroups: ["skupper.io"]
+  resources: ["sites", "linkaccesses", "links"]
+  verbs: ["get", "list", "watch", "create", "update", "delete", "patch"]
+`;
+}
+

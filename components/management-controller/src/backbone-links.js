@@ -145,7 +145,7 @@ const resolveTLSData = async function() {
         }
         await client.query('COMMIT');
     } catch (err) {
-        Log(`Rolling back resolve-management-controller transaction: ${err.stack}`);
+        Log(`Rolling back resolveTLSData transaction: ${err.stack}`);
         await client.query('ROLLBACK');
         reschedule_delay = 10000;
     } finally {
@@ -171,7 +171,7 @@ const resolveControllerRecord = async function() {
         }
         await client.query('COMMIT');
     } catch (err) {
-        Log(`Rolling back resolve-management-controller transaction: ${err.stack}`);
+        Log(`Rolling back resolveControllerRecord transaction: ${err.stack}`);
         await client.query('ROLLBACK');
         reschedule_delay = 10000;
     } finally {

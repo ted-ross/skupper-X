@@ -396,10 +396,6 @@ const listClaimAccessPoints = async function(res, bid, ref) {
     return returnStatus;
 }
 
-const apiLog = function(req, status) {
-    Log(`UserAPI: ${req.ip} - (${status}) ${req.method} ${req.originalUrl}`);
-}
-
 exports.Initialize = async function(api, keycloak) {
     Log('[API User interface starting]');
 
@@ -409,32 +405,32 @@ exports.Initialize = async function(api, keycloak) {
 
     // CREATE
     api.post(API_PREFIX + 'backbone/:bid/vans', keycloak.protect('realm:van-owner'), async (req, res) => {
-        apiLog(req, await createVan(req.params.bid, req, res));
+        await createVan(req.params.bid, req, res);
     });
 
     // READ
     api.get(API_PREFIX + 'van/:vid', keycloak.protect('realm:van-owner'), async (req, res) => {
-        apiLog(req, await readVan(res, req.params.vid));
+        await readVan(res, req.params.vid);
     });
 
     // LIST
     api.get(API_PREFIX + 'backbone/:bid/vans', keycloak.protect('realm:van-owner'), async (req, res) => {
-        apiLog(req, await listVans(res, req.params.bid));
+        await listVans(res, req.params.bid);
     });
 
     // LIST ALL
     api.get(API_PREFIX + 'vans', keycloak.protect('realm:van-owner'), async (req, res) => {
-        apiLog(req, await listAllVans(res));
+        await listAllVans(res);
     });
 
     // DELETE
     api.delete(API_PREFIX + 'van/:vid', keycloak.protect('realm:van-owner'), async (req, res) => {
-        apiLog(req, await deleteVan(res, req.params.vid));
+        await deleteVan(res, req.params.vid);
     });
 
     // COMMANDS
     api.put(API_PREFIX + 'van/:vid/evict', keycloak.protect('realm:van-owner'), async (req, res) => {
-        apiLog(req, await evictVan(req.params.vid, req, res));
+        await evictVan(req.params.vid, req, res);
     });
 
     //========================================
@@ -443,27 +439,27 @@ exports.Initialize = async function(api, keycloak) {
 
     // CREATE
     api.post(API_PREFIX + 'van/:vid/invitations', keycloak.protect('realm:van-owner'), async (req, res) => {
-        apiLog(req, await createInvitation(req.params.vid, req, res));
+        await createInvitation(req.params.vid, req, res);
     });
 
     // READ
     api.get(API_PREFIX + 'invitation/:iid', keycloak.protect('realm:van-owner'), async (req, res) => {
-        apiLog(req, await readInvitation(res, req.params.iid));
+        await readInvitation(res, req.params.iid);
     });
 
     // LIST
     api.get(API_PREFIX + 'van/:vid/invitations', keycloak.protect('realm:van-owner'), async (req, res) => {
-        apiLog(req, await listInvitations(res, req.params.vid));
+        await listInvitations(res, req.params.vid);
     });
 
     // DELETE
     api.delete(API_PREFIX + 'invitation/:iid', keycloak.protect('realm:van-owner'), async (req, res) => {
-        apiLog(req, await deleteInvitation(res, req.params.iid));
+        await deleteInvitation(res, req.params.iid);
     });
 
     // COMMANDS
     api.put(API_PREFIX + 'invitation/:iid/expire', keycloak.protect('realm:van-owner'), async (req, res) => {
-        apiLog(req, await expireInvitation(res, req.params.iid));
+        await expireInvitation(res, req.params.iid);
     })
 
     //========================================
@@ -472,17 +468,17 @@ exports.Initialize = async function(api, keycloak) {
 
     // READ
     api.get(API_PREFIX + 'member/:mid', keycloak.protect('realm:van-owner'), async (req, res) => {
-        apiLog(req, await readVanMember(res, req.params.mid));
+        await readVanMember(res, req.params.mid);
     });
 
     // LIST
     api.get(API_PREFIX + 'van/:vid/members', keycloak.protect('realm:van-owner'), async (req, res) => {
-        apiLog(req, await listVanMembers(res, req.params.vid));
+        await listVanMembers(res, req.params.vid);
     });
 
     // COMMANDS
     api.put(API_PREFIX + 'member/:mid/evict', keycloak.protect('realm:van-owner'), async (req, res) => {
-        apiLog(req, await evictMember(req.params.mid, req, res));
+        await evictMember(req.params.mid, req, res);
     });
 
     //========================================
@@ -491,11 +487,11 @@ exports.Initialize = async function(api, keycloak) {
 
     // Claim Access Points
     api.get(API_PREFIX + 'backbone/:bid/access/claim', keycloak.protect('realm:van-owner'), async (req, res) => {
-        apiLog(req, await listClaimAccessPoints(res, req.params.bid, 'ClaimAccess'));
+        await listClaimAccessPoints(res, req.params.bid, 'ClaimAccess');
     });
 
     // Member Access Points
     api.get(API_PREFIX + 'backbone/:bid/access/member', keycloak.protect('realm:van-owner'), async (req, res) => {
-        apiLog(req, await listClaimAccessPoints(res, req.params.bid, 'MemberAccess'));
+        await listClaimAccessPoints(res, req.params.bid, 'MemberAccess');
     });
 }
