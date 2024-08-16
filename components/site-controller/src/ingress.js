@@ -47,6 +47,7 @@ const Log         = require('./common/log.js').Log;
 const common      = require('./common/common.js');
 const sync        = require('./site-sync.js');
 const router_port = require('./router-port.js');
+const util        = require('./common/util.js');
 const crypto      = require('crypto');
 
 var ingressState = { // TODO - remove or refactor
@@ -89,6 +90,9 @@ const free_access_point = function(apid) {
     }
 }
 
+//
+// Refactor: TODO
+//
 const backbone_service = function() {
     let service_object = {
         apiVersion : 'v1',
@@ -118,6 +122,9 @@ const backbone_service = function() {
     return service_object;
 }
 
+//
+// Refactor: TODO
+//
 const backbone_route = function(name, apid) {
     const access = accessPoints[apid];
     return {
@@ -144,6 +151,9 @@ const backbone_route = function(name, apid) {
     };
 }
 
+//
+// Refactor: TODO
+//
 const sync_kube_service = async function() {
     let services = await kube.GetServices();
     let found    = false;
@@ -171,11 +181,17 @@ const sync_kube_service = async function() {
     }
 
     if (desired && found) {
-        const service = backbone_service();
-        await kube.ReplaceService(common.ROUTER_SERVICE_NAME, service);
+        const desired_service = backbone_service();
+        const existing_service = await kube.LoadService(common.ROUTER_SERVICE_NAME);
+        if (!util.mapEqual_sync(desired_service, existing_service)) {
+            await kube.ReplaceService(common.ROUTER_SERVICE_NAME, desired_service);
+        }
     }
 }
 
+//
+// Refactor: TODO
+//
 const sync_route = async function(name, kind) {
     let routes  = await kube.GetRoutes();
     let found   = false;
@@ -211,6 +227,9 @@ const sync_route = async function(name, kind) {
     }
 }
 
+//
+// Refactor: TODO
+//
 const sync_ingress = async function() {
     await sync_kube_service();
     await sync_route('skx-peer',   'peer');
@@ -228,6 +247,9 @@ const ingressHash = function(data) {
     return crypto.createHash('sha1').update(text).digest('hex');
 }
 
+//
+// Refactor: TODO
+//
 exports.GetInitialConfig = async function() {
     try {
         const routeList = await kube.GetRoutes();
@@ -244,6 +266,9 @@ exports.GetInitialConfig = async function() {
     return ingressState;
 }
 
+//
+// Refactor: TODO
+//
 exports.GetIngressBundle = function() {
     let bundle = {};
 
@@ -258,6 +283,9 @@ exports.GetIngressBundle = function() {
     return bundle;
 }
 
+//
+// Refactor: TODO
+//
 const updateConfigMap = function(cm) {
     const apid   = cm.metadata.annotations[common.META_ANNOTATION_STATE_ID];
     const access = accessPoints[apid];
@@ -268,19 +296,22 @@ const updateConfigMap = function(cm) {
     return false;
 }
 
+//
+// Refactor: TODO
+//
 const deleteConfigMap = function(cm) {
 
 }
 
+//
+// Refactor: TODO
+//
 const onConfigMapWatch = function(type, apiObj) {
     try {
         var changed = true;
         const state_type = kube.Annotation(apiObj, common.META_ANNOTATION_STATE_TYPE);
 
         if (state_type == common.STATE_TYPE_ACCESS_POINT) {
-
-        } else if (state_type == common.STATE_TYPE_LINK) {
-
         }
 
         if (apiObj.metadata.annotations && apiObj.metadata.annotations[common.META_ANNOTATION_STATE_TYPE] == common.STATE_TYPE_ACCESS_POINT) {
@@ -298,6 +329,9 @@ const onConfigMapWatch = function(type, apiObj) {
     }
 }
 
+//
+// Refactor: TODO
+//
 const onRouteWatch = async function(type, apiObj) {
     let routes = await kube.GetRoutes();
 
@@ -333,6 +367,9 @@ const onRouteWatch = async function(type, apiObj) {
     }
 }
 
+//
+// Refactor: TODO
+//
 const onServiceWatch = async function(type, apiObj) {
     if (apiObj.metadata.name == common.ROUTER_SERVICE_NAME) {
         await sync_kube_service();
