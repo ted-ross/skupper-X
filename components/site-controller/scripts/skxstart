@@ -17,4 +17,4 @@
 # specific language governing permissions and limitations
 # under the License.
 
-curl -X PUT -d \{\"name\"\:\"$1\"\} -H "Content-Type: application/json" http://localhost:8086/api/v1alpha1/site/start -s | jq
+curl -X PUT -d \{\"name\"\:\"$1\"\} -H "Content-Type: application/json" http://localhost:1040/api/v1alpha1/site/start -s | jq

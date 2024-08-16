@@ -2,31 +2,35 @@
 
 ## Site
 
-### TLS Profile Secrets
+### Secrets
 
  - metadata
+   - name skx-site-<SITE_ID>
+          skx-access-<ACCESS_POINT_ID>
    - annotations
-     - skupperx/skx-inject (name of a router SslProfile to create that references the content of the secret)
+     - skx/tls-inject: [site|accesspoint]
+     - skx/tls-ordinal: NUMBER       (placeholder for future)
+     - skx/tls-oldest-valid: NUMBER  (placeholder for future)
+
+A secret with a tls-inject annotation will cause the creation of ah SslProfile on the router.  The name of the SslProfile depends on the tls-inject value:
+
+For 'site', the SslProfile shall be named 'site-client'
+For 'accesspoint', the SslProfile name shall be the same as the secret name.
+
+The tls-ordinal and tls-oldest-valid annotations are used to manage the rotation and expiration of certificates.  When a new certificate is generated for the profile, the tls-ordinal is incremented.  The tls-oldest-valid ordinal is incremented when the certificate associated with the ordinal expires.  This is used by the router to pull down open connections that are still using the expired certificate.
 
 ### ConfigMaps
 
-#### skupperx-incoming
-
-This config map indicates to to the site controller (of an interior router) which ingresses are to be exposed.  The data consists of an entry per desired ingress:
-
- - data
-   - manage : true
-   - peer : true
-   - claim : true
-   - member : true
-
-If the element for a particular ingress is present and true, the site controller shall maintain an ingress by any available mechanism for that function.  If the element is absent, the ingress shall not be maintained.
-
-#### skupperx-outgoing
-
-This config map contains an entry per outgoing link (inter-router or edge).  Each entry is keyed using a unique UUID with a value that is a JSON string describing the remote access point (host and port), and the cost of the link for routing purposes.
-
- - data
-   - UUID : JSON({host, port, cost})
-
-The SslProfile for each link is assumed to be skx-site-client and the role of the connector is either inter-router or edge depending on the type of site in use.
+ - metadata
+   - name skx-access-<ACCESS_POINT_ID>
+          skx-link-<LINK_ID>
+   - annotations
+     - skx/state-type: [accesspoint|link]
+     - skx/state-id: Database ID of the associated AccessPoint or Link
+ - data (for accesspoint)
+   - kind: [claim|peer|member|manage]
+   - bindhost: optional host for socket bind
+ - data (for link)
+   - host
+   - port
+   - cost

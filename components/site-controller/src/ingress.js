@@ -20,89 +20,115 @@
 "use strict";
 
 //
-// This module is responsible for setting up the requested ingresses into a site.  It maintains synchronization with the
-// incoming-links ConfigMap that controls ingress.
+// This module is responsible for setting up the requested ingresses into a site.
+//
+// The input to this module is a set of ConfigMaps that represent configured access points:
+//   metadata.annotations:
+//     skx/state-type: accesspoint
+//     skx/state-id:   <The database ID of the source BackboneAccessPoint>
+//   data:
+//     kind: [claim|peer|member|manage]
+//     bindhost: The host to bind the listening socket to, optional.
+//
+// The output of this module:
+//   Kubernetes Service: skx-router, with a port for each access point
+//   Kubernetes Ingresses: OC Route, Load-balancer, nginx ingress, etc.
+//   Host/Port status of created ingresses
 //
 // Currently the only ingress supported is OpenShift Routes.
+//   TODO: Add "loadbalancer" ingress
+//   TODO: Add "nodeport" ingress
+//   TODO: Add "nginx-ingress-v1" ingress
+//   TODO: Add "contour-http-proxy" ingress
 //
 
-const kube   = require('./common/kube.js');
-const Log    = require('./common/log.js').Log;
-const sync   = require('./site-sync.js');
-const crypto = require('crypto');
+const kube        = require('./common/kube.js');
+const Log         = require('./common/log.js').Log;
+const common      = require('./common/common.js');
+const sync        = require('./site-sync.js');
+const router_port = require('./router-port.js');
+const crypto      = require('crypto');
 
-const SERVICE_NAME = 'skx-router';
-const ROUTER_LABEL = 'skx-router';
-
-const INCOMING_CONFIG_MAP_NAME = 'skupperx-links-incoming';
-
-var SITE_ID;
-
-const MANAGE_PORT = 45670;
-const PEER_PORT   = 55671;
-const CLAIM_PORT  = 45669;
-const MEMBER_PORT = 45671;
-
-var ingressState = {
+var ingressState = { // TODO - remove or refactor
     manage : {hash: null, data: {}, toDelete: false},
     peer   : {hash: null, data: {}, toDelete: false},
     claim  : {hash: null, data: {}, toDelete: false},
     member : {hash: null, data: {}, toDelete: false},
 };
 
-const backbone_service = function() {
-    return {
-        apiVersion: 'v1',
-        kind: 'Service',
-        metadata: {
-            name: SERVICE_NAME,
-        },
-        spec: {
-            type: 'ClusterIP',
-            internalTrafficPolicy: 'Cluster',
-            ports: [
-                {
-                    name:       'peer',
-                    port:       PEER_PORT,
-                    protocol:   'TCP',
-                    targetPort: PEER_PORT,
-                },
-                {
-                    name:       'member',
-                    port:       MEMBER_PORT,
-                    protocol:   'TCP',
-                    targetPort: MEMBER_PORT,
-                },
-                {
-                    name:       'claim',
-                    port:       CLAIM_PORT,
-                    protocol:   'TCP',
-                    targetPort: CLAIM_PORT,
-                },
-                {
-                    name:       'manage',
-                    port:       MANAGE_PORT,
-                    protocol:   'TCP',
-                    targetPort: MANAGE_PORT,
-                },
-            ],
-            selector: {
-                application: ROUTER_LABEL,
-            },
-        }
-    };
+var accessPoints = {}; // APID => {kind, bindHost, routerPort, toDelete}
+
+exports.GetTargetPort = function(apid) {
+    const ap = accessPoints[apid];
+    if (ap) {
+        return ap.routerPort;
+    }
+    return undefined;
 }
 
-const backbone_route = function(name, socket) {
+const new_access_point = function(apid, kind, bindHost=undefined) {
+    const port = router_port.AllocatePort();
+    let value = {
+        kind       : kind,
+        routerPort : port,
+        toDelete   : false,
+    };
+
+    if (bindHost) {
+        value.bindHost = bindHost;
+    }
+
+    accessPoints[apid] = value;
+}
+
+const free_access_point = function(apid) {
+    const ap = accessPoints[apid];
+    if (ap) {
+        router_port.FreePort(ap.routerPort);
+        accessPoints.delete(apid)
+    }
+}
+
+const backbone_service = function() {
+    let service_object = {
+        apiVersion : 'v1',
+        kind       : 'Service',
+        metadata   : {
+            name : common.ROUTER_SERVICE_NAME,
+        },
+        spec : {
+            type                  : 'ClusterIP',
+            internalTrafficPolicy : 'Cluster',
+            ports                 : [],
+            selector : {
+                application: common.APPLICATION_ROUTER_LABEL,
+            },
+        },
+    };
+
+    for (const [apid, access] of Object.entries(accessPoints)) {
+        service_object.spec.ports.push({
+            name       : `${access.kind}-${apid}`,
+            port       : access.routerPort,
+            protocol   : 'TCP',
+            targetPort : access.routerPort,
+        });
+    };
+
+    return service_object;
+}
+
+const backbone_route = function(name, apid) {
+    const access = accessPoints[apid];
     return {
-        apiVersion: 'route.openshift.io/v1',
-        kind: 'Route',
-        metadata: {
+        apiVersion : 'route.openshift.io/v1',
+        kind       : 'Route',
+        metadata : {
             name: name,
         },
         spec: {
             port: {
-                targetPort: socket,
+                targetPort: `${access.kind}-${apid}`,
             },
             tls: {
                 termination: 'passthrough',
@@ -110,7 +136,7 @@ const backbone_route = function(name, socket) {
             },
             to: {
                 kind: 'Service',
-                name: SERVICE_NAME,
+                name: common.ROUTER_SERVICE_NAME,
                 weight: 100,
             },
             wildcardPolicy: 'None',
@@ -121,29 +147,32 @@ const backbone_route = function(name, socket) {
 const sync_kube_service = async function() {
     let services = await kube.GetServices();
     let found    = false;
-    let desired  = true;
+    let desired  = Object.keys(accessPoints).length > 0;
+
     services.forEach(service => {
-        if (service.metadata.name == SERVICE_NAME) {
-            if (!service.metadata.annotations || service.metadata.annotations['skupper.io/skx-controlled'] != 'true') {
-                throw Error(`Existing service ${SERVICE_NAME} found that is not controlled by skupper-X`);
+        if (service.metadata.name == common.ROUTER_SERVICE_NAME) {
+            if (!service.metadata.annotations || service.metadata.annotations[common.META_ANNOTATION_SKUPPERX_CONTROLLED] != 'true') {
+                throw Error(`Existing service ${common.ROUTER_SERVICE_NAME} found that is not controlled by skupper-X`);
             }
             found = true;
         }
     });
 
-    try {
-        const unused = await kube.LoadConfigmap(INCOMING_CONFIG_MAP_NAME);
-    } catch (error) {
-        desired = false;
-    }
-
     if (desired && !found) {
-        let service = backbone_service();
+        //
+        // Create the service object
+        //
+        const service = backbone_service();
         await kube.ApplyObject(service);
     }
 
     if (!desired && found) {
-        await kube.DeleteService(SERVICE_NAME);
+        await kube.DeleteService(common.ROUTER_SERVICE_NAME);
+    }
+
+    if (desired && found) {
+        const service = backbone_service();
+        await kube.ReplaceService(common.ROUTER_SERVICE_NAME, service);
     }
 }
 
@@ -153,7 +182,7 @@ const sync_route = async function(name, kind) {
     let desired = false;
     routes.forEach(route => {
         if (route.metadata.name == name) {
-            if (!route.metadata.annotations || route.metadata.annotations['skupper.io/skx-controlled'] != 'true') {
+            if (kube.Annotation(route, common.META_ANNOTATION_SKUPPERX_CONTROLLED) != 'true') {
                 throw Error(`Existing route ${name} found that is not controller by skupper-X`);
             }
             found = true;
@@ -229,9 +258,43 @@ exports.GetIngressBundle = function() {
     return bundle;
 }
 
+const updateConfigMap = function(cm) {
+    const apid   = cm.metadata.annotations[common.META_ANNOTATION_STATE_ID];
+    const access = accessPoints[apid];
+    if (!access) {
+        new_access_point(apid, cm.data.kind, cm.data.bindhost);
+        return true;
+    }
+    return false;
+}
+
+const deleteConfigMap = function(cm) {
+
+}
+
 const onConfigMapWatch = function(type, apiObj) {
-    if (apiObj.metadata.name == INCOMING_CONFIG_MAP_NAME) {
-        sync_ingress();
+    try {
+        var changed = true;
+        const state_type = kube.Annotation(apiObj, common.META_ANNOTATION_STATE_TYPE);
+
+        if (state_type == common.STATE_TYPE_ACCESS_POINT) {
+
+        } else if (state_type == common.STATE_TYPE_LINK) {
+
+        }
+
+        if (apiObj.metadata.annotations && apiObj.metadata.annotations[common.META_ANNOTATION_STATE_TYPE] == common.STATE_TYPE_ACCESS_POINT) {
+            if (type == 'ADDED') {
+                changed = updateConfigMap(apiObj);
+            } else if (type == 'DELETED') {
+                deleteConfigMap(apiObj);
+            }
+            if (changed) {
+                sync_ingress();
+            }
+        }
+    } catch (e) {
+        Log(e.stack);
     }
 }
 
@@ -270,9 +333,15 @@ const onRouteWatch = async function(type, apiObj) {
     }
 }
 
+const onServiceWatch = async function(type, apiObj) {
+    if (apiObj.metadata.name == common.ROUTER_SERVICE_NAME) {
+        await sync_kube_service();
+    }
+}
+
 exports.Start = async function(siteId) {
     Log('[Ingress module started]');
-    SITE_ID = siteId;
     kube.WatchConfigMaps(onConfigMapWatch);
     kube.WatchRoutes(onRouteWatch);
+    kube.WatchServices(onServiceWatch);
 }

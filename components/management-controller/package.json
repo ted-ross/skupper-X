@@ -19,7 +19,7 @@
     "express-session": "^1.18.0",
     "formidable": "^3.5.1",
     "js-yaml": "^4.1.0",
-    "keycloak-connect": "^24.0.2",
+    "keycloak-connect": "^9.0.0",
     "morgan": "^1.10.0",
     "net": "^1.0.2",
     "pg": "^8.11.3",

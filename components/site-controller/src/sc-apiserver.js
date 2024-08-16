@@ -19,19 +19,19 @@
 
 "use strict";
 
-const formidable = require('formidable');
-const express    = require('express');
-const cors       = require('cors');
-const yaml       = require('js-yaml');
-const ingress    = require('./ingress.js');
-const claim      = require('./claim.js');
-const kube       = require('./common/kube.js');
-const util       = require('./common/util.js');
-const Log        = require('./common/log.js').Log;
-const memberapi  = require('./api-member.js');
+const formidable  = require('formidable');
+const express     = require('express');
+const cors        = require('cors');
+const yaml        = require('js-yaml');
+const ingress     = require('./ingress.js');
+const claim       = require('./claim.js');
+const kube        = require('./common/kube.js');
+const util        = require('./common/util.js');
+const Log         = require('./common/log.js').Log;
+const memberapi   = require('./api-member.js');
+const router_port = require('./router-port.js');
 
 const API_PREFIX = '/api/v1alpha1/';
-const API_PORT   = 8086;
 var api;
 
 const getHostnames = function(res) {
@@ -96,7 +96,7 @@ exports.Start = async function(backboneMode) {
 
     memberapi.Initialize(api);
 
-    let server = api.listen(API_PORT, () => {
+    let server = api.listen(router_port.GetApiPort(), () => {
         let host = server.address().address;
         let port = server.address().port;
         if (host[0] == ':') {

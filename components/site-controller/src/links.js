@@ -20,19 +20,24 @@
 "use strict";
 
 /*
- * This module is responsible for synchronizing secrets to router ssl-profiles and the 'skupperx-links-[incom,outgo]ing' config maps to connectors and listeners.
+ * This module is responsible for synchronizing Secrets to router ssl-profiles and ConfigMaps to connectors and listeners.
  */
 
-const Log    = require('./common/log.js').Log;
-const kube   = require('./common/kube.js');
-const router = require('./common/router.js');
-const sync   = require('./site-sync.js');
-var   fs     = require('fs/promises');
+/*
+ * TODO Items for the future:
+ *
+ * - Update the profile injection to allow overwrite of existing SslProfiles with new content.
+ * - Support the tls-ordinal/tls-oldest-valid features in SslProfiles.
+ * - Support changes in link-cost (ignored presently) by deleting/re-creating connectors (or using a new router cost-update feature).
+ */
 
-const MANAGE_PORT = 45670;  // TODO - centralize these
-const PEER_PORT   = 55671;
-const CLAIM_PORT  = 45669;
-const MEMBER_PORT = 45671;
+const Log     = require('./common/log.js').Log;
+const kube    = require('./common/kube.js');
+const router  = require('./common/router.js');
+const common  = require('./common/common.js');
+const sync    = require('./site-sync.js');
+const ingress = require('./ingress.js');
+var   fs      = require('fs/promises');
 
 const CERT_DIRECTORY = process.env.SKX_CERT_PATH || '/etc/skupper-router-certs/';
 
@@ -71,27 +76,36 @@ const sync_secrets = async function() {
     });
 
     for (const secret of secrets) {
-        let profile_name = secret.metadata.annotations ? secret.metadata.annotations['skupper.io/skx-inject'] : undefined;
-        if (profile_name) {
+        const inject_type = secret.metadata.annotations ? secret.metadata.annotations[common.META_ANNOTATION_TLS_INJECT] : undefined;
+        if (inject_type) {
+            const profile_name = (inject_type == common.INJECT_TYPE_SITE) ? 'site-client' : secret.metadata.name;
             if (Object.keys(profiles).indexOf(profile_name) >= 0) {
                 delete profiles[profile_name];
             } else {
-                sync.LocalObjectUpdated('Secret', secret.metadata.name, secret.metadata.annotations['skupper.io/skx-hash']);
+                sync.LocalObjectUpdated('Secret', secret.metadata.name, secret.metadata.annotations[common.META_ANNOTATION_STATE_HASH]);
                 await inject_profile(profile_name, secret)
             }
         }
     };
 
+    //
+    // Delete any profiles that were not mentioned in the set of secrets.
+    //
     for (const p of Object.values(profiles)) {
         await router.DeleteSslProfile(p.name);
         await fs.rm(CERT_DIRECTORY + p.name, recursive=true);
     };
 }
 
-const sync_listeners = async function(router_listeners, config_listeners_in) {
+const sync_listeners = async function() {
     try {
         //
-        // Build a map of the synchronizable listeners.  Exclude the builtin listeners.
+        // Get the current set of listeners from the router.
+        //
+        const router_listeners = await router.ListListeners();
+
+        //
+        // Build a map of the synchronizable listeners.  Exclude the listeners that are built into the basic configuration.
         //
         let listener_map = {};
         for (const rl of router_listeners) {
@@ -101,7 +115,7 @@ const sync_listeners = async function(router_listeners, config_listeners_in) {
         }
 
         //
-        // Get a list of the injected SslProfiles so we can avoid creating listeners that reference a nonexistent profile.
+        // Get a list of the names of injected SslProfiles so we can avoid creating listeners that reference nonexistent profiles.
         //
         let sslProfileNames = [];
         const profileList = await router.ListSslProfiles();
@@ -110,12 +124,19 @@ const sync_listeners = async function(router_listeners, config_listeners_in) {
         }
 
         //
-        // Build a map of listeners that have ssl-profiles and their JSON-decoded contents
+        // Build a list of accesspoint-type ConfigMaps as our set of desired listeners.  Exclude any listeners for which there is no SslProfile.
         //
+        const configMaplist = await kube.GetConfigmaps();
         var config_listeners = {};
-        for (const [key, value] of Object.entries(config_listeners_in)) {
-            if (sslProfileNames.indexOf(`${key}-server`) >= 0) {
-                config_listeners[key] = JSON.parse(value);
+        var target_ports     = {};
+        for (const configMap of configMaplist) {
+            if ((kube.Annotation(configMap, common.META_ANNOTATION_STATE_TYPE) == common.STATE_TYPE_ACCESS_POINT)
+                && sslProfileNames.indexOf(configMap.metadata.name) >= 0) {
+                let port = ingress.GetTargetPort(kube.Annotation(configMap, common.META_ANNOTATION_STATE_ID));
+                if (port) {
+                    config_listeners[configMap.metadata.name] = configMap;
+                    target_ports[configMap.metadata.name] = port;
+                }
             }
         }
 
@@ -125,36 +146,24 @@ const sync_listeners = async function(router_listeners, config_listeners_in) {
                 delete listener_map[lname];
             } else {
                 Log(`Creating router listener ${lname}`);
-                var host = value.bindhost;
-                var port;
-                var role;
-                var profile;
-                var strip = 'both';
+                var host    = value.bindhost;
+                var port    = target_ports[key];
+                var role    = 'normal';
+                var profile = key;
+                var strip   = 'both';
                 switch (value.kind) {
+                case 'claim':
                 case 'manage':
-                    port    = MANAGE_PORT;
-                    role    = 'normal';
-                    profile = 'manage-server';
                     break;
 
                 case 'peer':
-                    port    = PEER_PORT;
-                    role    = 'inter-router';
-                    profile = 'peer-server';
-                    strip   = 'no';
-                    break;
-
-                case 'claim':
-                    port    = CLAIM_PORT;
-                    role    = 'normal';
-                    profile = 'claim-server';
+                    role  = 'inter-router';
+                    strip = 'no';
                     break;
 
                 case 'member':
-                    port    = MEMBER_PORT;
-                    role    = 'edge';
-                    profile = 'member-server';
-                    strip   = 'no';
+                    role  = 'edge';
+                    strip = 'no';
                     break;
 
                 default:
@@ -188,22 +197,26 @@ const sync_listeners = async function(router_listeners, config_listeners_in) {
     }
 }
 
-const sync_connectors = async function(router_connectors, config_connectors_json) {
-    if (!config_connectors_json) {
-        config_connectors_json = {};
-    }
+const sync_connectors = async function() {
     try {
         //
-        // Build a map of the connectors.
+        // Build a map of the existing router connectors.
         //
+        const router_connectors = await router.ListConnectors();
         let connector_map = {};
         for (const rc of router_connectors) {
             connector_map[rc.name] = rc;
         }
 
+        //
+        // Build a map of synchronizable links.
+        //
+        const configMaplist = await kube.GetConfigmaps();
         var config_connectors = {};
-        for (const [key, value] of Object.entries(config_connectors_json)) {
-            config_connectors['connector_' + key] = JSON.parse(value);
+        for (const configMap of configMaplist) {
+            if (kube.Annotation(configMap, common.META_ANNOTATION_STATE_TYPE) == common.STATE_TYPE_LINK) {
+                config_connectors[configMap.metadata.name] = configMap;
+            }
         }
 
         for (const [cname, cc] of Object.entries(config_connectors)) {
@@ -232,64 +245,41 @@ const sync_connectors = async function(router_connectors, config_connectors_json
             await router.DeleteConnector(cname);
         }
     } catch (err) {
-        Log(`Exception in sync_connectors: ${err.message}`);
+        Log(`Exception in sync_connectors: ${err.stack}`);
     }
-}
-
-const sync_config_map_incoming = async function() {
-    var configmap;
-    try {
-        configmap = await kube.LoadConfigmap('skupperx-links-incoming');
-        sync.LocalObjectUpdated('ConfigMap', 'skupperx-links-incoming', configmap.metadata.annotations['skupper.io/skx-hash']);
-    } catch (error) {
-        configmap = {data: {}};
-        sync.LocalObjectUpdated('ConfigMap', 'skupperx-links-incoming', null);
-    }
-
-    let actual_listeners  = await router.ListListeners();
-    let config_listeners  = configmap.data;
-
-    await sync_listeners(actual_listeners, config_listeners);
-}
-
-const sync_config_map_outgoing = async function() {
-    var configmap;
-    try {
-        configmap = await kube.LoadConfigmap('skupperx-links-outgoing');
-        sync.LocalObjectUpdated('ConfigMap', 'skupperx-links-outgoing', configmap.metadata.annotations['skupper.io/skx-hash']);
-    } catch(err) {
-        Log(`Failed to load skupperx-links-outgoing config-map, no links created`);
-        sync.LocalObjectUpdated('ConfigMap', 'skupperx-links-outgoing', null);
-        return;
-    }
-
-    let actual_connectors = await router.ListConnectors();
-    let config_connectors = configmap.data;
-
-    await sync_connectors(actual_connectors, config_connectors);
 }
 
 const on_secret_watch = async function(kind, obj) {
-    if (obj.metadata.annotations && obj.metadata.annotations['skupper.io/skx-inject']) {
+    const inject_type = kube.Annotation(obj, common.META_ANNOTATION_TLS_INJECT);
+    if (inject_type == common.INJECT_TYPE_ACCESS_POINT) {
+        //
+        // An update occurred that affects an access-point.  First, sync the secrets to update the SslProfiles,
+        // then sync the Listeners in case SslProfile changes affect Listener configuration.
+        //
         await sync_secrets();
-        await sync_config_map_incoming();
-        await sync_config_map_outgoing();
+        await sync_listeners();
+    } else if (inject_type == common.INJECT_TYPE_SITE) {
+        //
+        // The site client certificate has bee updated.  Sync the secrets to ensure the SslProfiles are up to date.
+        //
+        await sync_secrets();
     }
 }
 
 const on_configmap_watch = async function(kind, obj) {
-    if (obj.metadata.name == 'skupperx-links-incoming') {
-        await sync_config_map_incoming();
-    } else if (obj.metadata.name == 'skupperx-links-outgoing') {
-        await sync_config_map_outgoing();
+    const state_type = kube.Annotation(obj, common.META_ANNOTATION_STATE_TYPE);
+    if (state_type == common.STATE_TYPE_ACCESS_POINT) {
+        await sync_listeners();
+    } else if (state_type == common.STATE_TYPE_LINK) {
+        await sync_connectors();
     }
 }
 
 const start_sync_loop = async function () {
     Log('Link module sync-loop starting');
     await sync_secrets();
-    await sync_config_map_incoming();
-    await sync_config_map_outgoing();
+    await sync_listeners();
+    await sync_connectors();
     kube.WatchSecrets(on_secret_watch);
     kube.WatchConfigMaps(on_configmap_watch);
 }

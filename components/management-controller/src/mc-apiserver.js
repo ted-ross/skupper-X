@@ -316,15 +316,15 @@ exports.AddHostToAccessPoint = async function(siteId, key, hostname, port) {
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
-        var ref;
+        var kind;
         switch (key) {
-            case 'ingress/manage' : ref = 'ManageAccess';  break;
-            case 'ingress/member' : ref = 'MemberAccess';  break;
-            case 'ingress/claim'  : ref = 'ClaimAccess';   break;
-            case 'ingress/peer'   : ref = 'PeerAccess';    break;
+            case 'ingress/claim'  : kind = 'claim';   break;
+            case 'ingress/peer'   : kind = 'peer';    break;
+            case 'ingress/member' : kind = 'member';  break;
+            case 'ingress/manage' : kind = 'manage';  break;
             default: throw Error(`Invalid ingress key: ${key}`);
         }
-        const result = await client.query(`SELECT ${ref} as access_ref, BackboneAccessPoints.* FROM InteriorSites JOIN BackboneAccessPoints ON ${ref} = BackboneAccessPoints.Id WHERE InteriorSites.Id = $1`, [siteId]);
+        const result = await client.query(`SELECT Id, Hostname, Port FROM BackboneAccessPoints WHERE Kind = $1 AND InteriorSite = $2`, [kind, siteId]);
         if (result.rowCount == 1) {
             let access = result.rows[0];
             if (access.hostname != hostname || access.port != port) {
@@ -345,7 +345,7 @@ exports.AddHostToAccessPoint = async function(siteId, key, hostname, port) {
                 await sync.NewIngressAvailable(siteId);
             }
         } else {
-            throw Error(`Access point not found for site ${siteId} (${ref})`);
+            throw Error(`Access point not found for site ${siteId} (${kind})`);
         }
     } catch (err) {
         await client.query('ROLLBACK');

@@ -75,12 +75,12 @@ exports.Main = async function() {
         await links.Start(BACKBONE_MODE);
         if (BACKBONE_MODE) {
             await ingress.Start(SITE_ID);
-            //await siteSync.Start(BACKBONE_MODE, SITE_ID, conn);
-            if (BACKBONE_MODE) {
-                await syncBackboneKube.Start(SITE_ID, conn);
-            } else {
-                await syncMember.Start(SITE_ID);
-            }
+        }
+        //await siteSync.Start(BACKBONE_MODE, SITE_ID, conn);
+        if (BACKBONE_MODE) {
+            await syncBackboneKube.Start(SITE_ID, conn);
+        } else {
+            await syncMember.Start(SITE_ID);
         }
         Log("[Site controller initialization completed successfully]");
     } catch (error) {

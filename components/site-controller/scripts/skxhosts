@@ -17,4 +17,4 @@
 # specific language governing permissions and limitations
 # under the License.
 
-curl http://localhost:8086/api/v1alpha1/hostnames -s | jq -c
+curl http://localhost:1040/api/v1alpha1/hostnames -s | jq -M

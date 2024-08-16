@@ -25,9 +25,31 @@
 exports.API_CONTROLLER_ADDRESS = 'skx/sync/mgmtcontroller';
 
 //
+// Selector labels
+//
+exports.APPLICATION_ROUTER_LABEL = 'skx-router';
+
+//
 // Kubernetes annotation keys
 //
 exports.META_ANNOTATION_SKUPPERX_CONTROLLED = 'skupper.io/skupperx-controlled';
+exports.META_ANNOTATION_STATE_HASH          = 'skx/state-hash';
+exports.META_ANNOTATION_STATE_TYPE          = 'skx/state-type';
+exports.META_ANNOTATION_STATE_ID            = 'skx/state-id';
+exports.META_ANNOTATION_TLS_INJECT          = 'skx/tls-inject';
+
+//
+// State types
+//
+exports.STATE_TYPE_LINK          = 'link';
+exports.STATE_TYPE_ACCESS_POINT  = 'accesspoint';
+exports.INJECT_TYPE_ACCESS_POINT = 'accesspoint';
+exports.INJECT_TYPE_SITE         = 'site';
+
+//
+// Kubernetes object names
+//
+exports.ROUTER_SERVICE_NAME = 'skx-router';
 
 //
 // Skupper CRD constants

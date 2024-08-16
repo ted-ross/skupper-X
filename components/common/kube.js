@@ -19,7 +19,8 @@
 
 "use strict";
 
-const Log  = require('./log.js').Log;
+const Log    = require('./log.js').Log;
+const common = require('./common.js');
 const WATCH_ERROR_THRESHOLD = 10;   // Log if threshold is exceeded in a minute's time.
 
 var fs;
@@ -34,9 +35,18 @@ var secretWatch;
 var certificateWatch;
 var configMapWatch;
 var routeWatch;
+var serviceWatch;
 var watchErrorCount = 0;
 var lastWatchError;
 var namespace = 'default';
+
+exports.Annotation = function(obj, key) {
+    if (obj && obj.metadata && obj.metadata.annotations) {
+        return obj.metadata.annotations[key];
+    }
+
+    return undefined;
+}
 
 exports.Namespace = function() {
     return namespace;
@@ -63,6 +73,7 @@ exports.Start = async function (k8s_mod, fs_mod, yaml_mod, in_cluster) {
     certificateWatch = new k8s.Watch(kc);
     configMapWatch   = new k8s.Watch(kc);
     routeWatch       = new k8s.Watch(kc);
+    serviceWatch     = new k8s.Watch(kc);
 
     try {
         if (in_cluster) {
@@ -191,6 +202,10 @@ exports.GetServices = async function() {
 exports.LoadService = async function(name) {
     let service = await v1Api.readNamespacedService(name, namespace);
     return service.body;
+}
+
+exports.ReplaceService = async function(name, obj) {
+    await v1Api.replaceNamespacedService(name, namespace, obj);
 }
 
 exports.DeleteService = async function(name) {
@@ -346,12 +361,40 @@ exports.WatchRoutes = function(callback) {
     }
 }
 
+var serviceWatches = [];
+
+const startWatchServices = function() {
+    serviceWatch.watch(
+        `/api/v1/namespaces/${namespace}/services`,
+        {},
+        (type, apiObj, watchObj) => {
+            for (const callback of serviceWatches) {
+                callback(type, apiObj);
+            }
+        },
+        (err) => {
+            if (err) {
+                watchErrorCount++;
+                lastWatchError = `Services: ${err}`;
+            }
+            startWatchServices();
+        }
+    )
+}
+
+exports.WatchServices = function(callback) {
+    serviceWatches.push(callback);
+    if (serviceWatches.length == 1) {
+        startWatchServices();
+    }
+}
+
 exports.ApplyObject = async function(obj) {
     try {
         if (obj.metadata.annotations == undefined) {
             obj.metadata.annotations = {};
         }
-        obj.metadata.annotations["skupper.io/skx-controlled"] = "true";
+        obj.metadata.annotations[common.META_ANNOTATION_SKUPPERX_CONTROLLED] = "true";
         obj.metadata.namespace = namespace;
         Log(`Creating resource: ${obj.kind} ${obj.metadata.name}`);
         return await client.create(obj);
