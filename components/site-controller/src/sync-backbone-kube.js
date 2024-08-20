@@ -23,14 +23,15 @@
 // This module is the state-sync endpoint for backbone sites.  This module should only be started for
 // backbone sites.
 //
-// The responsibility of this module is simply to synchronize Kubernetes state with the management controller.
+// The responsibility of this module is to synchronize Kubernetes state with the management controller.
 //
 // Local State (synchronized to the management-controller):
 //   - Ingress host/port pairs for each access point
 //
 // Remote State (synchronized from the management-controller):
 //   - Secrets
-//   - Access Points
+//   - Access-Point ConfigMaps
+//   - Link ConfigMaps
 //
 
 const Log    = require('./common/log.js').Log;

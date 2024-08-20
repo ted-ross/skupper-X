@@ -35,7 +35,7 @@ const Log     = require('./common/log.js').Log;
 const kube    = require('./common/kube.js');
 const router  = require('./common/router.js');
 const common  = require('./common/common.js');
-const sync    = require('./site-sync.js');
+const sync    = require('./sync-backbone-kube.js');
 const ingress = require('./ingress.js');
 var   fs      = require('fs/promises');
 
@@ -82,7 +82,7 @@ const sync_secrets = async function() {
             if (Object.keys(profiles).indexOf(profile_name) >= 0) {
                 delete profiles[profile_name];
             } else {
-                sync.LocalObjectUpdated('Secret', secret.metadata.name, secret.metadata.annotations[common.META_ANNOTATION_STATE_HASH]);
+                sync.LocalObjectUpdated('Secret', secret.metadata.name, secret.metadata.annotations[common.META_ANNOTATION_STATE_HASH]);  // TODO - redirect this call
                 await inject_profile(profile_name, secret)
             }
         }

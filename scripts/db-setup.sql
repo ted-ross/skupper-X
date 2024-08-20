@@ -142,7 +142,9 @@ CREATE TABLE TlsCertificates (
     ObjectName text,                           -- The name of the secret, certificate, and issuer objects in k8s
     SignedBy UUID REFERENCES TlsCertificates,  -- NULL => signed by the Root Issuer
     Expiration timestamptz,
-    RenewalTime timestamptz
+    RenewalTime timestamptz,
+    RotationOrdinal integer DEFAULT 0,
+    Supercedes UUID REFERENCES TlsCertificates
 );
 
 --

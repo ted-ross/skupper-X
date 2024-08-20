@@ -48,6 +48,10 @@ exports.Annotation = function(obj, key) {
     return undefined;
 }
 
+exports.Controlled = function(obj) {
+    return exports.Annotation(obj, common.META_ANNOTATION_SKUPPERX_CONTROLLED) == 'true';
+}
+
 exports.Namespace = function() {
     return namespace;
 }
@@ -399,7 +403,7 @@ exports.ApplyObject = async function(obj) {
         Log(`Creating resource: ${obj.kind} ${obj.metadata.name}`);
         return await client.create(obj);
     } catch (error) {
-        Log(`Exception in kube.ApplyObject: ${error.message}`);
+        Log(`Exception in kube.ApplyObject: kind: ${obj.kind}, name: ${obj.metadata.name}:  ${error.message}`);
     }
 }
 

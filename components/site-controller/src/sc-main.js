@@ -26,7 +26,6 @@ const rhea         = require('rhea');
 const kube         = require('./common/kube.js');
 const amqp         = require('./common/amqp.js');
 const apiserver    = require('./sc-apiserver.js');
-const siteSync     = require('./site-sync.js');
 const syncBackboneKube = require('./sync-backbone-kube.js');
 const syncMember   = require('./sync-member.js');
 const router       = require('./common/router.js');
