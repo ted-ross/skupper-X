@@ -32,7 +32,7 @@ const siteTemplates = require('./site-templates.js');
 const crdTemplates  = require('./crd-templates.js');
 const kube       = require('./common/kube.js');
 const Log        = require('./common/log.js').Log;
-const sync       = require('./manage-sync.js');
+const sync       = require('./sync-management.js');
 const adminApi   = require('./api-admin.js');
 const userApi    = require('./api-user.js');
 const util       = require('./common/util.js');
@@ -67,8 +67,8 @@ const link_config_map_yaml = function(name, data) {
         data: data,
     };
 
-    configMap.metadata.annotations['skupper.io/skx-hash'] = sync.HashOfConfigMap(configMap);
-    return yaml.dump(configMap);
+    configMap.metadata.annotations[common.META_ANNOTATION_STATE_HASH] = sync.HashOfConfigMap(configMap);
+    return "---\n" + yaml.dump(configMap);
 }
 
 const claim_config_map_yaml = function(claimId, hostname, port, interactive) {
@@ -89,7 +89,7 @@ const claim_config_map_yaml = function(claimId, hostname, port, interactive) {
         port: port,
     });
 
-    configMap.metadata.annotations['skupper.io/skx-hash'] = sync.HashOfConfigMap(configMap);
+    configMap.metadata.annotations[common.META_ANNOTATION_STATE_HASH] = sync.HashOfConfigMap(configMap);
     return "---\n" + yaml.dump(configMap);
 }
 
@@ -155,11 +155,15 @@ const fetchBackboneSiteKube = async function (siteId, res) {
             text += siteTemplates.DeploymentYaml(siteId, true);
             text += siteTemplates.SecretYaml(secret, `skx-site-${siteId}`, common.INJECT_TYPE_SITE);
 
-            const outgoing = await sync.GetBackboneConnectors_TX(client, siteId);
-            text += "---\n" + link_config_map_yaml('skupperx-links-outgoing', outgoing);
+            const links = await sync.GetBackboneLinks_TX(client, siteId);
+            for (const [linkId, linkData] of Object.entries(links)) {
+                text += siteTemplates.LinkConfigMapYaml(linkId, linkData);
+            }
 
-            const incoming = await sync.GetBackboneIngresses_TX(client, siteId, true);
-            text += "---\n" + link_config_map_yaml('skupperx-links-incoming', incoming)
+            const accessPoints = await sync.GetBackboneAccessPoints_TX(client, siteId, true);
+            for (const [apId, apData] of Object.entries(accessPoints)) {
+                text += siteTemplates.AccessPointConfigMapYaml(apId, apData);
+            }
 
             res.status(returnStatus).send(text);
         } else {
@@ -275,7 +279,7 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
                 }
             }
 
-            text += "---\n" + link_config_map_yaml('skupperx-incoming', incoming);
+            text += link_config_map_yaml('skupperx-incoming', incoming);
 
             res.status(returnStatus).send(text);
         } else {
@@ -298,7 +302,7 @@ const fetchBackboneLinksOutgoingKube = async function (bsid, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
-        const outgoing = await sync.GetBackboneConnectors_TX(client, bsid);
+        const outgoing = await sync.GetBackboneLinks_TX(client, bsid);
         res.status(returnStatus).send(link_config_map_yaml('skupperx-outgoing', outgoing));
         await client.query('COMMIT');
     } catch (err) {

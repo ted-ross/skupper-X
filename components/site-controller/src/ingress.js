@@ -153,7 +153,6 @@ const backbone_route = function(apid) {
 }
 
 const do_reconcile_kube_service = async function() {
-    Log("do_reconcile_kube_service");
     reconcile_service_scheduled = false;
     let services = await kube.GetServices();
     let found    = false;
@@ -169,28 +168,21 @@ const do_reconcile_kube_service = async function() {
     });
 
     if (desired && !found) {
-        Log('  Desired and not found');
         const service = backbone_service();
         await kube.ApplyObject(service);
     }
 
     if (!desired && found) {
-        Log('  Not desired and found');
         await kube.DeleteService(common.ROUTER_SERVICE_NAME);
     }
 
     if (desired && found) {
-        Log('  Desired and found');
         //
         // If the ports array has changed, then update the service.
         //
         const desired_service  = backbone_service();
         const existing_service = await kube.LoadService(common.ROUTER_SERVICE_NAME);
-        Log('    Comparing:');
-        Log(desired_service.spec.ports);
-        Log(existing_service.spec.ports);
         if (!(JSON.stringify(desired_service.spec.ports) === JSON.stringify(existing_service.spec.ports))) {
-            Log('      Replacing...');
             await kube.ReplaceService(common.ROUTER_SERVICE_NAME, desired_service);
         }
     }
@@ -199,12 +191,12 @@ const do_reconcile_kube_service = async function() {
 const reconcile_kube_service = async function() {
     if (!reconcile_service_scheduled) {
         reconcile_service_scheduled = true;
-        setTimeout(do_reconcile_kube_service, 200);
+        await setTimeout(200);
+        await do_reconcile_kube_service();
     }
 }
 
 const do_reconcile_routes = async function() {
-    Log('do_reconcile_routes');
     reconcile_routes_scheduled = false;
     const all_routes = await kube.GetRoutes();
     let routes = {};
@@ -250,7 +242,8 @@ const do_reconcile_routes = async function() {
 const reconcile_routes = async function() {
     if (!reconcile_routes_scheduled) {
         reconcile_routes_scheduled = true;
-        setTimeout(do_reconcile_routes, 200);
+        await setTimeout(200);
+        await do_reconcile_routes();
     }
 }
 
@@ -357,7 +350,8 @@ const do_reconcile_config_maps = async function() {
 const reconcile_config_maps = async function() {
     if (!reconcile_config_map_scheduled) {
         reconcile_config_map_scheduled = true;
-        setTimeout(do_reconcile_config_maps, 200);
+        await setTimeout(200);
+        await do_reconcile_config_maps();
     }
 }
 
@@ -375,7 +369,6 @@ const onConfigMapWatch = function(type, apiObj) {
 }
 
 const onRouteWatch = async function(type, route) {
-    Log('onRouteWatch');
     if (kube.Controlled(route)) {
         await reconcile_routes();
     }

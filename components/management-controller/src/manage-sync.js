@@ -190,14 +190,6 @@ const checkSiteHashset = async function(backboneId, siteId, hashSet, address) {
     }
 }
 
-exports.HashOfSecret = function(secret) {
-    let text = '';
-    for (const [key, value] of Object.entries(secret.data)) {
-        text += key + value;
-    }
-    return crypto.createHash('sha1').update(text).digest('hex');
-}
-
 const dataOfSecret = function(secret, hash) {
     let data = {};
     data.metadata = {
@@ -214,14 +206,6 @@ const dataOfSecret = function(secret, hash) {
     }
     data.metadata.annotations['skupper.io/skx-hash'] = hash;
     return data;
-}
-
-exports.HashOfConfigMap = function(cm) {
-    let text = '';
-    for (const [key, value] of Object.entries(cm.data)) {
-        text += key + value;
-    }
-    return crypto.createHash('sha1').update(text).digest('hex');
 }
 
 const getSiteClient = async function(siteId) {
@@ -295,24 +279,6 @@ const getAccessCert = async function(siteId, kind) {
     return [hash, data];
 }
 
-//
-// Ingress config-map:  { access-point-id : JSON( { kind : [manage,peer,member,claim], bindhost : <bind-host-string> } )}
-//
-exports.GetBackboneIngresses_TX = async function(client, siteId, initialOnly = false) {
-    let data = {};
-    const result = await client.query(
-        'SELECT Id, Kind, BindHost FROM BackboneAccessPoints WHERE InteriorSite = $1', [siteId]);
-    for (const ap of result.rows) {
-        if (!initialOnly || (ap.kind == 'manage' || ap.kind == 'peer')) {
-            data[ap.id] = JSON.stringify({
-                kind     : ap.kind,
-                bindhost : ap.bindhost ? ap.bindhost : "",
-            });
-        }
-    }
-    return data;
-}
-
 const getLinksIncoming = async function(siteId) {
     var configMap = {
         metadata : {
@@ -336,24 +302,6 @@ const getLinksIncoming = async function(siteId) {
     }
 
     return [hash, configMap];
-}
-
-exports.GetBackboneConnectors_TX = async function (client, siteId) {
-    const result = await client.query(
-        'SELECT *, BackboneAccessPoints.Hostname, BackboneAccessPoints.Port FROM InterRouterLinks ' +
-        'JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = InterRouterLinks.AccessPoint ' +
-        'WHERE ConnectingInteriorSite = $1', [siteId]);
-    let outgoing = {};
-    for (const connection of result.rows) {
-        if (connection.hostname) {
-            outgoing[connection.listeninginteriorsite] = JSON.stringify({
-                host: connection.hostname,
-                port: connection.port,
-                cost: connection.cost.toString(),
-            });
-        }
-    }
-    return outgoing;
 }
 
 const getLinksOutgoing = async function(siteId) {

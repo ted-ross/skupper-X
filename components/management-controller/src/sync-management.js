@@ -26,14 +26,15 @@
 // the database.
 //
 
-const Log     = require('./common/log.js').Log;
-const common  = require('./common/common.js');
-const util    = require('./common/util.js');
-const db      = require('./db.js');
-const kube    = require('./common/kube.js');
-const sync    = require('./common/state-sync.js');
-const bbLinks = require('./backbone-links.js');
-const crypto  = require('crypto');
+const Log       = require('./common/log.js').Log;
+const common    = require('./common/common.js');
+const util      = require('./common/util.js');
+const db        = require('./db.js');
+const kube      = require('./common/kube.js');
+const sync      = require('./common/state-sync.js');
+const bbLinks   = require('./backbone-links.js');
+const templates = require('./site-templates.js');
+const crypto    = require('crypto');
 
 var peers = {};  // {peerId: {pClass: <>, stuff}}
 
@@ -46,9 +47,37 @@ const hashOfData = function(data) {
     return crypto.createHash('sha1').update(text).digest('hex');
 }
 
-const hashOfSecret = async function(secretName) {
-    const secret = await kube.LoadSecret(secretName);
-    return hashOfData(secret.data);
+exports.GetBackboneLinks_TX = async function(client, siteId) {
+    const result = await client.query(
+        'SELECT InterRouterLinks.Id, InterRouterLinks.Cost, BackboneAccessPoints.Hostname, BackboneAccessPoints.Port FROM InterRouterLinks ' +
+        'JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = InterRouterLinks.AccessPoint ' +
+        'WHERE ConnectingInteriorSite = $1', [siteId]);
+    let links = {};
+    for (const link of result.rows) {
+        if (link.hostname) {
+            links[link.id] = {
+                host: link.hostname,
+                port: link.port,
+                cost: link.cost.toString(),
+            };
+        }
+    }
+    return links;
+}
+
+exports.GetBackboneAccessPoints_TX = async function(client, siteId, initialOnly = false) {
+    let data = {};
+    const result = await client.query(
+        'SELECT Id, Kind, BindHost FROM BackboneAccessPoints WHERE InteriorSite = $1', [siteId]);
+    for (const ap of result.rows) {
+        if (!initialOnly || (ap.kind == 'manage' || ap.kind == 'peer')) {
+            data[ap.id] = {
+                kind     : ap.kind,
+                bindhost : ap.bindhost ? ap.bindhost : "",
+            };
+        }
+    }
+    return data;
 }
 
 //=========================================================================================================================

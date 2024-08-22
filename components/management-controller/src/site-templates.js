@@ -33,9 +33,17 @@ const CM_NAME           = 'skupper-internal';
 const DEPLOYMENT_NAME   = 'skupperx-site';
 
 
-const HashOfSecret = function(secret) {
+exports.HashOfSecret = function(secret) {
     let text = '';
     for (const [key, value] of Object.entries(secret.data)) {
+        text += key + value;
+    }
+    return crypto.createHash('sha1').update(text).digest('hex');
+}
+
+exports.HashOfConfigMap = function(cm) {
+    let text = '';
+    for (const [key, value] of Object.entries(cm.data)) {
         text += key + value;
     }
     return crypto.createHash('sha1').update(text).digest('hex');
@@ -374,7 +382,51 @@ exports.SecretYaml = function(certificate, profile_name, inject) {
     if (inject) {
         secret.metadata.annotations[common.META_ANNOTATION_TLS_INJECT] = inject;
     }
-    secret.metadata.annotations[common.META_ANNOTATION_STATE_HASH] = HashOfSecret(secret);
+    secret.metadata.annotations[common.META_ANNOTATION_STATE_HASH] = exports.HashOfSecret(secret);
 
     return "---\n" + yaml.dump(secret);
+}
+
+exports.LinkConfigMapYaml = function(linkId, data) {
+    let link = {
+        apiVersion : 'v1',
+        kind       : 'ConfigMap',
+        metadata   : {
+            name : `skx-link-${linkId}`,
+            annotations : {
+                [common.META_ANNOTATION_SKUPPERX_CONTROLLED] : 'true',
+                [common.META_ANNOTATION_STATE_TYPE]          : common.STATE_TYPE_LINK,
+                [common.META_ANNOTATION_STATE_ID]            : linkId,
+                [common.META_ANNOTATION_STATE_DIR]           : 'remote',
+                [common.META_ANNOTATION_STATE_KEY]           : `link-${linkId}`,
+            },
+        },
+        data : data,
+    };
+
+    link.metadata.annotations[common.META_ANNOTATION_STATE_HASH] = exports.HashOfConfigMap(link);
+
+    return "---\n" + yaml.dump(link);
+}
+
+exports.AccessPointConfigMapYaml = function(apId, data) {
+    let accessPoint = {
+        apiVersion : 'v1',
+        kind       : 'ConfigMap',
+        metadata   : {
+            name : `skx-access-${apId}`,
+            annotations : {
+                [common.META_ANNOTATION_SKUPPERX_CONTROLLED] : 'true',
+                [common.META_ANNOTATION_STATE_TYPE]          : common.STATE_TYPE_ACCESS_POINT,
+                [common.META_ANNOTATION_STATE_ID]            : apId,
+                [common.META_ANNOTATION_STATE_DIR]           : 'remote',
+                [common.META_ANNOTATION_STATE_KEY]           : `access-${apId}`,
+            },
+        },
+        data : data,
+    };
+
+    accessPoint.metadata.annotations[common.META_ANNOTATION_STATE_HASH] = exports.HashOfConfigMap(accessPoint);
+
+    return "---\n" + yaml.dump(accessPoint);
 }
