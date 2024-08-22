@@ -17,6 +17,10 @@
  under the License.
 */
 
+//
+// This module is deprecated and will be removed
+//
+
 "use strict";
 
 const Log      = require('./common/log.js').Log;

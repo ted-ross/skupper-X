@@ -48,9 +48,11 @@ const sync        = require('./sync-backbone-kube.js');
 const router_port = require('./router-port.js');
 const util        = require('./common/util.js');
 const crypto      = require('crypto');
+const { setTimeout } = require('timers/promises');
 
 var reconcile_config_map_scheduled = false;
 var reconcile_routes_scheduled     = false;
+var reconcile_service_scheduled    = false;
 var accessPoints = {}; // APID => {kind, routerPort, syncHash, syncData, toDelete}
 
 exports.GetTargetPort = function(apid) {
@@ -62,6 +64,7 @@ exports.GetTargetPort = function(apid) {
 }
 
 const new_access_point = function(apid, kind) {
+    Log(`new_access_point: ${apid}`);
     const port = router_port.AllocatePort();
     let value = {
         kind       : kind,
@@ -71,10 +74,14 @@ const new_access_point = function(apid, kind) {
         toDelete   : false,
     };
 
+    if (accessPoints[apid]) {
+        throw Error(`accessPoint already exists for ${apid}`);
+    }
     accessPoints[apid] = value;
 }
 
 const free_access_point = function(apid) {
+    Log(`free_access_point: ${apid}`);
     const ap = accessPoints[apid];
     if (ap) {
         router_port.FreePort(ap.routerPort);
@@ -145,7 +152,9 @@ const backbone_route = function(apid) {
     };
 }
 
-const reconcile_kube_service = async function() {
+const do_reconcile_kube_service = async function() {
+    Log("do_reconcile_kube_service");
+    reconcile_service_scheduled = false;
     let services = await kube.GetServices();
     let found    = false;
     let desired  = Object.keys(accessPoints).length > 0;
@@ -160,34 +169,49 @@ const reconcile_kube_service = async function() {
     });
 
     if (desired && !found) {
-        //
-        // Create the service object
-        //
+        Log('  Desired and not found');
         const service = backbone_service();
         await kube.ApplyObject(service);
     }
 
     if (!desired && found) {
+        Log('  Not desired and found');
         await kube.DeleteService(common.ROUTER_SERVICE_NAME);
     }
 
     if (desired && found) {
-        const desired_service = backbone_service();
+        Log('  Desired and found');
+        //
+        // If the ports array has changed, then update the service.
+        //
+        const desired_service  = backbone_service();
         const existing_service = await kube.LoadService(common.ROUTER_SERVICE_NAME);
-        if (!util.mapEqual_sync(desired_service, existing_service)) {
+        Log('    Comparing:');
+        Log(desired_service.spec.ports);
+        Log(existing_service.spec.ports);
+        if (!(JSON.stringify(desired_service.spec.ports) === JSON.stringify(existing_service.spec.ports))) {
+            Log('      Replacing...');
             await kube.ReplaceService(common.ROUTER_SERVICE_NAME, desired_service);
         }
     }
 }
 
-const reconcile_routes = async function() {
+const reconcile_kube_service = async function() {
+    if (!reconcile_service_scheduled) {
+        reconcile_service_scheduled = true;
+        setTimeout(do_reconcile_kube_service, 200);
+    }
+}
+
+const do_reconcile_routes = async function() {
+    Log('do_reconcile_routes');
     reconcile_routes_scheduled = false;
     const all_routes = await kube.GetRoutes();
     let routes = {};
 
     for (const candidate of all_routes) {
         const apid = kube.Annotation(candidate, common.META_ANNOTATION_STATE_ID);
-        if (kube.Controlled(candidate) && Object.keys(accessPoints).indexOf(apid) >= 0) {
+        if (kube.Controlled(candidate)) {
             routes[apid] = candidate;
         }
     }
@@ -204,9 +228,9 @@ const reconcile_routes = async function() {
                 };
                 hash = ingressHash(data);
                 if (hash != ap.syncHash) {
-                    ap.syncHash = hash;
-                    ap.syncData = data;
-                    // TODO - Inform the state-sync module of the local change.
+                    accessPoints[apid].syncHash = hash;
+                    accessPoints[apid].syncData = data;
+                    await sync.UpdateLocalState(`accessstatus-${apid}`, hash, data);
                 }
             }
             delete routes[apid];
@@ -220,6 +244,13 @@ const reconcile_routes = async function() {
     //
     for (const route of Object.values(routes)) {
         await kube.DeleteRoute(route.metadata.name);
+    }
+}
+
+const reconcile_routes = async function() {
+    if (!reconcile_routes_scheduled) {
+        reconcile_routes_scheduled = true;
+        setTimeout(do_reconcile_routes, 200);
     }
 }
 
@@ -251,24 +282,22 @@ exports.GetInitialConfig = async function() {
     return ingressState;
 }
 
-//
-// Refactor: TODO
-//
 exports.GetIngressBundle = function() {
     let bundle = {};
 
-    for (const key of ['manage', 'peer']) {
-        const value = ingressState[key];
-        if (value.hash) {
-            bundle[`${key}_host`] = value.data.host;
-            bundle[`${key}_port`] = value.data.port;
+    for (const [apid, ap] of Object.entries(accessPoints)) {
+        if (ap.syncHash) {
+            bundle[apid] = {
+                host : ap.syncData.host,
+                port : ap.syncData.port,
+            };
         }
     }
 
     return bundle;
 }
 
-const reconcile_config_maps = async function() {
+const do_reconcile_config_maps = async function() {
     reconcile_config_map_scheduled = false;
     const all_config_maps = await kube.GetConfigmaps();
     let ingress_config_maps = {};
@@ -297,7 +326,7 @@ const reconcile_config_maps = async function() {
     // Un-condemn still-existing ingresses and create new ones.
     //
     for (const [apid, cm] of Object.entries(ingress_config_maps)) {
-        if (apid in Object.keys(accessPoints)) {
+        if (Object.keys(accessPoints).indexOf(apid) >= 0) {
             accessPoints[apid].toDelete = false;
         } else {
             const kind = cm.data.kind;
@@ -325,15 +354,19 @@ const reconcile_config_maps = async function() {
     }
 }
 
+const reconcile_config_maps = async function() {
+    if (!reconcile_config_map_scheduled) {
+        reconcile_config_map_scheduled = true;
+        setTimeout(do_reconcile_config_maps, 200);
+    }
+}
+
 const onConfigMapWatch = function(type, apiObj) {
     try {
         const controlled = kube.Controlled(apiObj);
         const state_type = kube.Annotation(apiObj, common.META_ANNOTATION_STATE_TYPE);
         if (controlled && state_type == common.STATE_TYPE_ACCESS_POINT) {
-            if (!reconcile_config_map_scheduled) {
-                setTimeout(reconcile_config_maps, 200);
-                reconcile_config_map_scheduled = true;
-            }
+            reconcile_config_maps();
         }
     } catch (e) {
         Log('Exception caught in ingress.onConfigMapWatch');
@@ -342,10 +375,9 @@ const onConfigMapWatch = function(type, apiObj) {
 }
 
 const onRouteWatch = async function(type, route) {
-    const apid = kube.Annotation(route, common.META_ANNOTATION_STATE_ID);
-    if (apid && Object.keys(accessPoints).indexOf(apid) >= 0 && !reconcile_routes_scheduled) {
-        reconcile_routes_scheduled = true;
-        setTimeout(reconcile_routes, 200);
+    Log('onRouteWatch');
+    if (kube.Controlled(route)) {
+        await reconcile_routes();
     }
 }
 
@@ -357,6 +389,8 @@ const onServiceWatch = async function(type, apiObj) {
 
 exports.Start = async function(siteId) {
     Log('[Ingress module started]');
+    await do_reconcile_config_maps();
+    await do_reconcile_routes();
     kube.WatchConfigMaps(onConfigMapWatch);
     kube.WatchRoutes(onRouteWatch);
     kube.WatchServices(onServiceWatch);

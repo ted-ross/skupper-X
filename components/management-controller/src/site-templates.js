@@ -21,7 +21,8 @@
 
 const config = require('./config.js');
 const yaml   = require('js-yaml');
-const sync   = require('./manage-sync.js');
+const common = require('./common/common.js');
+const crypto = require('crypto');
 
 const SA_NAME           = 'skupperx-site';
 const ROLE_NAME         = SA_NAME;
@@ -30,6 +31,15 @@ const APPLICATION       = 'skupperx';
 const ROUTER_LABEL      = 'skx-router';
 const CM_NAME           = 'skupper-internal';
 const DEPLOYMENT_NAME   = 'skupperx-site';
+
+
+const HashOfSecret = function(secret) {
+    let text = '';
+    for (const [key, value] of Object.entries(secret.data)) {
+        text += key + value;
+    }
+    return crypto.createHash('sha1').update(text).digest('hex');
+}
 
 exports.ServiceAccountYaml = function() {
     return `---
@@ -352,16 +362,19 @@ exports.SecretYaml = function(certificate, profile_name, inject) {
         kind: 'Secret',
         type: 'kubernetes.io/tls',
         metadata: {
-            name: 'skupperx-' + profile_name,
-            annotations: {},
+            name: profile_name,
+            annotations: {
+                [common.META_ANNOTATION_SKUPPERX_CONTROLLED] : 'true',
+                [common.META_ANNOTATION_STATE_DIR]           : 'remote',
+            },
         },
         data: certificate.data,
     };
 
     if (inject) {
-        secret.metadata.annotations['skupper.io/skx-inject'] = profile_name;  
+        secret.metadata.annotations[common.META_ANNOTATION_TLS_INJECT] = inject;
     }
-    secret.metadata.annotations['skupper.io/skx-hash'] = sync.HashOfSecret(secret);
+    secret.metadata.annotations[common.META_ANNOTATION_STATE_HASH] = HashOfSecret(secret);
 
     return "---\n" + yaml.dump(secret);
 }

@@ -36,6 +36,7 @@ const sync       = require('./manage-sync.js');
 const adminApi   = require('./api-admin.js');
 const userApi    = require('./api-user.js');
 const util       = require('./common/util.js');
+const common     = require('./common/common.js');
 const path       = require('path');
 
 const API_PREFIX = '/api/v1alpha1/';
@@ -152,7 +153,7 @@ const fetchBackboneSiteKube = async function (siteId, res) {
             text += siteTemplates.RoleBindingYaml();
             text += siteTemplates.ConfigMapYaml('interior');
             text += siteTemplates.DeploymentYaml(siteId, true);
-            text += siteTemplates.SecretYaml(secret, 'site-client', true);
+            text += siteTemplates.SecretYaml(secret, `skx-site-${siteId}`, common.INJECT_TYPE_SITE);
 
             const outgoing = await sync.GetBackboneConnectors_TX(client, siteId);
             text += "---\n" + link_config_map_yaml('skupperx-links-outgoing', outgoing);

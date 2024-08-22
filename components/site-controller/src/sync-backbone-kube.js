@@ -26,7 +26,7 @@
 // The responsibility of this module is to synchronize Kubernetes state with the management controller.
 //
 // Local State (synchronized to the management-controller):
-//   - Ingress host/port pairs for each access point
+//   - Ingress host/port pairs for each access point (programatically supplied by ingress module)
 //
 // Remote State (synchronized from the management-controller):
 //   - Secrets
@@ -41,6 +41,7 @@ const sync   = require('./common/state-sync.js');
 
 var connectedToPeer = false;
 var peerId;
+var localState = {};  // state-key: {hash, data}
 
 const kubeObjectForState = function(stateKey) {
     const elements   = stateKey.split('-');
@@ -57,7 +58,7 @@ const kubeObjectForState = function(stateKey) {
         case 'tls'          : objKind = 'Secret';     break;
         case 'access'       : objKind = 'ConfigMap';  break;
         case 'link'         : objKind = 'ConfigMap';  break;
-        case 'accessstatus' : objKind = 'ConfigMap';  objDir = 'local';  break;
+        case 'accessstatus' : objKind = 'InMemory';   objDir = 'local';  break;
         default:
             throw(Error(`Invalid stateKey prefix: ${elements[0]}`))
     }
@@ -67,9 +68,9 @@ const kubeObjectForState = function(stateKey) {
 
 const stateForList = function(objectList, local, remote) {
     for (const obj of objectList) {
-        const stateKey  = obj.metadata.annotations['skupper.io/skx-state-key'];
-        const stateDir  = obj.metadata.annotations['skupper.io/skx-state-dir'];
-        const stateHash = obj.metadata.annotations['skupper.io/skx-state-hash'];
+        const stateKey  = kube.Annotation(obj, common.META_ANNOTATION_STATE_KEY);
+        const stateDir  = kube.Annotation(obj, common.META_ANNOTATION_STATE_DIR);
+        const stateHash = kube.Annotation(obj, common.META_ANNOTATION_STATE_HASH);
 
         if (!!stateKey && !!stateDir && !!stateHash) {
             if (stateDir == 'local') {
@@ -82,6 +83,13 @@ const stateForList = function(objectList, local, remote) {
     return [local, remote];
 }
 
+const stateInMemory = function(local) {
+    for (const [key, data] of Object.entries(localState)) {
+        local[key] = data.hash;
+    }
+    return local;
+}
+
 const getHashState = async function() {
     var local  = {};
     var remote = {};
@@ -89,6 +97,7 @@ const getHashState = async function() {
     const configmaps = await kube.GetConfigmaps();
     [local, remote] = stateForList(secrets, local, remote);
     [local, remote] = stateForList(configmaps, local, remote);
+    local = stateInMemory(local);
     return [local, remote];
 }
 
@@ -116,9 +125,9 @@ const onStateChange = async function(peerId, stateKey, hash, data) {
             metadata   : {
                 name        : objName,
                 annotations : {
-                    'skupper.io/skx-state-key'  : stateKey,
-                    'skupper.io/skx-state-dir'  : objDir,
-                    'skupper.io/skx-state-hash' : hash,
+                    [common.META_ANNOTATION_STATE_KEY]  : stateKey,
+                    [common.META_ANNOTATION_STATE_DIR]  : objDir,
+                    [common.META_ANNOTATION_STATE_HASH] : hash,
                 },
             data : data,
             },
@@ -145,11 +154,15 @@ const onStateRequest = async function(peerId, stateKey) {
 
     try {
         if (objKind == 'Secret') {
-            obj = await kube.LoadSecret(objName);
+            obj  = await kube.LoadSecret(objName);
+            hash = kube.Annotation(obj, common.META_ANNOTATION_STATE_HASH);
         } else if (objKind == 'ConfigMap') {
-            obj = await kube.LoadConfigmap(objName);
+            obj  = await kube.LoadConfigmap(objName);
+            hash = kube.Annotation(obj, common.META_ANNOTATION_STATE_HASH);
+        } else if (objKind == 'InMemory') {
+            obj  = { data : localState[stateKey].data };
+            hash = localState[stateKey].hash;
         }
-        hash = obj.metadata.annotations['skupper.io/skx-state-hash'];
     } catch (error) {
         hash = null;
     }
@@ -164,23 +177,22 @@ const onPing = async function(siteId) {
     // This function intentionally left blank
 }
 
-const onConfigMapWatch = async function(action, obj) {
-    if (connectedToPeer) {
-        const stateKey  = obj.metadata.annotations['skupper.io/skx-state-key'];
-        const stateDir  = obj.metadata.annotations['skupper.io/skx-state-dir'];
-        var   stateHash = obj.metadata.annotations['skupper.io/skx-state-hash'];
+exports.UpdateLocalState = async function(stateKey, stateHash, stateData) {
+    if (stateHash) {
+        localState[stateKey] = {
+            hash : stateHash,
+            data : stateData,
+        };
+    } else {
+        delete localState[stateKey];
+    }
 
-        if (!!stateKey && stateDir == 'local' && !!stateHash) {
-            if (action == 'DELETE') {
-                stateHash = null;
-            }
-            await sync.UpdateLocalState(peerId, stateKey, stateHash);
-        }
+    if (connectedToPeer) {
+        await sync.UpdateLocalState(peerId, stateKey, stateHash);
     }
 }
 
 exports.Start = async function(siteId, conn) {
-    kube.WatchConfigMaps(onConfigMapWatch);
     await sync.Start(sync.CLASS_BACKBONE, siteId, undefined, onNewPeer, onPeerLost, onStateChange, onStateRequest, onPing);
     await sync.AddTarget(common.API_CONTROLLER_ADDRESS);
     await sync.AddConnection(undefined, conn);

@@ -34,6 +34,8 @@ exports.APPLICATION_ROUTER_LABEL = 'skx-router';
 //
 exports.META_ANNOTATION_SKUPPERX_CONTROLLED = 'skupper.io/skupperx-controlled';
 exports.META_ANNOTATION_STATE_HASH          = 'skx/state-hash';
+exports.META_ANNOTATION_STATE_KEY           = 'skx/state-key';
+exports.META_ANNOTATION_STATE_DIR           = 'skx/state-dir';
 exports.META_ANNOTATION_STATE_TYPE          = 'skx/state-type';
 exports.META_ANNOTATION_STATE_ID            = 'skx/state-id';
 exports.META_ANNOTATION_TLS_INJECT          = 'skx/tls-inject';
