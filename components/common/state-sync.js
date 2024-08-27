@@ -81,19 +81,24 @@ const sendHeartbeat = function(peerId) {
             clearTimeout(peer.hbTimer);
         }
         const sender = connections[peer.connectionKey].apiSender;
-        amqp.SendMessage(sender, protocol.Heartbeat(localId, localClass, sender.localState, peer.address));
+        const message = protocol.Heartbeat(localId, localClass, sender.localState, peer.address);
+        amqp.SendMessage(sender, message);
         peers[peerId].hbTimer = setTimeout(sendHeartbeat, timerDelayMsec(HEARTBEAT_PERIOD_SECONDS), peerId);
+        Log(`SYNC: Sent Heartbeat to ${peerId}`);
+        Log(message);
     }
 }
 
 const onHeartbeat = async function(connectionKey, peerClass, peerId, hashset, address) {
     var localState;
     var remoteState;
+    Log(`SYNC: Received Heartbeat from ${peerId}`);
 
     //
     // If this heartbeat comes from a peer we are not tracking, consider this a new-peer.
     //
     if (!peers[peerId]) {
+        Log('SYNC:   New Peer');
         [localState, remoteState] = await onNewPeer(peerId, peerClass);
         peers[peerId] = {
             connectionKey : connectionKey,
@@ -135,6 +140,7 @@ const onHeartbeat = async function(connectionKey, peerClass, peerId, hashset, ad
         for (const [key, value] of Object.entries(toDeleteStateKeys)) {
             try {
                 if (value) {
+                    Log(`SYNC:   Removing state: ${key}`);
                     await onStateChange(peerId, key, null, null);
                 }
             } catch (error) {
@@ -148,8 +154,10 @@ const onHeartbeat = async function(connectionKey, peerClass, peerId, hashset, ad
         const sender = connections[connectionKey].apiSender;
         for (const key of toRequestStateKeys) {
             try {
+                Log(`SYNC:   Requesting state update for key: ${key}`);
                 const [ap, body] = await amqp.Request(sender, protocol.GetState(localId, key));
                 if (body.statusCode == 200) {
+                    Log(`SYNC:     New State: hash=${hash}, data=${data}`);
                     await onStateChange(peerId, key, body.hash, body.data);
                     peers[peerId].remoteState[key] = body.hash;
                 } else {

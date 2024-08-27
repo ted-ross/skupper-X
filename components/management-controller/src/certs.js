@@ -23,7 +23,7 @@ const kube       = require('./common/kube.js');
 const Log        = require('./common/log.js').Log;
 const db         = require('./db.js');
 const config     = require('./config.js');
-const sync       = require('./manage-sync.js');
+const sync       = require('./sync-management.js');
 const deployment = require('./site-deployment-state.js');
 
 //

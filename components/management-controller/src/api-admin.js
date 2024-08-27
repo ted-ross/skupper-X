@@ -21,7 +21,7 @@
 
 const formidable = require('formidable');
 const db         = require('./db.js');
-const sync       = require('./manage-sync.js');
+const sync       = require('./sync-management.js');
 const Log        = require('./common/log.js').Log;
 const deployment = require('./site-deployment-state.js');
 const util       = require('./common/util.js');

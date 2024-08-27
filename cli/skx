@@ -412,7 +412,7 @@ DISPATCH = {   # {object : {verb : ([positional], [options], METHOD, URI, data-f
                     ['id', 'name', ('stat', None, 'lifecycle'), 'failure', ('deploy', None, 'deploymentstate'), ('since', None, 'firstactivetime'), ('last', None, 'lastheartbeat')]),
         'deploy' : (['siteid', 'outfile'], ['format'], 'GET', '/api/v1alpha1/backbonesite/${siteid}/${format}', 'File'),
         'boot-ingress' : (['siteid', 'infile'], [], 'POST', '/api/v1alpha1/backbonesite/${siteid}/ingress', 'SendFile'),
-        'boot-finish'  : (['siteid'], ['format'],   'GET',  '/api/v1alpha1/backbonesite/${siteid}/links/incoming/${format}', 'File'),
+        'boot-finish'  : (['siteid', 'outfile'], ['format'],   'GET',  '/api/v1alpha1/backbonesite/${siteid}/accesspoints/${format}', 'File'),
     },
 
     ##
@@ -524,7 +524,7 @@ def process(desc, data):
         elif style == 'Result':
             print('Result code: %d' % result.status_code)
         elif style == 'CreateResult':
-            print('Id of created object: %s' % result.json()['id'])
+            print(result.json()['id'])
         elif style == 'File':
             with open(data['outfile'], "w") as outfile:
                 outfile.write(result.text)

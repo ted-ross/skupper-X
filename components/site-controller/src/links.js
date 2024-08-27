@@ -20,7 +20,9 @@
 "use strict";
 
 /*
- * This module is responsible for synchronizing Secrets to router ssl-profiles and ConfigMaps to connectors and listeners.
+ * This module is responsible for synchronizing:
+ *   - Secrets to router ssl-profiles
+ *   - ConfigMaps to connectors and listeners.
  */
 
 /*
@@ -35,7 +37,6 @@ const Log     = require('./common/log.js').Log;
 const kube    = require('./common/kube.js');
 const router  = require('./common/router.js');
 const common  = require('./common/common.js');
-const sync    = require('./sync-backbone-kube.js');
 const ingress = require('./ingress.js');
 var   fs      = require('fs/promises');
 
@@ -82,7 +83,6 @@ const sync_secrets = async function() {
             if (Object.keys(profiles).indexOf(profile_name) >= 0) {
                 delete profiles[profile_name];
             } else {
-                sync.LocalObjectUpdated('Secret', secret.metadata.name, secret.metadata.annotations[common.META_ANNOTATION_STATE_HASH]);  // TODO - redirect this call
                 await inject_profile(profile_name, secret)
             }
         }
@@ -134,7 +134,7 @@ const sync_listeners = async function() {
                 && sslProfileNames.indexOf(configMap.metadata.name) >= 0) {
                 let port = ingress.GetTargetPort(kube.Annotation(configMap, common.META_ANNOTATION_STATE_ID));
                 if (port) {
-                    config_listeners[configMap.metadata.name] = configMap;
+                    config_listeners[configMap.metadata.name] = configMap.data;
                     target_ports[configMap.metadata.name] = port;
                 }
             }

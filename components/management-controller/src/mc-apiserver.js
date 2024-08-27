@@ -239,13 +239,13 @@ const fetchBackboneSiteCrd = async function (siteId, res) {
     return returnStatus;
 }
 
-const fetchBackboneLinksIncomingKube = async function (bsid, res) {
+const fetchBackboneAccessPointsKube = async function (bsid, res) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
         const result = await client.query(
-            'SELECT ManageAccess, PeerAccess, DeploymentState FROM InteriorSites WHERE Id = $1', [bsid]);
+            'SELECT DeploymentState FROM InteriorSites WHERE Id = $1', [bsid]);
         if (result.rowCount == 1) {
             let site = result.rows[0];
 
@@ -254,32 +254,16 @@ const fetchBackboneLinksIncomingKube = async function (bsid, res) {
             }
 
             let text = '';
-            let incoming = {};
-            const worklist = [
-                {ap_ref: site.manageaccess, profile: 'manage'},
-                {ap_ref: site.peeraccess,   profile: 'peer'},
-                {ap_ref: null,              profile: 'member'}, // Let member and claim get picked up later during reconciliation
-                {ap_ref: null,              profile: 'claim'},
-            ]
-
-            for (const work of worklist) {
-                if (work.ap_ref) {
-                    const ap_result = await client.query("SELECT *, TlsCertificates.ObjectName FROM BackboneAccessPoints " +
-                                                         "JOIN TlsCertificates ON TlsCertificates.Id = Certificate " +
-                                                         "WHERE BackboneAccessPoints.Id = $1 AND Lifecycle = 'ready'", [work.ap_ref]);
-                    if (ap_result.rowCount == 1) {
-                        let ap = ap_result.rows[0];
-                        let secret = await kube.LoadSecret(ap.objectname);
-                        text += siteTemplates.SecretYaml(secret, `${work.profile}-server`, true);
-
-                        incoming[work.profile] = 'true';
-                    } else {
-                        throw(Error(`Certificate for profile ${work.profile} not yet ready`));
-                    }
+            const ap_result = await client.query("SELECT TlsCertificates.ObjectName, BackboneAccessPoints.Id as apid, Lifecycle, Kind FROM BackboneAccessPoints " +
+                                                 "JOIN TlsCertificates ON TlsCertificates.Id = Certificate " +
+                                                 "WHERE BackboneAccessPoints.InteriorSite = $1", [bsid]);
+            for (const ap of ap_result.rows) {
+                if (ap.lifecycle != 'ready') {
+                    throw Error(`Certificate for access point of kind ${ap.kind} is not yet ready`);
                 }
+                let secret = await kube.LoadSecret(ap.objectname);
+                text += siteTemplates.SecretYaml(secret, `skx-access-${ap.apid}`, common.INJECT_TYPE_ACCESS_POINT);
             }
-
-            text += link_config_map_yaml('skupperx-incoming', incoming);
 
             res.status(returnStatus).send(text);
         } else {
@@ -316,20 +300,12 @@ const fetchBackboneLinksOutgoingKube = async function (bsid, res) {
     return returnStatus;
 }
 
-exports.AddHostToAccessPoint = async function(siteId, key, hostname, port) {
+exports.AddHostToAccessPoint = async function(siteId, apid, hostname, port) {
     let retval = 1;
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
-        var kind;
-        switch (key) {
-            case 'ingress/claim'  : kind = 'claim';   break;
-            case 'ingress/peer'   : kind = 'peer';    break;
-            case 'ingress/member' : kind = 'member';  break;
-            case 'ingress/manage' : kind = 'manage';  break;
-            default: throw Error(`Invalid ingress key: ${key}`);
-        }
-        const result = await client.query(`SELECT Id, Hostname, Port FROM BackboneAccessPoints WHERE Kind = $1 AND InteriorSite = $2`, [kind, siteId]);
+        const result = await client.query(`SELECT Id, Lifecycle, Hostname, Port, Kind FROM BackboneAccessPoints WHERE Id = $1 AND InteriorSite = $2`, [apid, siteId]);
         if (result.rowCount == 1) {
             let access = result.rows[0];
             if (access.hostname != hostname || access.port != port) {
@@ -339,18 +315,18 @@ exports.AddHostToAccessPoint = async function(siteId, key, hostname, port) {
                 if (access.lifecycle != 'partial') {
                     throw Error(`Referenced access (${access.access_ref}) has lifecycle ${access.lifecycle}, expected partial`);
                 }
-                await client.query("UPDATE BackboneAccessPoints SET Hostname = $1, Port=$2, Lifecycle='new' WHERE Id = $3", [hostname, port, access.access_ref]);
+                await client.query("UPDATE BackboneAccessPoints SET Hostname = $1, Port=$2, Lifecycle='new' WHERE Id = $3", [hostname, port, apid]);
             }
             await client.query("COMMIT");
 
             //
             // Alert the sync module that an access point has advanced from 'partial' state if this is a peer ingress
             //
-            if (key == 'ingress/peer') {
+            if (access.kind == 'peer') {
                 await sync.NewIngressAvailable(siteId);
             }
         } else {
-            throw Error(`Access point not found for site ${siteId} (${kind})`);
+            throw Error(`Access point not found for site ${siteId} (${apid})`);
         }
     } catch (err) {
         await client.query('ROLLBACK');
@@ -366,20 +342,18 @@ const postBackboneIngress = async function (bsid, req, res) {
     var returnStatus = 201;
     const form = new formidable.IncomingForm();
     try {
-        const [fields, files] = await form.parse(req);
-        const norm = util.ValidateAndNormalizeFields(fields, {
-            'manage_host'  : {type: 'string', optional: false},
-            'manage_port'  : {type: 'number', optional: false},
-            'peer_host'    : {type: 'string', optional: true, default: null},
-            'peer_port'    : {type: 'number', optional: true, default: null},
-        });
-
         let count = 0;
-        if (norm.manage_host) {
-            count += await exports.AddHostToAccessPoint(bsid, 'ingress/manage', norm.manage_host, norm.manage_port);
-        }
-        if (norm.peer_host) {
-            count += await exports.AddHostToAccessPoint(bsid, 'ingress/peer', norm.peer_host, norm.peer_port);
+        const [fields, files] = await form.parse(req);
+        for (const [apid, apdata] of Object.entries(fields)) {
+            if (!util.IsValidUuid(apid)) {
+                throw Error(`Invalid access-point identifier ${apid}`);
+            }
+            const norm = util.ValidateAndNormalizeFields(apdata, {
+                'host' : {type: 'string', optional: false},
+                'port' : {type: 'number', optional: false},
+            });
+
+            count += await exports.AddHostToAccessPoint(bsid, apid, norm.host, norm.port);
         }
 
         res.status(returnStatus).json({ processed: count });
@@ -421,8 +395,8 @@ exports.Start = async function() {
         await fetchBackboneSiteCrd(req.params.bsid, res);
     });
 
-    app.get(API_PREFIX + 'backbonesite/:bsid/links/incoming/kube', async (req, res) => {
-        await fetchBackboneLinksIncomingKube(req.params.bsid, res);
+    app.get(API_PREFIX + 'backbonesite/:bsid/accesspoints/kube', async (req, res) => {
+        await fetchBackboneAccessPointsKube(req.params.bsid, res);
     });
 
     app.get(API_PREFIX + 'backbonesite/:bsid/links/outgoing/kube', async (req, res) => {

@@ -5,12 +5,12 @@ mkdir app
 mkdir app/src
 mkdir app/src/common
 uglifyjs index.js -c -m -o app/index.js
-for MODULE in api-member ingress links sc-apiserver sc-main claim router-port sync-backbone-kube
+for MODULE in api-member ingress links sc-apiserver sc-main claim router-port sync-backbone-kube sync-member
 do
     cp src/$MODULE.js app/src/$MODULE.js
 #    uglifyjs src/$MODULE.js --toplevel -c -m -o app/src/$MODULE.js
 done
-for MODULE in common amqp kube protocol log router util
+for MODULE in common amqp kube protocol log router util state-sync
 do
     cp ../common/$MODULE.js app/src/common/$MODULE.js
 #    uglifyjs ../common/$MODULE.js --toplevel -c -m -o app/src/common/$MODULE.js

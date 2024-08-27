@@ -492,8 +492,8 @@ exports.AccessCertificateChanged = async function(certId) {
         await client.query("BEGIN");
         const result = await client.query("SELECT InteriorSites.Id, TlsCertificates.ObjectName FROM BackboneAccessPoints " +
                                           "JOIN InteriorSites ON InteriorSites.id = InteriorSite " +
-                                          "JOIN TlsCertificates ON TlsCertificates.Id = Certificate " +
-                                          "WHERE Certificate = $1", [certId]);
+                                          "JOIN TlsCertificates ON TlsCertificates.Id = BackboneAccessPoints.Certificate " +
+                                          "WHERE BackboneAccessPoints.Certificate = $1", [certId]);
         if (result.rowCount == 1) {
             const row = result.rows[0];
             if (peers[row.id]) {

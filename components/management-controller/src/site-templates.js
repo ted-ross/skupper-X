@@ -257,18 +257,6 @@ spec:
         - containerPort: 9090
           name: http
           protocol: TCP
-        - containerPort: 55671
-          name: peer
-          protocol: TCP
-        - containerPort: 45671
-          name: member
-          protocol: TCP
-        - containerPort: 45670
-          name: manage
-          protocol: TCP
-        - containerPort: 45669
-          name: claim
-          protocol: TCP
         readinessProbe:
           failureThreshold: 3
           httpGet:
@@ -300,14 +288,14 @@ spec:
         - name: NODE_ENV
           value: production
         ports:
-        - containerPort: 8086
+        - containerPort: 1040
           name: siteapi
           protocol: TCP
         readinessProbe:
           failureThreshold: 3
           httpGet:
             path: /healthz
-            port: 8086
+            port: 1040
             scheme: HTTP
           initialDelaySeconds: 1
           periodSeconds: 10
