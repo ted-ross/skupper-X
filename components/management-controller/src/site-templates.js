@@ -33,20 +33,20 @@ const CM_NAME           = 'skupper-internal';
 const DEPLOYMENT_NAME   = 'skupperx-site';
 
 
-exports.HashOfSecret = function(secret) {
+exports.HashOfData = function(data) {
     let text = '';
-    for (const [key, value] of Object.entries(secret.data)) {
+    for (const [key, value] of Object.entries(data)) {
         text += key + value;
     }
     return crypto.createHash('sha1').update(text).digest('hex');
 }
 
+exports.HashOfSecret = function(secret) {
+    return exports.HashOfData(secret.data);
+}
+
 exports.HashOfConfigMap = function(cm) {
-    let text = '';
-    for (const [key, value] of Object.entries(cm.data)) {
-        text += key + value;
-    }
-    return crypto.createHash('sha1').update(text).digest('hex');
+    return exports.HashOfData(cm.data);
 }
 
 exports.ServiceAccountYaml = function() {
@@ -352,7 +352,7 @@ exports.SiteApiServiceYaml = function() {
     return "---\n" + yaml.dump(service);
 }
 
-exports.SecretYaml = function(certificate, profile_name, inject) {
+exports.SecretYaml = function(certificate, profile_name, inject, stateKey) {
     let secret = {
         apiVersion: 'v1',
         kind: 'Secret',
@@ -362,6 +362,7 @@ exports.SecretYaml = function(certificate, profile_name, inject) {
             annotations: {
                 [common.META_ANNOTATION_SKUPPERX_CONTROLLED] : 'true',
                 [common.META_ANNOTATION_STATE_DIR]           : 'remote',
+                [common.META_ANNOTATION_STATE_KEY]           : stateKey,
             },
         },
         data: certificate.data,

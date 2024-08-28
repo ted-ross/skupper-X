@@ -72,7 +72,9 @@ const reconcileBackboneConnections = async function() {
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
-        const result = await client.query("SELECT * FROM BackboneAccessPoints WHERE Lifecycle = 'ready' and Kind = 'manage'");
+        const result = await client.query("SELECT BackboneAccessPoints.*, InteriorSites.Backbone FROM BackboneAccessPoints " +
+                                          "JOIN InteriorSites ON InteriorSites.Id = InteriorSite " + 
+                                          "WHERE BackboneAccessPoints.Lifecycle = 'ready' and Kind = 'manage'");
         let db_rows = {};
         for (const row of result.rows) {
             if (!db_rows[row.backbone]) {

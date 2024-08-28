@@ -193,6 +193,7 @@ exports.UpdateLocalState = async function(stateKey, stateHash, stateData) {
 }
 
 exports.Start = async function(siteId, conn) {
+    Log(`[Sync-Backbone-Kube module started - siteId: ${siteId}]`);
     await sync.Start(sync.CLASS_BACKBONE, siteId, undefined, onNewPeer, onPeerLost, onStateChange, onStateRequest, onPing);
     await sync.AddTarget(common.API_CONTROLLER_ADDRESS);
     await sync.AddConnection(undefined, conn);

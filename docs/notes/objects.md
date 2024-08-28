@@ -26,6 +26,10 @@ For the purpose of deriving values for the ordinals in the SslProfile (current v
      - skx/tls-inject: [site|accesspoint]
      - skx/tls-ordinal: NUMBER
      - skx/tls-last-valid: NUMBER
+     - skx/state-key: tls-site-<InteriorSites.Id>
+                      tls-server-<BackboneAccessPoints.Id>
+     - skx/state-hash: <hash>
+     - skx/state-dir: remote
 
 A secret with a tls-inject annotation will cause the create or update of an SslProfile on the router.  The name of the SslProfile depends on the tls-inject value:
 
@@ -42,6 +46,10 @@ The tls-ordinal and tls-oldest-valid annotations are used to manage the rotation
    - annotations
      - skx/state-type: [accesspoint|link]
      - skx/state-id: Database ID of the associated AccessPoint or Link
+     - skx/state-key: access-<BackboneAccessPoints.Id>
+                      link-<InterRouterLinks.Id>
+     - skx/state-hash: <hash>
+     - skx/state-dir: remote
  - data (for accesspoint)
    - kind: [claim|peer|member|manage]
    - bindhost: optional host for socket bind

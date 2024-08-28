@@ -46,6 +46,7 @@ var localClass;
 var localId;
 var localAddress;
 var addressToUse;
+var initialBeacon = true;
 var onNewPeer;
 var onPeerLost;
 var onStateChange;
@@ -81,8 +82,8 @@ const sendHeartbeat = function(peerId) {
             clearTimeout(peer.hbTimer);
         }
         const sender = connections[peer.connectionKey].apiSender;
-        const message = protocol.Heartbeat(localId, localClass, sender.localState, peer.address);
-        amqp.SendMessage(sender, message);
+        const message = protocol.Heartbeat(localId, localClass, peer.localState, addressToUse);
+        amqp.SendMessage(sender, message, {}, peer.address);
         peers[peerId].hbTimer = setTimeout(sendHeartbeat, timerDelayMsec(HEARTBEAT_PERIOD_SECONDS), peerId);
         Log(`SYNC: Sent Heartbeat to ${peerId}`);
         Log(message);
@@ -93,12 +94,13 @@ const onHeartbeat = async function(connectionKey, peerClass, peerId, hashset, ad
     var localState;
     var remoteState;
     Log(`SYNC: Received Heartbeat from ${peerId}`);
+    initialBeacon = false;
 
     //
     // If this heartbeat comes from a peer we are not tracking, consider this a new-peer.
     //
     if (!peers[peerId]) {
-        Log('SYNC:   New Peer');
+        Log(`SYNC:   New Peer, id: ${peerId}`);
         [localState, remoteState] = await onNewPeer(peerId, peerClass);
         peers[peerId] = {
             connectionKey : connectionKey,
@@ -170,12 +172,37 @@ const onHeartbeat = async function(connectionKey, peerClass, peerId, hashset, ad
     }
 }
 
+const sendInitialBeacon = function() {
+    try {
+        if (initialBeacon && connections['net']) {
+            const sender  = connections['net'].apiSender;
+            for (const address of extraTargets) {
+                Log(`Sending beacon heartbeat to ${address}`);
+                const message = protocol.Heartbeat(localId, localClass, null, addressToUse);
+                amqp.SendMessage(sender, message, {}, address);
+            }
+        }
+    } catch(e) {
+        Log(`Exception caught in sendInitialBeacon - ${e.message}`);
+    }
+
+    if (initialBeacon) {
+        setTimeout(sendInitialBeacon, 5000);
+    }
+}
+
 const onSendable = function(connectionKey) {
-    // TODO - Send a null-hash heartbeat to the added target addresses
+    if (initialBeacon) {
+        sendInitialBeacon();
+    }
 }
 
 const onAddress = function(connectionKey, address) {
-    addressToUse = address;
+    if (connectionKey == 'net') {
+        addressToUse = address;
+    } else {
+        Log(`ERROR: onAddress invoked with connectionKey '${connectionKey}', expected 'net`);
+    }
 }
 
 const onMessage = function(connectionKey, application_properties, body, onReply) {
@@ -245,7 +272,7 @@ exports.AddConnection = async function(backboneId, conn) {
 
     let connRecord = {
         conn        : conn,
-        apiSender   : amqp.OpenSender('AnonymousSender', conn, undefined, onSendable),
+        apiSender   : amqp.OpenSender('AnonymousSender', conn, undefined, onSendable, connectionKey),
         apiReceiver : null,
     };
 
