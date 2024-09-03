@@ -222,11 +222,14 @@ exports.SendMessage = function(sender, messageBody, ap={}, destination=null) {
     sender.amqpSender.send(message);
 }
 
-exports.Request = function(sender, messageBody, ap={}, timeoutSeconds=DEFAULT_TIMEOUT_SECONDS, destination=null) {
+exports.Request = function(sender, messageBody, ap={}, destination=null, timeoutSeconds=DEFAULT_TIMEOUT_SECONDS) {
     return new Promise((resolve, reject) => {
-        let timer   = setTimeout(() => reject(Error('AMQP request/response timeout')), timeoutSeconds * 1000);
         const cid   = nextCid;
         const msgId = nextMessageId;
+        let timer   = setTimeout(() => {
+            delete inFlight[cid];
+            reject(Error('AMQP request/response timeout'));
+        }, timeoutSeconds * 1000);
         nextMessageId++;
         nextCid++;
         inFlight[cid] = (response) => {

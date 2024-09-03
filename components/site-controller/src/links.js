@@ -97,6 +97,13 @@ const sync_secrets = async function() {
     };
 }
 
+const profile_from_key = function(key) {
+    if (key.substring(0, 11) == 'skx-access-') {
+        return `skx-tls-server-${key.substring(11)}`;
+    }
+    return key;
+}
+
 const sync_listeners = async function() {
     try {
         //
@@ -131,7 +138,7 @@ const sync_listeners = async function() {
         var target_ports     = {};
         for (const configMap of configMaplist) {
             if ((kube.Annotation(configMap, common.META_ANNOTATION_STATE_TYPE) == common.STATE_TYPE_ACCESS_POINT)
-                && sslProfileNames.indexOf(configMap.metadata.name) >= 0) {
+                && sslProfileNames.indexOf(profile_from_key(configMap.metadata.name)) >= 0) {
                 let port = ingress.GetTargetPort(kube.Annotation(configMap, common.META_ANNOTATION_STATE_ID));
                 if (port) {
                     config_listeners[configMap.metadata.name] = configMap.data;
@@ -146,10 +153,10 @@ const sync_listeners = async function() {
                 delete listener_map[lname];
             } else {
                 Log(`Creating router listener ${lname}`);
-                var host    = value.bindhost;
+                var host    = value.bindhost || '';
                 var port    = target_ports[key];
                 var role    = 'normal';
-                var profile = key;
+                var profile = profile_from_key(key);
                 var strip   = 'both';
                 switch (value.kind) {
                 case 'claim':

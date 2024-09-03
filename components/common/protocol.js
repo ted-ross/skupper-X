@@ -84,7 +84,7 @@ exports.ReponseFailure = function(code, description) {
     };
 }
 
-exports.DispatchMessage = function(body, onHeartbeat, onSolicit, onGet, onClaim) {
+exports.DispatchMessage = function(body, onHeartbeat, onGet, onClaim) {
     if (body.version != VERSION) {
         throw Error(`Unsupported protocol version ${body.version}`);
     }

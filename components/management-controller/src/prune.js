@@ -21,6 +21,7 @@
 
 const kube   = require('./common/kube.js');
 const Log    = require('./common/log.js').Log;
+const common = require('./common/common.js');
 const db     = require('./db.js');
 
 const reconcileCertificates = async function() {
@@ -34,7 +35,7 @@ const reconcileCertificates = async function() {
 
         const issuer_list = await kube.GetIssuers();
         issuer_list.forEach(issuer => {
-            if (!db_cert_names.includes(issuer.metadata.name) && (issuer.metadata.annotations && issuer.metadata.annotations['skupper.io/skx-controlled'] == 'true')) {
+            if (!db_cert_names.includes(issuer.metadata.name) && (issuer.metadata.annotations && issuer.metadata.annotations[common.META_ANNOTATION_SKUPPERX_CONTROLLED] == 'true')) {
                 kube.DeleteIssuer(issuer.metadata.name);
                 Log(`  Deleted issuer: ${issuer.metadata.name}`);
             }
@@ -42,7 +43,7 @@ const reconcileCertificates = async function() {
 
         const cert_list = await kube.GetCertificates();
         cert_list.forEach(cert => {
-            if (!db_cert_names.includes(cert.metadata.name) && (cert.metadata.annotations && cert.metadata.annotations['skupper.io/skx-controlled'] == 'true')) {
+            if (!db_cert_names.includes(cert.metadata.name) && (cert.metadata.annotations && cert.metadata.annotations[common.META_ANNOTATION_SKUPPERX_CONTROLLED] == 'true')) {
                 kube.DeleteCertificate(cert.metadata.name);
                 Log(`  Deleted certificate: ${cert.metadata.name}`);
             }
@@ -50,7 +51,7 @@ const reconcileCertificates = async function() {
 
         const secret_list = await kube.GetSecrets();
         secret_list.forEach(secret => {
-            if (!db_cert_names.includes(secret.metadata.name) && (secret.metadata.annotations && secret.metadata.annotations['skupper.io/skx-controlled'] == 'true')) {
+            if (!db_cert_names.includes(secret.metadata.name) && (secret.metadata.annotations && secret.metadata.annotations[common.META_ANNOTATION_SKUPPERX_CONTROLLED] == 'true')) {
                 kube.DeleteSecret(secret.metadata.name);
                 Log(`  Deleted secret: ${secret.metadata.name}`);
             }

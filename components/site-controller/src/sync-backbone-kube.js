@@ -45,17 +45,18 @@ var localState = {};  // state-key: {hash, data}
 
 const kubeObjectForState = function(stateKey) {
     const elements   = stateKey.split('-');
-    const objName    = 'skupperx-' + stateKey;
+    const objName    = 'skx-' + stateKey;
     var   objDir     = 'remote';
     var   apiVersion = 'v1';
     var   objKind;
+    var   objType;
 
     if (elements.length < 2) {
         throw(Error(`Malformed stateKey: ${stateKey}`));
     }
 
     switch (elements[0]) {
-        case 'tls'          : objKind = 'Secret';     break;
+        case 'tls'          : objKind = 'Secret';     objType = 'kubernetes.io/tls';  break;
         case 'access'       : objKind = 'ConfigMap';  break;
         case 'link'         : objKind = 'ConfigMap';  break;
         case 'accessstatus' : objKind = 'InMemory';   objDir = 'local';  break;
@@ -63,7 +64,7 @@ const kubeObjectForState = function(stateKey) {
             throw(Error(`Invalid stateKey prefix: ${elements[0]}`))
     }
 
-    return [objName, apiVersion, objKind, objDir];
+    return [objName, apiVersion, objKind, objType, objDir];
 }
 
 const stateForList = function(objectList, local, remote) {
@@ -113,13 +114,13 @@ const onPeerLost = async function(peerId) {
 }
 
 const onStateChange = async function(peerId, stateKey, hash, data) {
-    const [objName, apiVersion, objKind, objDir] = kubeObjectForState(stateKey);
+    const [objName, apiVersion, objKind, objType, objDir] = kubeObjectForState(stateKey);
     if (objDir == 'local') {
         throw(Error(`Protocol error: Received update for local state ${stateKey}`));
     }
 
     if (!!hash) {
-        const obj = {
+        let obj = {
             apiVersion : apiVersion,
             kind       : objKind,
             metadata   : {
@@ -129,8 +130,12 @@ const onStateChange = async function(peerId, stateKey, hash, data) {
                     [common.META_ANNOTATION_STATE_DIR]  : objDir,
                     [common.META_ANNOTATION_STATE_HASH] : hash,
                 },
-            data : data,
             },
+            data : data,
+        };
+
+        if (objType) {
+            obj.type = objType;
         }
 
         await kube.ApplyObject(obj);
@@ -144,7 +149,7 @@ const onStateChange = async function(peerId, stateKey, hash, data) {
 }
 
 const onStateRequest = async function(peerId, stateKey) {
-    const [objName, apiVersion, objKind, objDir] = kubeObjectForState(stateKey);
+    const [objName, apiVersion, objKind, objType, objDir] = kubeObjectForState(stateKey);
     if (objDir == 'remote') {
         throw(Error(`Protocol error: Received request for remote state ${stateKey}`));
     }

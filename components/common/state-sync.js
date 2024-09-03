@@ -121,6 +121,10 @@ const onHeartbeat = async function(connectionKey, peerClass, peerId, hashset, ad
     // If the hashset is not present in the heartbeat, there is no synchronization to be done.
     //
     if (!!hashset) {
+        Log('Current Hashset:');
+        Log(peers[peerId].remoteState);
+        Log('Heartbeat Hashset:');
+        Log(hashset);
         //
         // Reconcile the existing remote state against the advertized remote state.
         //
@@ -144,6 +148,7 @@ const onHeartbeat = async function(connectionKey, peerClass, peerId, hashset, ad
                 if (value) {
                     Log(`SYNC:   Removing state: ${key}`);
                     await onStateChange(peerId, key, null, null);
+                    delete peers[peerId].remoteState[key];
                 }
             } catch (error) {
                 Log(`Exception in state reconciliation for deletion of ${key}: ${error.message}`);
@@ -156,10 +161,11 @@ const onHeartbeat = async function(connectionKey, peerClass, peerId, hashset, ad
         const sender = connections[connectionKey].apiSender;
         for (const key of toRequestStateKeys) {
             try {
-                Log(`SYNC:   Requesting state update for key: ${key}`);
-                const [ap, body] = await amqp.Request(sender, protocol.GetState(localId, key));
+                Log(`SYNC:   Requesting state update for key: ${key}, to: ${peers[peerId].address}`);
+                const [ap, body] = await amqp.Request(sender, protocol.GetState(localId, key), {}, peers[peerId].address);
                 if (body.statusCode == 200) {
-                    Log(`SYNC:     New State: hash=${hash}, data=${data}`);
+                    Log(`SYNC:     New State: hash=${body.hash}, data=`);
+                    Log(body.data);
                     await onStateChange(peerId, key, body.hash, body.data);
                     peers[peerId].remoteState[key] = body.hash;
                 } else {
@@ -167,6 +173,7 @@ const onHeartbeat = async function(connectionKey, peerClass, peerId, hashset, ad
                 }
             } catch (error) {
                 Log(`Exception in state reconciliation for ${key}: ${error.message}`);
+                Log(error.stack);
             }
         }
     }

@@ -64,9 +64,11 @@ exports.GetBackboneAccessPoints_TX = async function(client, siteId, initialOnly 
     for (const ap of result.rows) {
         if (!initialOnly || (ap.kind == 'manage' || ap.kind == 'peer')) {
             data[ap.id] = {
-                kind     : ap.kind,
-                bindhost : ap.bindhost ? ap.bindhost : "",
+                kind : ap.kind,
             };
+            if (ap.bindhost) {
+                data[ap.id].bindhost = ap.bindhost;
+            }
         }
     }
     return data;
@@ -114,11 +116,12 @@ const onNewBackboneSite = async function(peerId) {
         const accessResult = await client.query("SELECT Id, Lifecycle, Certificate, Kind, BindHost, Hostname, Port FROM BackboneAccessPoints WHERE InteriorSite = $1", [peerId]);
         for (const accessPoint of accessResult.rows) {
             let ap = {
-                kind     : accessPoint.kind,
-                bindhost : accessPoint.bindhost,
+                kind : accessPoint.kind,
             };
+            if (accessPoint.bindhost) {
+                ap.bindhost = accessPoint.bindhost;
+            }
             if (accessPoint.lifecycle == 'ready') {
-                ap.tls = `tls-server-${accessPoint.id}`;
                 const tlsResult = await client.query("SELECT ObjectName FROM TlsCertificates WHERE Id = $1", [accessPoint.certificate]);
                 if (tlsResult.rowCount != 1) {
                     throw Error(`Access point in ready state does not have a TlsCertificate - ${accessPoint.id}`);
@@ -180,9 +183,8 @@ const onStateChangeBackbone = async function(peerId, stateKey, hash, data) {
     //     Delete => delete TLS certificate, nullify host/port, lifecycle := partial
     //     Update => delete TLS certificate, update host/port, lifecycle := new
     //
-    const tokens = stateKey.split('-');
-    if (tokens.length == 2 && tokens[0] == 'accessstatus') {
-        const accessId = tokens[1];
+    if (stateKey.substring(0, 13) == 'accessstatus-') {
+        const accessId = stateKey.substring(13);
         const client = await db.ClientFromPool();
         try {
             await client.query("BEGIN");
@@ -201,16 +203,43 @@ const onStateChangeBackbone = async function(peerId, stateKey, hash, data) {
     }
 }
 
-const getStateTls = async function(certId) {
+const getStateTlsSite = async function(siteId) {
     var hash = null;
     var data = null;
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT ObjectName FROM TlsCertificates WHERE Id = $1", [certId]);
+        const result = await client.query("SELECT TlsCertificates.ObjectName FROM InteriorSites " +
+                                          "JOIN TlsCertificates ON TlsCertificates.Id = Certificate " +
+                                          "WHERE InteriorSites.Id = $1", [siteId]);
         if (result.rowCount == 1) {
             const secret = await kube.LoadSecret(result.rows[0].objectname);
-            hash = templates.HashOfData(secret.data);
+            hash = templates.HashOfSecret(secret);
+            data = secret.data;
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        await client.query("ROLLBACK");
+        Log(`Exception in getStateTlsSite processing: ${error.message}`);
+        Log(error.stack);
+    } finally {
+        client.release();
+    }
+    return [hash, data];
+}
+
+const getStateTlsServer = async function(apid) {
+    var hash = null;
+    var data = null;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT TlsCertificates.ObjectName FROM BackboneAccessPoints " +
+                                          "JOIN TlsCertificates ON TlsCertificates.Id = Certificate " + 
+                                          "WHERE BackboneAccessPoints.Id = $1", [apid]);
+        if (result.rowCount == 1) {
+            const secret = await kube.LoadSecret(result.rows[0].objectname);
+            hash = templates.HashOfSecret(secret);
             data = secret.data;
         }
         await client.query("COMMIT");
@@ -234,9 +263,11 @@ const getStateAccessPoint = async function(apId) {
         if (result.rowCount == 1) {
             const accessPoint = result.rows[0];
             data = {
-                kind     : accessPoint.kind,
-                bindhost : accessPoint.bindhost,
+                kind : accessPoint.kind,
             };
+            if (accessPoint.bindhost) {
+                data.bindhost = accessPoint.bindhost;
+            }
             hash = templates.HashOfData(data);
         }
         await client.query("COMMIT");
@@ -282,26 +313,17 @@ const getStateLink = async function(linkId) {
 const onStateRequestBackbone = async function(peerId, stateKey) { // => [hash, data]
     var hash = null;
     var data = null;
-    const elements = stateKey.split('-');
 
-    if (util.IsValidUuid(elements[elements.length - 1])) {
-        if (elements[0] == 'tls' && elements.length == 3) {
-            if (elements[1] == 'client') {
-                [hash, data] = await getStateTls(elements[2]);
-            } else if (elements[1] == 'server') {
-                [hash, data] = await getStateTls(elements[2]);
-            } else {
-                Log(`Invalid sub-type in stateKey: ${stateKey}`);
-            }
-        } else if (elements[0] == 'access' && elements.length == 2) {
-            [hash, data] = await getStateAccessPoint(elements[1]);
-        } else if (elements[0] == 'link' && elements.length == 2) {
-            [hash, data] = await getStateLink(elements[1]);
-        } else {
-            Log(`Invalid stateKey for onStateRequestBackbone processing: ${stateKey}`);
-        }
+    if (stateKey.substring(0, 9) == 'tls-site-') {
+        [hash, data] = await getStateTlsSite(stateKey.substring(9));
+    } else if (stateKey.substring(0, 11) == 'tls-server-') {
+        [hash, data] = await getStateTlsServer(stateKey.substring(11));
+    } else if (stateKey.substring(0, 7) == 'access-') {
+        [hash, data] = await getStateAccessPoint(stateKey.substring(7));
+    } else if (stateKey.substring(0, 5) == 'link-') {
+        [hash, data] = await getStateLink(stateKey.substring(5));
     } else {
-        Log(`Invalid uuid inside stateKey: ${stateKey}`);
+        Log(`Invalid stateKey for onStateRequestBackbone processing: ${stateKey}`);
     }
 
     return [hash, data];
@@ -517,12 +539,9 @@ exports.SiteIngressChanged = async function(siteId, accessPointId) {
             const result = await client.query("SELECT Kind, BindHost, Certificate, Lifecycle FROM BackboneAccessPoints WHERE Id = $1", [accessPointId]);
             if (result.rowCount == 1) {
                 const row = result.rows[0];
-                var ap = {
-                    kind     : row.kind,
-                    bindhost : row.bindhost,
-                };
-                if (row.lifecycle == 'ready') {
-                    ap.tls = `tls-server-${row.certificate}`;
+                var ap = {kind : row.kind};
+                if (row.bindhost) {
+                    ap.bindhost = row.bindhost;
                 }
                 const hash = templates.HashOfData(ap);
                 await sync.UpdateLocalState(siteId, `access-${accessPointId}`, hash);

@@ -53,7 +53,7 @@ exports.ListManagementEntity = async function(entityType, timeout, attributes=[]
         attributeNames : attributes,
     };
 
-    const [replyAp, replyBody] = await amqp.Request(mgmtSender, requestBody, requestAp, timeout);
+    const [replyAp, replyBody] = await amqp.Request(mgmtSender, requestBody, requestAp, null, timeout);
 
     if (replyAp.statusCode == 200) {
         let items = convertBodyToItems(replyBody);
@@ -70,7 +70,7 @@ exports.CreateManagementEntity = async function(entityType, name, data, timeout)
         name      : name,
     };
 
-    const [replyAp, replyBody] = await amqp.Request(mgmtSender, data, requestAp, timeout);
+    const [replyAp, replyBody] = await amqp.Request(mgmtSender, data, requestAp, null, timeout);
 
     if (replyAp.statusCode == 201) {
         return (replyBody);
@@ -86,7 +86,7 @@ exports.DeleteManagementEntity = async function(entityType, name, timeout) {
         name      : name,
     };
 
-    const [replyAp, replyBody] = await amqp.Request(mgmtSender, undefined, requestAp, timeout);
+    const [replyAp, replyBody] = await amqp.Request(mgmtSender, undefined, requestAp, null, timeout);
 
     if (replyAp.statusCode == 204) {
         return (replyBody);

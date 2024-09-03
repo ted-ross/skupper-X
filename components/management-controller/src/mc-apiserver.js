@@ -153,7 +153,7 @@ const fetchBackboneSiteKube = async function (siteId, res) {
             text += siteTemplates.RoleBindingYaml();
             text += siteTemplates.ConfigMapYaml('interior');
             text += siteTemplates.DeploymentYaml(siteId, true);
-            text += siteTemplates.SecretYaml(secret, `skx-site-${siteId}`, common.INJECT_TYPE_SITE, `tls-site-${siteId}`);
+            text += siteTemplates.SecretYaml(secret, `skx-tls-site-${siteId}`, common.INJECT_TYPE_SITE, `tls-site-${siteId}`);
 
             const links = await sync.GetBackboneLinks_TX(client, siteId);
             for (const [linkId, linkData] of Object.entries(links)) {
@@ -262,7 +262,7 @@ const fetchBackboneAccessPointsKube = async function (bsid, res) {
                     throw Error(`Certificate for access point of kind ${ap.kind} is not yet ready`);
                 }
                 let secret = await kube.LoadSecret(ap.objectname);
-                text += siteTemplates.SecretYaml(secret, `skx-access-${ap.apid}`, common.INJECT_TYPE_ACCESS_POINT, `tls-server-${ap.apid}`);
+                text += siteTemplates.SecretYaml(secret, `skx-tls-server-${ap.apid}`, common.INJECT_TYPE_ACCESS_POINT, `tls-server-${ap.apid}`);
             }
 
             res.status(returnStatus).send(text);

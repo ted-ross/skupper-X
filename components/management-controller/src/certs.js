@@ -25,6 +25,7 @@ const db         = require('./db.js');
 const config     = require('./config.js');
 const sync       = require('./sync-management.js');
 const deployment = require('./site-deployment-state.js');
+const common     = require('./common/common.js');
 
 //
 // processNewManagementControllers
@@ -482,7 +483,7 @@ const onSecretWatch = function(action, secret) {
     switch (action) {
     case 'ADDED':
         const anno = secret.metadata.annotations;
-        if (anno && anno['skupper.io/skx-controlled'] == 'true') {
+        if (anno && anno[common.META_ANNOTATION_SKUPPERX_CONTROLLED] == 'true') {
             var dblink = anno['skupper.io/skx-dblink'];
             if (dblink) {
                 secretAdded(dblink, secret);
@@ -497,7 +498,7 @@ const onSecretWatch = function(action, secret) {
 const onCertificateWatch = async function(action, cert) {
     if (action == 'MODIFIED'
         && cert.metadata.annotations
-        && cert.metadata.annotations['skupper.io/skx-controlled'] == 'true'
+        && cert.metadata.annotations[common.META_ANNOTATION_SKUPPERX_CONTROLLED] == 'true'
         && cert.status
         && cert.status.notAfter
         && cert.status.renewalTime) {
@@ -529,7 +530,7 @@ const certificateObject = function(name, duration_hours, is_ca, issuer, db_link,
             secretName: name,
             secretTemplate: {
                 annotations: {
-                    'skupper.io/skx-controlled': 'true',
+                    [common.META_ANNOTATION_SKUPPERX_CONTROLLED]: 'true',
                     'skupper.io/skx-dblink': db_link,
                     'skupper.io/skx-issuerlink': issuer_link,
                 },
