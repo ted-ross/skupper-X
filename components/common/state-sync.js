@@ -219,6 +219,7 @@ const onMessage = function(connectionKey, application_properties, body, onReply)
                 await onHeartbeat(connectionKey, sclass, site, hashset, address);
             },
             async (site, statekey) => {                 // onGet
+                Log(`SYNC: Received state request from ${site} for key ${statekey}`);
                 const [hash, data] = await onStateRequest(site, statekey);
                 onReply({}, protocol.GetStateResponseSuccess(statekey, hash, data));
             },

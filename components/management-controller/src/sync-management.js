@@ -115,11 +115,11 @@ const onNewBackboneSite = async function(peerId) {
         //
         const accessResult = await client.query("SELECT Id, Lifecycle, Certificate, Kind, BindHost, Hostname, Port FROM BackboneAccessPoints WHERE InteriorSite = $1", [peerId]);
         for (const accessPoint of accessResult.rows) {
-            let ap = {
+            let apData = {
                 kind : accessPoint.kind,
             };
             if (accessPoint.bindhost) {
-                ap.bindhost = accessPoint.bindhost;
+                apData.bindhost = accessPoint.bindhost;
             }
             if (accessPoint.lifecycle == 'ready') {
                 const tlsResult = await client.query("SELECT ObjectName FROM TlsCertificates WHERE Id = $1", [accessPoint.certificate]);
@@ -133,7 +133,7 @@ const onNewBackboneSite = async function(peerId) {
                     port : accessPoint.port,
                 });
             }
-            localState[`access-${accessPoint.id}`] = templates.HashOfData(ap);
+            localState[`access-${accessPoint.id}`] = templates.HashOfData(apData);
         }
 
         //
@@ -484,11 +484,11 @@ exports.SiteCertificateChanged = async function(certId) {
                                           "JOIN TlsCertificates ON TlsCertificates.Id = InteriorSites.Certificate " +
                                           "WHERE Certificate = $1", [certId]);
         if (result.rowCount == 1) {
-            const row = result.rows[0];
-            if (peers[row.id]) {
-                const secret = await kube.LoadSecret(row.objectname);
+            const site = result.rows[0];
+            if (peers[site.id]) {
+                const secret = await kube.LoadSecret(site.objectname);
                 const hash = templates.HashOfSecret(secret);
-                await sync.UpdateLocalState(row.id, `tls-site-${row.id}`, hash);
+                await sync.UpdateLocalState(site.id, `tls-site-${site.id}`, hash);
             }
         }
         await client.query("COMMIT");
@@ -507,7 +507,7 @@ exports.AccessCertificateChanged = async function(certId) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT InteriorSites.Id, TlsCertificates.ObjectName FROM BackboneAccessPoints " +
+        const result = await client.query("SELECT BackboneAccessPoints.Id as apid, InteriorSites.Id, TlsCertificates.ObjectName FROM BackboneAccessPoints " +
                                           "JOIN InteriorSites ON InteriorSites.id = InteriorSite " +
                                           "JOIN TlsCertificates ON TlsCertificates.Id = BackboneAccessPoints.Certificate " +
                                           "WHERE BackboneAccessPoints.Certificate = $1", [certId]);
@@ -516,7 +516,7 @@ exports.AccessCertificateChanged = async function(certId) {
             if (peers[row.id]) {
                 const secret = await kube.LoadSecret(row.objectname);
                 const hash = templates.HashOfSecret(secret);
-                await sync.UpdateLocalState(row.id, `tls-server-${certId}`, hash);
+                await sync.UpdateLocalState(row.id, `tls-server-${row.apid}`, hash);
             }
         }
         await client.query("COMMIT");

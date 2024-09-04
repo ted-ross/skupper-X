@@ -45,26 +45,54 @@ var localState = {};  // state-key: {hash, data}
 
 const kubeObjectForState = function(stateKey) {
     const elements   = stateKey.split('-');
-    const objName    = 'skx-' + stateKey;
+    var   objName    = 'skx-' + stateKey;
     var   objDir     = 'remote';
     var   apiVersion = 'v1';
     var   objKind;
     var   objType;
+    var   stateType;
+    var   stateId;
+    var   inject;
 
     if (elements.length < 2) {
         throw(Error(`Malformed stateKey: ${stateKey}`));
     }
 
     switch (elements[0]) {
-        case 'tls'          : objKind = 'Secret';     objType = 'kubernetes.io/tls';  break;
-        case 'access'       : objKind = 'ConfigMap';  break;
-        case 'link'         : objKind = 'ConfigMap';  break;
-        case 'accessstatus' : objKind = 'InMemory';   objDir = 'local';  break;
+        case 'tls':
+            objKind = 'Secret';
+            objType = 'kubernetes.io/tls';
+            if (elements[1] == 'site') {
+                stateId = stateKey.substring(9); // text following 'tls-site-'
+                objName = `skx-site-${stateId}`;
+                inject  = common.INJECT_TYPE_SITE;
+            } else if (elements[1] == 'server') {
+                stateId = stateKey.substring(11); // text following 'tls-server-'
+                objName = `skx-access-${stateId}`;
+                inject  = common.INJECT_TYPE_ACCESS_POINT;
+            } else {
+                throw(Error(`Invalid stateKey prefix ${elements[0]}-${elements[1]}`));
+            }
+            break;
+        case 'access':
+            objKind = 'ConfigMap';
+            stateType = common.STATE_TYPE_ACCESS_POINT;
+            stateId = stateKey.substring(7); // text following 'access-'
+            break;
+        case 'link':
+            objKind = 'ConfigMap';
+            stateType = common.STATE_TYPE_LINK;
+            stateId = stateKey.substring(5); // text following 'link-'
+            break;
+        case 'accessstatus':
+            objKind = 'InMemory';
+            objDir = 'local';
+            break;
         default:
             throw(Error(`Invalid stateKey prefix: ${elements[0]}`))
     }
 
-    return [objName, apiVersion, objKind, objType, objDir];
+    return [objName, apiVersion, objKind, objType, objDir, stateType, stateId, inject];
 }
 
 const stateForList = function(objectList, local, remote) {
@@ -114,7 +142,7 @@ const onPeerLost = async function(peerId) {
 }
 
 const onStateChange = async function(peerId, stateKey, hash, data) {
-    const [objName, apiVersion, objKind, objType, objDir] = kubeObjectForState(stateKey);
+    const [objName, apiVersion, objKind, objType, objDir, stateType, stateId, inject] = kubeObjectForState(stateKey);
     if (objDir == 'local') {
         throw(Error(`Protocol error: Received update for local state ${stateKey}`));
     }
@@ -136,6 +164,18 @@ const onStateChange = async function(peerId, stateKey, hash, data) {
 
         if (objType) {
             obj.type = objType;
+        }
+
+        if (stateType) {
+            obj.metadata.annotations[common.META_ANNOTATION_STATE_TYPE] = stateType;
+        }
+
+        if (stateId) {
+            obj.metadata.annotations[common.META_ANNOTATION_STATE_ID] = stateId;
+        }
+
+        if (inject) {
+            obj.metadata.annotations[common.META_ANNOTATION_TLS_INJECT] = inject;
         }
 
         await kube.ApplyObject(obj);

@@ -153,6 +153,7 @@ const backbone_route = function(apid) {
 }
 
 const do_reconcile_kube_service = async function() {
+    Log('INGRESS: do_reconcile_kube_service');
     reconcile_service_scheduled = false;
     let services = await kube.GetServices();
     let found    = false;
@@ -197,6 +198,7 @@ const reconcile_kube_service = async function() {
 }
 
 const do_reconcile_routes = async function() {
+    Log('INGRESS: do_reconcile_routes');
     reconcile_routes_scheduled = false;
     const all_routes = await kube.GetRoutes();
     let routes = {};
@@ -256,25 +258,6 @@ const ingressHash = function(data) {
     return crypto.createHash('sha1').update(text).digest('hex');
 }
 
-//
-// Refactor: TODO
-//
-exports.GetInitialConfig = async function() {
-    try {
-        const routeList = await kube.GetRoutes();
-        for (const route of routeList) {
-            for (const [key, unused] of Object.entries(ingressState)) {
-                if (route.metadata.name == 'skx-' + key && route.spec.host) {
-                    ingressState[key].data = {host: route.spec.host, port: 443};
-                    ingressState[key].hash = ingressHash(ingressState[key].data);
-                }
-            }
-        }
-    } catch (error) {}
-
-    return ingressState;
-}
-
 exports.GetIngressBundle = function() {
     let bundle = {};
 
@@ -291,6 +274,7 @@ exports.GetIngressBundle = function() {
 }
 
 const do_reconcile_config_maps = async function() {
+    Log('INGRESS: do_reconcile_config_maps');
     reconcile_config_map_scheduled = false;
     const all_config_maps = await kube.GetConfigmaps();
     let ingress_config_maps = {};
