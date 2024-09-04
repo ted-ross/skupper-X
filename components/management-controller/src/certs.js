@@ -444,13 +444,15 @@ const secretAdded = async function(dblink, secret) {
                 await kube.ApplyObject(issuer_obj);
             }
             Log(`Certificate${is_ca ? ' Authority' : ''} created: ${secret.metadata.name}`)
+            if (alertSiteCertChanged) {
+                await deployment.SiteLifecycleChanged_TX(client, ref_id, 'ready');
+            }
             await client.query('COMMIT');
 
             //
             // Alert the sync module that changes have been made that require reconciliation with remote sites
             //
             if (alertSiteCertChanged) {
-                await deployment.SiteLifecycleChanged(ref_id, 'ready');
                 await sync.SiteCertificateChanged(dblink);
             } else if (alertAccessCertChanged) {
                 await sync.AccessCertificateChanged(dblink);

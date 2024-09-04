@@ -35,7 +35,7 @@ const evaluateSingleSite_TX = async function (client, site) {
         //
         // Find the links which come from this site and go to access points on sites with deployed state
         //
-        const peerResult = await client.query("SELECT * FROM InterRouterLinks " +
+        const peerResult = await client.query("SELECT InterRouterLinks.Id FROM InterRouterLinks " +
                                               "JOIN BackboneAccessPoints ON AccessPoint = BackboneAccessPoints.Id " +
                                               "JOIN InteriorSites ON BackboneAccessPoints.InteriorSite = InteriorSites.Id " +
                                               "WHERE InterRouterLinks.ConnectingInteriorSite = $1 AND InteriorSites.DeploymentState = 'deployed'", [site.id]);
@@ -57,44 +57,38 @@ const evaluateSingleSite_TX = async function (client, site) {
     }
 }
 
-exports.SiteLifecycleChanged = async function(siteId, newState) {
-    const client = await db.ClientFromPool();
-    try {
-        await client.query("BEGIN");
-        const result = await client.query("SELECT Id, Lifecycle, DeploymentState FROM InteriorSites WHERE Id = $1", [siteId]);
-        if (result.rowCount == 1) {
-            const site = result.rows[0];
-            await evaluateSingleSite_TX(client, site);
-            if (newState == 'active') {
-                //
-                // If this site became active, evaluate all sites connected to this site
-                //
-                const connected = await client.query("SELECT InteriorSites.Id as Id, InteriorSites.Lifecycle, InteriorSites.DeploymentState, InterRouterLinks.Id as LinkId FROM InterRouterLinks " +
-                                                     "JOIN InteriorSites ON InteriorSites.Id = ConnectingInteriorSite " +
-                                                     "WHERE ListeningInteriorSite = $1", [siteId]);
-                for (const linkSite of connected.rows) {
-                    await evaluateSingleSite_TX(client, linkSite);
+exports.SiteLifecycleChanged_TX = async function(client, siteId, newState) {
+    const result = await client.query("SELECT Id, Lifecycle, DeploymentState FROM InteriorSites WHERE Id = $1", [siteId]);
+    if (result.rowCount == 1) {
+        const site = result.rows[0];
+        await evaluateSingleSite_TX(client, site);
+        if (newState == 'active') {
+            //
+            // If this site became active, evaluate all sites connected to this site
+            //
+            const connected = await client.query("SELECT ConnectingInteriorSite FROM InterRouterLinks " +
+                                                 "JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = AccessPoint " +
+                                                 "WHERE BackboneAccessPoints.InteriorSite = $1", [siteId]);
+            for (const row of connected.rows) {
+                const siteResult = await client.query("SELECT Id, Lifecycle, DeploymentState FROM InteriorSites WHERE Id = $1", [row.connectinginteriorsite]);
+                if (siteResult.rowCount == 1) {
+                    await evaluateSingleSite_TX(client, siteResult.rows[0]);
                 }
             }
         }
-        await client.query("COMMIT");
-    } catch (error) {
-        await client.query("ROLLBACK");
-        Log(`Exception in SiteLifecycleChanged: ${error.message}`);
-        Log(error.stack);
-    } finally {
-        client.release();
     }
 }
 
-exports.LinkAddedOrDeleted = async function(connectingSiteId, accessPointId) {  // TODO - Refactor to use access point rather than listening site
+exports.LinkAddedOrDeleted = async function(connectingSiteId, accessPointId) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
         //
         // If listening site is "deployed", re-evaluate the connecting site
         //
-        const lResult = await client.query("SELECT DeploymentState from InteriorSites WHERE Id = $1", [accessPointId]);
+        const lResult = await client.query("SELECT InteriorSites.DeploymentState FROM BackboneAccessPoints " +
+                                           "JOIN InteriorSites ON InteriorSites.Id = InteriorSite " +
+                                           "WHERE BackboneAccessPoints.Id = $1", [accessPointId]);
         if (lResult.rowCount == 1 && lResult.rows[0].deploymentstate == 'deployed') {
             const cResult = await client.query("SELECT Id, Lifecycle, DeploymentState FROM InteriorSites WHERE Id = $1", [connectingSiteId]);
             if (cResult.rowCount == 1) {

@@ -514,6 +514,7 @@ const deleteAccessPoint = async function(req, res) {
     var returnStatus = 204;
     const apid = req.params.apid;
     var siteId = undefined;
+    var wasManage = false;
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
@@ -527,12 +528,19 @@ const deleteAccessPoint = async function(req, res) {
             if (row.certificate) {
                 await client.query("DELETE FROM TlsCertificates WHERE Id = $1", [row.certificate]);
             }
+            siteId = row.interiorsite;
             if (row.kind == 'manage') {
-                siteId = row.interiorsite;
+                wasManage = true;
             }
         }
         await client.query("COMMIT");
         res.status(returnStatus).end();
+
+        //
+        // Alert the sync module that an access point changed on a site
+        //
+        await sync.SiteIngressChanged(siteId, apid);
+
     } catch (error) {
         await client.query("ROLLBACK");
         returnStatus = 400;
@@ -541,7 +549,7 @@ const deleteAccessPoint = async function(req, res) {
         client.release();
     }
 
-    if (siteId) {
+    if (wasManage) {
         await deployment.ManageIngressDeleted(siteId);
     }
 

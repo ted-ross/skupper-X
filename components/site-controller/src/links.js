@@ -225,10 +225,10 @@ const sync_connectors = async function() {
             } else {
                 Log(`Creating router connector ${cname}`);
                 await router.CreateConnector(cname, {
-                    host:             cc.host,
-                    port:             cc.port,
+                    host:             cc.data.host,
+                    port:             cc.data.port,
                     role:             backboneMode ? 'inter-router' : 'edge',
-                    cost:             cc.cost,
+                    cost:             cc.data.cost,
                     sslProfile:       'site-client',
                     saslMechanisms:   'EXTERNAL',
                     stripAnnotations: 'no',

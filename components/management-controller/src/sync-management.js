@@ -26,15 +26,15 @@
 // the database.
 //
 
-const Log       = require('./common/log.js').Log;
-const common    = require('./common/common.js');
-const util      = require('./common/util.js');
-const db        = require('./db.js');
-const kube      = require('./common/kube.js');
-const sync      = require('./common/state-sync.js');
-const bbLinks   = require('./backbone-links.js');
-const templates = require('./site-templates.js');
-const crypto    = require('crypto');
+const Log        = require('./common/log.js').Log;
+const common     = require('./common/common.js');
+const util       = require('./common/util.js');
+const db         = require('./db.js');
+const kube       = require('./common/kube.js');
+const sync       = require('./common/state-sync.js');
+const bbLinks    = require('./backbone-links.js');
+const templates  = require('./site-templates.js');
+const deployment = require('./site-deployment-state.js');
 
 var peers = {};  // {peerId: {pClass: <>, stuff}}
 
@@ -155,6 +155,7 @@ const onNewBackboneSite = async function(peerId) {
         //
         if (site.lifecycle == 'ready') {
             await client.query("UPDATE InteriorSites SET FirstActiveTime = CURRENT_TIMESTAMP, LastHeartbeat = CURRENT_TIMESTAMP, LifeCycle = 'active' WHERE Id = $1", [peerId]);
+            await deployment.SiteLifecycleChanged_TX(client, peerId, 'active');
         } else {
             await client.query("UPDATE InteriorSites SET LastHeartbeat = CURRENT_TIMESTAMP WHERE Id = $1", [peerId]);
         }
@@ -545,6 +546,8 @@ exports.SiteIngressChanged = async function(siteId, accessPointId) {
                 }
                 const hash = templates.HashOfData(ap);
                 await sync.UpdateLocalState(siteId, `access-${accessPointId}`, hash);
+            } else {
+                await sync.UpdateLocalState(siteId, `access-${accessPointId}`, null);
             }
             await client.query("COMMIT");
         } catch (error) {
@@ -579,7 +582,7 @@ exports.LinkChanged = async function(connectingSiteId, linkId) {
             await sync.UpdateLocalState(connectingSiteId, `link-${linkId}`, hash);
             await client.query("COMMIT");
         } catch (error) {
-            Log(`Exception in SiteIngressChanged: ${error.message}`);
+            Log(`Exception in LinkChanged: ${error.message}`);
             await client.query("ROLLBACK");
         } finally {
             client.release();
