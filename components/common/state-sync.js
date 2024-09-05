@@ -85,22 +85,22 @@ const sendHeartbeat = function(peerId) {
         const message = protocol.Heartbeat(localId, localClass, peer.localState, addressToUse);
         amqp.SendMessage(sender, message, {}, peer.address);
         peers[peerId].hbTimer = setTimeout(sendHeartbeat, timerDelayMsec(HEARTBEAT_PERIOD_SECONDS), peerId);
-        Log(`SYNC: Sent Heartbeat to ${peerId}`);
-        Log(message);
+        //Log(`SYNC: Sent Heartbeat to ${peerId}`);
+        //Log(message);
     }
 }
 
 const onHeartbeat = async function(connectionKey, peerClass, peerId, hashset, address) {
     var localState;
     var remoteState;
-    Log(`SYNC: Received Heartbeat from ${peerId}`);
+    //Log(`SYNC: Received Heartbeat from ${peerId}`);
     initialBeacon = false;
 
     //
     // If this heartbeat comes from a peer we are not tracking, consider this a new-peer.
     //
     if (!peers[peerId]) {
-        Log(`SYNC:   New Peer, id: ${peerId}`);
+        //Log(`SYNC:   New Peer, id: ${peerId}`);
         [localState, remoteState] = await onNewPeer(peerId, peerClass);
         peers[peerId] = {
             connectionKey : connectionKey,
@@ -121,10 +121,10 @@ const onHeartbeat = async function(connectionKey, peerClass, peerId, hashset, ad
     // If the hashset is not present in the heartbeat, there is no synchronization to be done.
     //
     if (!!hashset) {
-        Log('Current Hashset:');
-        Log(peers[peerId].remoteState);
-        Log('Heartbeat Hashset:');
-        Log(hashset);
+        //Log('Current Hashset:');
+        //Log(peers[peerId].remoteState);
+        //Log('Heartbeat Hashset:');
+        //Log(hashset);
         //
         // Reconcile the existing remote state against the advertized remote state.
         //
@@ -146,7 +146,7 @@ const onHeartbeat = async function(connectionKey, peerClass, peerId, hashset, ad
         for (const [key, value] of Object.entries(toDeleteStateKeys)) {
             try {
                 if (value) {
-                    Log(`SYNC:   Removing state: ${key}`);
+                    //Log(`SYNC:   Removing state: ${key}`);
                     await onStateChange(peerId, key, null, null);
                     delete peers[peerId].remoteState[key];
                 }
@@ -184,7 +184,7 @@ const sendInitialBeacon = function() {
         if (initialBeacon && connections['net']) {
             const sender  = connections['net'].apiSender;
             for (const address of extraTargets) {
-                Log(`Sending beacon heartbeat to ${address}`);
+                //Log(`Sending beacon heartbeat to ${address}`);
                 const message = protocol.Heartbeat(localId, localClass, null, addressToUse);
                 amqp.SendMessage(sender, message, {}, address);
             }
