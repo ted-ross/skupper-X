@@ -273,6 +273,12 @@ exports.GetIngressBundle = function() {
     return bundle;
 }
 
+exports.GetInitialState = async function() {
+    await do_reconcile_config_maps();
+    await do_reconcile_routes();
+    return exports.GetIngressBundle();
+}
+
 const do_reconcile_config_maps = async function() {
     Log('INGRESS: do_reconcile_config_maps');
     reconcile_config_map_scheduled = false;

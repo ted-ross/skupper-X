@@ -5,6 +5,7 @@
  - ~~There is a name-collision thing happening when a backbone is deleted and then re-created~~
 
 ## General Stuff
+ - ~~Generalize and parameterize the "hash-sets" for site-to-management reconciliation allowing for greater flexibility in development~~
  - Use PG notifications instead of polling to detect database changes
  - Explore ways to virtualize the Kubernetes content on backbones/member-sites for non-kube environments
  - Consolidate string definitions
@@ -22,7 +23,6 @@
      - Accepted only if the connecting site has an authentic initial configuration
  - Consider having the sites generate their own certificates and CSRs to be sync'd to the MC for signing
    - This would require the installation of openssl into the site-controller container image
- - Generalize and parameterize the "hash-sets" for site-to-management reconciliation allowing for greater flexibility in development
 
 ## Backbone Feature Tasks
  - ~~In initial setup, specify which ingresses are needed on the site based on configured access points (skupperx-incoming configmap?)~~
@@ -48,7 +48,6 @@
  - ~~Delete orphaned TlsCertificate records when their owners are deleted~~
  - Clean up the async structure of the "prune" module
  - Add an entry point in the "prune" module to clean things up after objects are deleted
- - When creating a link and there is no "peer" ingress on the listening site, either error out or create a peer ingress as a side effect
  - Add ingress capability for non-OpenShift kubernetes
  - Consider replacing the boolean ingress indication with "no-ingress", "any", or ingress-style suggestions
  - Add a PUT to allow backbones to be renamed

@@ -67,7 +67,7 @@ const link_config_map_yaml = function(name, data) {
         data: data,
     };
 
-    configMap.metadata.annotations[common.META_ANNOTATION_STATE_HASH] = sync.HashOfConfigMap(configMap);
+    configMap.metadata.annotations[common.META_ANNOTATION_STATE_HASH] = siteTemplates.HashOfConfigMap(configMap);
     return "---\n" + yaml.dump(configMap);
 }
 
@@ -89,7 +89,7 @@ const claim_config_map_yaml = function(claimId, hostname, port, interactive) {
         port: port,
     });
 
-    configMap.metadata.annotations[common.META_ANNOTATION_STATE_HASH] = sync.HashOfConfigMap(configMap);
+    configMap.metadata.annotations[common.META_ANNOTATION_STATE_HASH] = siteTemplates.HashOfConfigMap(configMap);
     return "---\n" + yaml.dump(configMap);
 }
 

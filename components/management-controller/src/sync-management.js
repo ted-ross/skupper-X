@@ -168,6 +168,8 @@ const onNewBackboneSite = async function(peerId) {
     } finally {
         client.release();
     }
+    Log('REMOTE STATE');
+    Log(remoteState);
     return [localState, remoteState];
 }
 

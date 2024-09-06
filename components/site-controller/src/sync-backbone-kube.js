@@ -34,10 +34,12 @@
 //   - Link ConfigMaps
 //
 
-const Log    = require('./common/log.js').Log;
-const common = require('./common/common.js');
-const kube   = require('./common/kube.js');
-const sync   = require('./common/state-sync.js');
+const Log     = require('./common/log.js').Log;
+const common  = require('./common/common.js');
+const kube    = require('./common/kube.js');
+const sync    = require('./common/state-sync.js');
+const ingress = require('./ingress.js');
+const hashes  = require('./hash.js');
 
 var connectedToPeer = false;
 var peerId;
@@ -119,13 +121,20 @@ const stateInMemory = function(local) {
     return local;
 }
 
-const getHashState = async function() {
+const getInitialHashState = async function() {
     var local  = {};
     var remote = {};
     const secrets    = await kube.GetSecrets();
     const configmaps = await kube.GetConfigmaps();
     [local, remote] = stateForList(secrets, local, remote);
     [local, remote] = stateForList(configmaps, local, remote);
+    const ingressState = await ingress.GetInitialState();
+    for (const [apid, state] of Object.entries(ingressState)) {
+        local[`accessstatus-${apid}`] = {
+            hash : hashes.HashOfData(state),
+            data : state,
+        };
+    }
     local = stateInMemory(local);
     return [local, remote];
 }
@@ -133,7 +142,7 @@ const getHashState = async function() {
 const onNewPeer = async function(_peerId, peerClass) {
     connectedToPeer = true;
     peerId = _peerId;
-    return await getHashState();
+    return await getInitialHashState();
 }
 
 const onPeerLost = async function(peerId) {
