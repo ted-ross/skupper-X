@@ -98,6 +98,13 @@ const sync_secrets = async function() {
 }
 
 const sync_listeners = async function() {
+    //
+    // Exit immediately if we are not in backbone mode.  There are no inter-router listeners on a member router.
+    //
+    if (!backboneMode) {
+        return;
+    }
+
     try {
         //
         // Get the current set of listeners from the router.

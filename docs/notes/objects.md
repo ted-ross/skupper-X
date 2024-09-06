@@ -17,6 +17,8 @@ For the purpose of deriving values for the ordinals in the SslProfile (current v
 
 ## Site
 
+Backbone sites can have the full complement of secret and config map types.  Member sites will only have links (no access-points).
+
 ### Secrets
 
  - metadata

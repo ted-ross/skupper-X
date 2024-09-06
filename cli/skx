@@ -450,7 +450,7 @@ DISPATCH = {   # {object : {verb : ([positional], [options], METHOD, URI, data-f
     ## Invitation
     ##
     'invite' : {
-        'create' : (['vanid', 'name', 'claimaccess', 'primaryaccess'], ['interactive'], 'POST', '/api/v1alpha1/van/${vanid}/invitations', 'CreateResult'),
+        'create' : (['vanid', 'name', 'claimaccess', 'primaryaccess'], ['interactive', 'prefix'], 'POST', '/api/v1alpha1/van/${vanid}/invitations', 'CreateResult'),
         'delete' : (['inviteid'], [], 'DELETE', '/api/v1alpha1/invitation/${inviteid}', 'Result'),
         'list'   : (['vanid'], [],    'GET',    '/api/v1alpha1/van/${vanid}/invitations', 'Table', 'Application Network Invitations',
                         ['id', 'name', ('stat', None, 'lifecycle'), 'failure', ('limit', 'NUM', 'instancelimit'), ('count', 'NUM', 'instancecount'), ('interactive', 'YN', 'interactive'), ('deadline', None, 'joindeadline')]),
@@ -581,6 +581,7 @@ def main():
     parser.add_argument('--cost',     action='store', required=False, default='1')
     parser.add_argument('--format',   action='store', required=False, default='kube')
     parser.add_argument('--interactive', action='store_true', required=False)
+    parser.add_argument('--prefix', action='store', required=False)
     args   = parser.parse_args()
     object = args.pos[0]
     verb   = args.pos[1]

@@ -103,6 +103,7 @@ const createInvitation = async function(vid, req, res) {
             'siteclass'       : {type: 'string',     optional: true, default: null},
             'instancelimit'   : {type: 'number',     optional: true, default: null},
             'interactive'     : {type: 'bool',       optional: true, default: false},
+            'prefix'          : {type: 'string',     optional: true, default: null},
         });
 
         const client = await db.ClientFromPool();

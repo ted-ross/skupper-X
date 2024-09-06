@@ -71,25 +71,25 @@ const link_config_map_yaml = function(name, data) {
     return "---\n" + yaml.dump(configMap);
 }
 
-const claim_config_map_yaml = function(claimId, hostname, port, interactive) {
+const claim_config_map_yaml = function(claimId, hostname, port, interactive, namePrefix) {
     let configMap = {
         apiVersion : 'v1',
         kind       : 'ConfigMap',
         metadata   : {
             name        : 'skupperx-claim',
             annotations : {
-                'skupper.io/skx-interactive' : interactive ? 'true' : 'false',
+                [common.META_ANNOTATION_SKUPPERX_CONTROLLED] : 'true',
             },
         },
-        data: {}
+        data: {
+            claimId     : claimId,
+            host        : hostname,
+            port        : port,
+            interactive : interactive ? 'true' : 'false',
+            namePrefix  : namePrefix,
+        }
     };
 
-    configMap.data[claimId] = JSON.stringify({
-        host: hostname,
-        port: port,
-    });
-
-    configMap.metadata.annotations[common.META_ANNOTATION_STATE_HASH] = siteTemplates.HashOfConfigMap(configMap);
     return "---\n" + yaml.dump(configMap);
 }
 
@@ -115,9 +115,14 @@ const fetchInvitationKube = async function (iid, res) {
             text += siteTemplates.DeploymentYaml(iid, false);
             text += siteTemplates.SiteApiServiceYaml();
             text += siteTemplates.SecretYaml(secret, 'claim', false);
-            text += claim_config_map_yaml(row.id, row.hostname, row.port, row.interactiveclaim);
+            text += claim_config_map_yaml(row.id, row.hostname, row.port, row.interactiveclaim, row.membernameprefix);
 
             res.status(returnStatus).send(text);
+
+            //
+            // Bump the fetch-count for the invitation.
+            //
+            await client.query("UPDATE MemberInvitations SET FetchCount = FetchCount + 1 WHERE Id = $1", [row.id]);
         } else {
             throw(Error('Valid invitation not found'));
         }

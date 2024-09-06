@@ -75,7 +75,6 @@ exports.Main = async function() {
         if (BACKBONE_MODE) {
             await ingress.Start(SITE_ID);
         }
-        //await siteSync.Start(BACKBONE_MODE, SITE_ID, conn);
         if (BACKBONE_MODE) {
             await syncBackboneKube.Start(SITE_ID, conn);
         } else {

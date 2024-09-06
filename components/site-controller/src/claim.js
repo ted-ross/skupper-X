@@ -28,6 +28,7 @@ const Log      = require('./common/log.js').Log;
 const kube     = require('./common/kube.js');
 const amqp     = require('./common/amqp.js');
 const protocol = require('./common/protocol.js');
+const common   = require('./common/common.js');
 
 const CLAIM_CONFIG_MAP_NAME         = 'skupperx-claim';
 const LINK_CONFIG_MAP_NAME          = 'skupperx-links-outgoing';
@@ -38,6 +39,7 @@ const CLAIM_REQUEST_TIMEOUT_SECONDS = 30;
 var claimState = {
     interactive : true,
     status      : 'awaiting-name',  // processing, joined, failed
+    namePrefix  : '',
     siteName    : null,
     failure     : null,
 };
@@ -65,19 +67,17 @@ const startClaim = async function(configMap, secret) {
     //
     // Extract the connection host and port from the config-map
     //
-    var connInfo;
-    var claimId;
-    for (const [key, value] of Object.entries(configMap.data)) {
-        claimId  = key;
-        connInfo = JSON.parse(value);
-        break;
-    }
+    var claimId    = configMap.data.claimId;
+    var host       = configMap.data.host;
+    var port       = configMap.data.port;
+    
+    claimState.namePrefix = configMap.data.namePrefix || '';
 
     //
     // Open the AMQP connection and sender for claim-assertion
     //
-    Log(`Asserting claim via amqps://${connInfo.host}:${connInfo.port}`);
-    let claimConnection = amqp.OpenConnection('Claim', connInfo.host, connInfo.port, 'tls', tls_ca, tls_cert, tls_key);
+    Log(`Asserting claim ${claimId} via amqps://${host}:${port}`);
+    let claimConnection = amqp.OpenConnection('Claim', host, port, 'tls', tls_ca, tls_cert, tls_key);
     let claimSender     = await amqp.OpenSender('Claim', claimConnection, CLAIM_CONTROLLER_ADDRESS);
 
     //
@@ -110,16 +110,22 @@ const startClaim = async function(configMap, secret) {
 
 const checkClaimState = async function() {
     var claimConfigMap;
-    var linkConfigMap;
+    var linkConfigMapPresent = false;
     var claimSecret;
 
     try {
         claimConfigMap = await kube.LoadConfigmap(CLAIM_CONFIG_MAP_NAME);
-        claimState.interactive = !! claimConfigMap.metadata.annotations['skupper.io/skx-interactive'];
+        claimState.interactive = claimConfigMap.data.interactive == 'true';
     } catch (error) {}
 
     try {
-        linkConfigMap = await kube.LoadConfigmap(LINK_CONFIG_MAP_NAME);
+        const configMaps = await kube.GetConfigmaps();
+        for (const configMap of configMaps) {
+            if (kube.Controlled(configMap) && kube.Annotation(common.META_ANNOTATION_STATE_TYPE) == common.STATE_TYPE_LINK) {
+                linkConfigMapPresent = true;
+                break;
+            }
+        }
     } catch (error) {}
 
     try {
@@ -127,7 +133,7 @@ const checkClaimState = async function() {
     } catch (error) {}
 
     try {
-        if (linkConfigMap) {
+        if (linkConfigMapPresent) {
             //
             // If we have a link config-map, the claim process has already been completed.
             // Remove leftover claim objects (config-map and secret) if they're still here.
@@ -171,7 +177,7 @@ exports.GetClaimState = function () {
 
 exports.StartClaim = async function (name) {
     if (claimState.status == 'awaiting-name') {
-        claimState.siteName = name;
+        claimState.siteName = claimState.namePrefix + name;
         await checkClaimState();
     }
 }
