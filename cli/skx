@@ -453,7 +453,7 @@ DISPATCH = {   # {object : {verb : ([positional], [options], METHOD, URI, data-f
         'create' : (['vanid', 'name', 'claimaccess', 'primaryaccess'], ['interactive', 'prefix'], 'POST', '/api/v1alpha1/van/${vanid}/invitations', 'CreateResult'),
         'delete' : (['inviteid'], [], 'DELETE', '/api/v1alpha1/invitation/${inviteid}', 'Result'),
         'list'   : (['vanid'], [],    'GET',    '/api/v1alpha1/van/${vanid}/invitations', 'Table', 'Application Network Invitations',
-                        ['id', 'name', ('stat', None, 'lifecycle'), 'failure', ('limit', 'NUM', 'instancelimit'), ('count', 'NUM', 'instancecount'), ('interactive', 'YN', 'interactive'), ('deadline', None, 'joindeadline')]),
+                        ['id', 'name', ('stat', None, 'lifecycle'), 'failure', ('limit', 'NUM', 'instancelimit'), ('count', 'NUM', 'instancecount'), ('fetch', 'NUM', 'fetchcount'), ('interactive', 'YN', 'interactive'), ('deadline', None, 'joindeadline')]),
         'deploy' : (['inviteid', 'outfile'], ['format'], 'GET', '/api/v1alpha1/invitation/${inviteid}/${format}', 'File'),
         'expire' : (['inviteid'], [], 'PUT',    '/api/v1alpha1/invitation/${inviteid}/expire', 'Result')
     },

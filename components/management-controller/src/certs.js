@@ -24,6 +24,7 @@ const Log        = require('./common/log.js').Log;
 const db         = require('./db.js');
 const config     = require('./config.js');
 const sync       = require('./sync-management.js');
+const claims     = require('./claim-server.js');
 const deployment = require('./site-deployment-state.js');
 const common     = require('./common/common.js');
 
@@ -462,7 +463,7 @@ const secretAdded = async function(dblink, secret) {
             // If we just updated a member site, there will be a claim-assertion that is awaiting completion.  Invoke the completion function.
             //
             if (alertMemberCompletion) {
-                await sync.CompleteMember(ref_id);
+                await claims.CompleteMember(ref_id);
             }
         } else {
             //

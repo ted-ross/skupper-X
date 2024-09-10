@@ -251,7 +251,7 @@ exports.Request = function(sender, messageBody, ap={}, destination=null, timeout
 }
 
 exports.Start = async function(rhea) {
-    Log('[AMQP module started]')
+    Log('[AMQP module started]');
     container = rhea;
     rhea_handlers();
 }

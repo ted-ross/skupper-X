@@ -86,9 +86,12 @@ const claim_config_map_yaml = function(claimId, hostname, port, interactive, nam
             host        : hostname,
             port        : port,
             interactive : interactive ? 'true' : 'false',
-            namePrefix  : namePrefix,
         }
     };
+
+    if (namePrefix) {
+        configMap.data.namePrefix = namePrefix;
+    }
 
     return "---\n" + yaml.dump(configMap);
 }
@@ -114,7 +117,7 @@ const fetchInvitationKube = async function (iid, res) {
             text += siteTemplates.ConfigMapYaml('edge', row.vanid);
             text += siteTemplates.DeploymentYaml(iid, false);
             text += siteTemplates.SiteApiServiceYaml();
-            text += siteTemplates.SecretYaml(secret, 'claim', false);
+            text += siteTemplates.SecretYaml(secret, 'skupperx-claim', false);
             text += claim_config_map_yaml(row.id, row.hostname, row.port, row.interactiveclaim, row.membernameprefix);
 
             res.status(returnStatus).send(text);

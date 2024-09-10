@@ -255,7 +255,7 @@ const listInvitations = async function(res, vid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT Id, Name, LifeCycle, Failure, JoinDeadline, MemberClass, InstanceLimit, InstanceCount, InteractiveClaim as interactive FROM MemberInvitations WHERE MemberOf = $1", [vid]);
+        const result = await client.query("SELECT Id, Name, LifeCycle, Failure, JoinDeadline, MemberClass, InstanceLimit, InstanceCount, FetchCount, InteractiveClaim as interactive FROM MemberInvitations WHERE MemberOf = $1", [vid]);
         res.status(returnStatus).json(result.rows);
     } catch (error) {
         returnStatus = 500

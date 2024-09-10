@@ -23,6 +23,7 @@
 // AMQP addresses
 //
 exports.API_CONTROLLER_ADDRESS = 'skx/sync/mgmtcontroller';
+exports.CLAIM_ASSERT_ADDRESS   = 'skx/claim';
 
 //
 // Selector labels

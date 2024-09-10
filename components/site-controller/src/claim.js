@@ -33,7 +33,6 @@ const common   = require('./common/common.js');
 const CLAIM_CONFIG_MAP_NAME         = 'skupperx-claim';
 const LINK_CONFIG_MAP_NAME          = 'skupperx-links-outgoing';
 const CLAIM_SECRET_NAME             = 'skupperx-claim';
-const CLAIM_CONTROLLER_ADDRESS      = 'skx/claim';
 const CLAIM_REQUEST_TIMEOUT_SECONDS = 30;
 
 var claimState = {
@@ -72,18 +71,21 @@ const startClaim = async function(configMap, secret) {
     var port       = configMap.data.port;
     
     claimState.namePrefix = configMap.data.namePrefix || '';
+    if (!claimState.siteName) {
+        claimState.siteName = claimState.namePrefix + process.env.HOSTNAME;
+    }
 
     //
     // Open the AMQP connection and sender for claim-assertion
     //
     Log(`Asserting claim ${claimId} via amqps://${host}:${port}`);
     let claimConnection = amqp.OpenConnection('Claim', host, port, 'tls', tls_ca, tls_cert, tls_key);
-    let claimSender     = await amqp.OpenSender('Claim', claimConnection, CLAIM_CONTROLLER_ADDRESS);
+    let claimSender     = await amqp.OpenSender('Claim', claimConnection, common.CLAIM_ASSERT_ADDRESS);
 
     //
     // Send the claim-assert request to the management controller
     //
-    const [ap, response] = await amqp.Request(claimSender, protocol.AssertClaim(claimId, claimState.siteName), {}, CLAIM_REQUEST_TIMEOUT_SECONDS);
+    const [ap, response] = await amqp.Request(claimSender, protocol.AssertClaim(claimId, claimState.siteName), {}, null, CLAIM_REQUEST_TIMEOUT_SECONDS);
     if (response.statusCode != 200) {
         throw(Error(`Claim Rejected: ${response.statusCode} - ${response.statusDescription}`));
     }
@@ -94,7 +96,9 @@ const startClaim = async function(configMap, secret) {
     // Create the objects needed to establish member connectivity
     //
     await kube.ApplyObject(response.siteClient);
-    await kube.ApplyObject(response.outgoingLinks);
+    for (const link of response.outgoingLinks) {
+        await kube.ApplyObject(link);
+    }
 
     //
     // Delete the claim objects
@@ -121,7 +125,7 @@ const checkClaimState = async function() {
     try {
         const configMaps = await kube.GetConfigmaps();
         for (const configMap of configMaps) {
-            if (kube.Controlled(configMap) && kube.Annotation(common.META_ANNOTATION_STATE_TYPE) == common.STATE_TYPE_LINK) {
+            if (kube.Controlled(configMap) && kube.Annotation(configMap, common.META_ANNOTATION_STATE_TYPE) == common.STATE_TYPE_LINK) {
                 linkConfigMapPresent = true;
                 break;
             }
@@ -152,7 +156,7 @@ const checkClaimState = async function() {
             //
             // If there is no link config-map but there is a claim config-map, we may begin the claim process.
             //
-            if (claimState.interactive && claimState.siteName) {
+            if (!claimState.interactive || claimState.siteName) {
                 await startClaim(claimConfigMap, claimSecret);
             } else {
                 Log('Claim is interactive - Awaiting API intervention');
@@ -161,10 +165,11 @@ const checkClaimState = async function() {
             //
             // If neither config-map is present, check again after a delay.
             //
-            throw(Error(`Expect one of these configMaps: ${CLAIM_CONFIG_MAP_NAME}, ${LINK_CONFIG_MAP_NAME}`));
+            throw(Error(`ERROR:Claim - Expect configMaps ${CLAIM_CONFIG_MAP_NAME} or a valid link configuration`));
         }
     } catch (error) {
         Log(`Claim-state check failed: ${error.message}`);
+        Log(error.stack);
         claimState.status  = 'failed';
         claimState.failure = error.message;
         throw(error);
