@@ -101,6 +101,18 @@ const startClaim = async function(configMap, secret) {
     }
 
     //
+    // Create the member config-map to store the member site-id.
+    //
+    await kube.ApplyObject({
+        apiVersion : 'v1',
+        kind       : 'ConfigMap',
+        data       : { siteId : response.siteId },
+        metadata   : {
+            name : common.MEMBER_CONFIG_MAP_NAME,
+        },
+    });
+
+    //
     // Delete the claim objects
     //
     await kube.DeleteSecret(CLAIM_SECRET_NAME);
@@ -110,12 +122,15 @@ const startClaim = async function(configMap, secret) {
     // Disconnect the claim connection
     //
     amqp.CloseConnection(claimConnection);
+
+    return response.siteId;
 }
 
 const checkClaimState = async function() {
     var claimConfigMap;
-    var linkConfigMapPresent = false;
+    var memberConfigMapPresent = false;
     var claimSecret;
+    var siteId;
 
     try {
         claimConfigMap = await kube.LoadConfigmap(CLAIM_CONFIG_MAP_NAME);
@@ -123,12 +138,10 @@ const checkClaimState = async function() {
     } catch (error) {}
 
     try {
-        const configMaps = await kube.GetConfigmaps();
-        for (const configMap of configMaps) {
-            if (kube.Controlled(configMap) && kube.Annotation(configMap, common.META_ANNOTATION_STATE_TYPE) == common.STATE_TYPE_LINK) {
-                linkConfigMapPresent = true;
-                break;
-            }
+        const memberConfigMap = await kube.LoadConfigmap(common.MEMBER_CONFIG_MAP_NAME);
+        if (kube.Controlled(memberConfigMap)) {
+            siteId = memberConfigMap.data.siteId;
+            memberConfigMapPresent = true;
         }
     } catch (error) {}
 
@@ -137,7 +150,7 @@ const checkClaimState = async function() {
     } catch (error) {}
 
     try {
-        if (linkConfigMapPresent) {
+        if (memberConfigMapPresent) {
             //
             // If we have a link config-map, the claim process has already been completed.
             // Remove leftover claim objects (config-map and secret) if they're still here.
@@ -157,7 +170,7 @@ const checkClaimState = async function() {
             // If there is no link config-map but there is a claim config-map, we may begin the claim process.
             //
             if (!claimState.interactive || claimState.siteName) {
-                await startClaim(claimConfigMap, claimSecret);
+                siteId = await startClaim(claimConfigMap, claimSecret);
             } else {
                 Log('Claim is interactive - Awaiting API intervention');
             }
@@ -174,6 +187,8 @@ const checkClaimState = async function() {
         claimState.failure = error.message;
         throw(error);
     }
+
+    return siteId;
 }
 
 exports.GetClaimState = function () {
@@ -189,5 +204,6 @@ exports.StartClaim = async function (name) {
 
 exports.Start = async function () {
     Log('[Claim module started]')
-    await checkClaimState();
+    const site_id = await checkClaimState();
+    return site_id;
 }

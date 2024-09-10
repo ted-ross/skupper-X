@@ -52,7 +52,8 @@ exports.INJECT_TYPE_SITE         = 'site';
 //
 // Kubernetes object names
 //
-exports.ROUTER_SERVICE_NAME = 'skx-router';
+exports.ROUTER_SERVICE_NAME    = 'skx-router';
+exports.MEMBER_CONFIG_MAP_NAME = 'skx-member';
 
 //
 // Skupper CRD constants

@@ -168,8 +168,6 @@ const onNewBackboneSite = async function(peerId) {
     } finally {
         client.release();
     }
-    Log('REMOTE STATE');
-    Log(remoteState);
     return [localState, remoteState];
 }
 
@@ -206,7 +204,7 @@ const onStateChangeBackbone = async function(peerId, stateKey, hash, data) {
     }
 }
 
-const getStateTlsSite = async function(siteId) {
+const getStateTlsBackboneSite = async function(siteId) {
     var hash = null;
     var data = null;
     const client = await db.ClientFromPool();
@@ -215,6 +213,31 @@ const getStateTlsSite = async function(siteId) {
         const result = await client.query("SELECT TlsCertificates.ObjectName FROM InteriorSites " +
                                           "JOIN TlsCertificates ON TlsCertificates.Id = Certificate " +
                                           "WHERE InteriorSites.Id = $1", [siteId]);
+        if (result.rowCount == 1) {
+            const secret = await kube.LoadSecret(result.rows[0].objectname);
+            hash = templates.HashOfSecret(secret);
+            data = secret.data;
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        await client.query("ROLLBACK");
+        Log(`Exception in getStateTlsSite processing: ${error.message}`);
+        Log(error.stack);
+    } finally {
+        client.release();
+    }
+    return [hash, data];
+}
+
+const getStateTlsMemberSite = async function(siteId) {
+    var hash = null;
+    var data = null;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT TlsCertificates.ObjectName FROM MemberSites " +
+                                          "JOIN TlsCertificates ON TlsCertificates.Id = Certificate " +
+                                          "WHERE MemberSites.Id = $1", [siteId]);
         if (result.rowCount == 1) {
             const secret = await kube.LoadSecret(result.rows[0].objectname);
             hash = templates.HashOfSecret(secret);
@@ -284,7 +307,7 @@ const getStateAccessPoint = async function(apId) {
     return [hash, data];
 }
 
-const getStateLink = async function(linkId) {
+const getStateBackboneLink = async function(linkId) {
     var hash = null;
     var data = null;
     const client = await db.ClientFromPool();
@@ -305,7 +328,36 @@ const getStateLink = async function(linkId) {
         await client.query("COMMIT");
     } catch (error) {
         await client.query("ROLLBACK");
-        Log(`Exception in getStateTls processing: ${error.message}`);
+        Log(`Exception in getStateBackboneLink processing: ${error.message}`);
+        Log(error.stack);
+    } finally {
+        client.release();
+    }
+    return [hash, data];
+}
+
+const getStateMemberLink = async function(linkId) {
+    var hash = null;
+    var data = null;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT BackboneAccessPoints.Hostname, BackboneAccessPoints.Port FROM EdgeLinks " +
+                                          "JOIN BackboneAccessPoints ON BackboneAccessPoint.Id = AccessPoint " +
+                                          "WHERE EdgeLinks.Id = $1 AND Lifecycle = 'ready'", [linkId]);
+        if (result.rowCount == 1) {
+            const link = result.rows[0];
+            data = {
+                host : link.hostname,
+                port : link.port,
+                cost : '1',
+            };
+            hash = templates.HashOfData(data);
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        await client.query("ROLLBACK");
+        Log(`Exception in getStateMemberLink processing: ${error.message}`);
         Log(error.stack);
     } finally {
         client.release();
@@ -318,33 +370,18 @@ const onStateRequestBackbone = async function(peerId, stateKey) { // => [hash, d
     var data = null;
 
     if (stateKey.substring(0, 9) == 'tls-site-') {
-        [hash, data] = await getStateTlsSite(stateKey.substring(9));
+        [hash, data] = await getStateTlsBackboneSite(stateKey.substring(9));
     } else if (stateKey.substring(0, 11) == 'tls-server-') {
         [hash, data] = await getStateTlsServer(stateKey.substring(11));
     } else if (stateKey.substring(0, 7) == 'access-') {
         [hash, data] = await getStateAccessPoint(stateKey.substring(7));
     } else if (stateKey.substring(0, 5) == 'link-') {
-        [hash, data] = await getStateLink(stateKey.substring(5));
+        [hash, data] = await getStateBackboneLink(stateKey.substring(5));
     } else {
         Log(`Invalid stateKey for onStateRequestBackbone processing: ${stateKey}`);
     }
 
     return [hash, data];
-}
-
-const onPingBackbone = async function(peerId) {
-    const client = await db.ClientFromPool();
-    try {
-        await client.query("BEGIN");
-        await client.query("UPDATE InteriorSite SET LastHeartbeat = CURRENT_TIMESTAMP WHERE Id = $1", [peerId]);
-        await client.query("COMMIT");
-    } catch (error) {
-        await client.query("ROLLBACK");
-        Log(`Exception in onPingBackbone processing: ${error.message}`);
-        Log(error.stack);
-    } finally {
-        client.release();
-    }
 }
 
 //=========================================================================================================================
@@ -355,18 +392,54 @@ const onNewMember = async function(peerId) {
     // peerId identifies the row in MemberSites
     //
     // Local state:
-    //   - tls-site-<id> - The client certificate/ca for the member router
-    //   - link-<id>     - Link (host: <>, port: <>)
+    //   - tls-site-<id>   - The client certificate/ca for the backbone router            [ id => Site ]
+    //   - link-<id>       - Link {host: <>, port: <>, cost: <>}                          [ id => InterRouterLink ]
     //
-    // Remote state:
-    //   - infostatus  - Information map from the member site (label, location, contactInfo, verifiedParticipantEmail, etc.)
+    // Remote state: none
     //
     var localState  = {};
     var remoteState = {};
     const client    = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        // TODO
+
+        //
+        // Query for the site's client certificate
+        //
+        const siteResult = await client.query("SELECT Lifecycle, FirstActiveTime, Certificate, TlsCertificates.ObjectName FROM MemberSites " +
+                                              "JOIN TlsCertificates ON TlsCertificates.Id = MemberSites.Certificate " +
+                                              "WHERE MemberSites.Id = $1", [peerId]);
+        if (siteResult.rowCount != 1) {
+            throw Error(`MemberSite not found using id ${peerId}`);
+        }
+        const site = siteResult.rows[0];
+        const secret = await kube.LoadSecret(site.objectname);
+        localState[`tls-site-${peerId}`] = templates.HashOfSecret(secret);
+
+        //
+        // Find the links from this member site.
+        //
+        const linkResult = await client.query("SELECT EdgeLinks.Id, BackboneAccessPoints.Lifecycle, BackboneAccessPoints.Hostname, BackboneAccessPoints.Port FROM EdgeLinks " +
+                                              "JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = AccessPoint " +
+                                              "JOIN MemberSites ON MemberSites.Invitation = EdgeToken " +
+                                              "WHERE MemberSites.Id = $1 AND BackboneAccessPoints.Lifecycle = 'ready'", [peerId]);
+        for (const link of linkResult.rows) {
+            localState[`link-${link.id}`] = templates.HashOfData({
+                host : link.hostname,
+                port : link.port,
+                cost : '1',
+            });
+        }
+
+        //
+        // Update the timestamps and lifecycle on the member site
+        //
+        if (site.lifecycle == 'ready') {
+            await client.query("UPDATE MemberSites SET FirstActiveTime = CURRENT_TIMESTAMP, LastHeartbeat = CURRENT_TIMESTAMP, LifeCycle = 'active' WHERE Id = $1", [peerId]);
+        } else {
+            await client.query("UPDATE MemberSites SET LastHeartbeat = CURRENT_TIMESTAMP WHERE Id = $1", [peerId]);
+        }
+
         await client.query("COMMIT");
     } catch (error) {
         await client.query("ROLLBACK");
@@ -383,16 +456,24 @@ const onLostMember = async function(peerId) {
 }
 
 const onStateChangeMember = async function(peerId, stateKey, hash, data) {
-    // TODO
+    // There is no local state on a member site
 }
 
 const onStateRequestMember = async function(peerId, stateKey) {
-    // TODO
+    var hash = null;
+    var data = null;
+
+    if (stateKey.substring(0, 9) == 'tls-site-') {
+        [hash, data] = await getStateTlsMemberSite(stateKey.substring(9));
+    } else if (stateKey.substring(0, 5) == 'link-') {
+        [hash, data] = await getStateMemberLink(stateKey.substring(5));
+    } else {
+        Log(`Invalid stateKey for onStateRequestMember processing: ${stateKey}`);
+    }
+
+    return [hash, data];
 }
 
-const onPingMember = async function(peerId) {
-    // TODO
-}
 
 //=========================================================================================================================
 // Sync Handlers
@@ -452,15 +533,25 @@ const onStateRequest = async function(peerId, stateKey) {
 }
 
 const onPing = async function(peerId) {
-    const peer = peers[peerId];
-    if (!!peer) {
-        if (peer.pClass == sync.CLASS_MEMBER) {
-            await onPingMember(peerId);
-        } else if (peer.pClass == sync.CLASS_BACKBONE) {
-            await onPingBackbone(peerId);
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const peer = peers[peerId];
+        if (peer.pClass == sync.CLASS_BACKBONE) {
+            await client.query("UPDATE InteriorSites SET LastHeartbeat = CURRENT_TIMESTAMP WHERE Id = $1", [peerId]);
+        } else if (peer.pClass == sync.CLASS_MEMBER) {
+            await client.query("UPDATE MemberSites SET LastHeartbeat = CURRENT_TIMESTAMP WHERE Id = $1", [peerId]);
         }
+        await client.query("COMMIT");
+    } catch (error) {
+        await client.query("ROLLBACK");
+        Log(`Exception in onPing processing: ${error.message}`);
+        Log(error.stack);
+    } finally {
+        client.release();
     }
 }
+
 
 //=========================================================================================================================
 // Backbone Link Handlers

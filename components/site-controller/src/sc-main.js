@@ -26,8 +26,7 @@ const rhea         = require('rhea');
 const kube         = require('./common/kube.js');
 const amqp         = require('./common/amqp.js');
 const apiserver    = require('./sc-apiserver.js');
-const syncBackboneKube = require('./sync-backbone-kube.js');
-const syncMember   = require('./sync-member.js');
+const syncKube     = require('./sync-site-kube.js');
 const router       = require('./common/router.js');
 const links        = require('./links.js');
 const ingress      = require('./ingress.js');
@@ -39,10 +38,9 @@ const Flush        = require('./common/log.js').Flush;
 const VERSION       = '0.1.2';
 const STANDALONE    = (process.env.SKX_STANDALONE || 'NO') == 'YES';
 const BACKBONE_MODE = (process.env.SKX_BACKBONE || 'NO') == 'YES';
-const SITE_ID       = process.env.SKUPPERX_SITE_ID || 'unknown';
+var   site_id       = process.env.SKUPPERX_SITE_ID || 'unknown';
 
 Log(`Skupper-X Site controller version ${VERSION}`);
-Log(`Site-Id    : ${SITE_ID}`);
 Log(`Backbone   : ${BACKBONE_MODE}`);
 Log(`Standalone : ${STANDALONE}`);
 
@@ -65,21 +63,18 @@ exports.Main = async function() {
             // This function does not complete until after the claim has been asserted, accepted, and processed.  On subsequent
             // restarts of this controller after claim acceptance, the following function is effectively a no-op.
             //
-            await claim.Start();
+            site_id = await claim.Start();
             await memberapi.Start();
         }
 
+        Log(`Site-Id : ${site_id}`);
         let conn = amqp.OpenConnection('LocalRouter');
         await router.Start(conn);
         await links.Start(BACKBONE_MODE);
         if (BACKBONE_MODE) {
-            await ingress.Start(SITE_ID);
+            await ingress.Start(site_id);
         }
-        if (BACKBONE_MODE) {
-            await syncBackboneKube.Start(SITE_ID, conn);
-        } else {
-            await syncMember.Start(SITE_ID);
-        }
+        await syncKube.Start(site_id, conn, BACKBONE_MODE);
         Log("[Site controller initialization completed successfully]");
     } catch (error) {
         Log(`Site controller initialization failed: ${error.message}`)

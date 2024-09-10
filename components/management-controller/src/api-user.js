@@ -270,7 +270,7 @@ const listVanMembers = async function(res, vid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT id, Name, LifeCycle, Failure, FirstActiveTime, LastHeartbeat, SiteClass FROM MemberSites WHERE MemberOf = $1", [vid]);
+        const result = await client.query("SELECT id, Name, LifeCycle, Failure, FirstActiveTime, LastHeartbeat, SiteClass, Invitation FROM MemberSites WHERE MemberOf = $1", [vid]);
         res.status(returnStatus).json(result.rows);
     } catch (error) {
         returnStatus = 500

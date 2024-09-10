@@ -20,8 +20,7 @@
 "use strict";
 
 //
-// This module is the state-sync endpoint for backbone sites.  This module should only be started for
-// backbone sites.
+// This module is the state-sync endpoint for backbone and member sites.
 //
 // The responsibility of this module is to synchronize Kubernetes state with the management controller.
 //
@@ -41,6 +40,7 @@ const sync    = require('./common/state-sync.js');
 const ingress = require('./ingress.js');
 const hashes  = require('./hash.js');
 
+var backbone_mode;
 var connectedToPeer = false;
 var peerId;
 var localState = {};  // state-key: {hash, data}
@@ -128,12 +128,14 @@ const getInitialHashState = async function() {
     const configmaps = await kube.GetConfigmaps();
     [local, remote] = stateForList(secrets, local, remote);
     [local, remote] = stateForList(configmaps, local, remote);
-    const ingressState = await ingress.GetInitialState();
-    for (const [apid, state] of Object.entries(ingressState)) {
-        local[`accessstatus-${apid}`] = {
-            hash : hashes.HashOfData(state),
-            data : state,
-        };
+    if (backbone_mode) {
+        const ingressState = await ingress.GetInitialState();
+        for (const [apid, state] of Object.entries(ingressState)) {
+            local[`accessstatus-${apid}`] = {
+                hash : hashes.HashOfData(state),
+                data : state,
+            };
+        }
     }
     local = stateInMemory(local);
     return [local, remote];
@@ -246,9 +248,10 @@ exports.UpdateLocalState = async function(stateKey, stateHash, stateData) {
     }
 }
 
-exports.Start = async function(siteId, conn) {
-    Log(`[Sync-Backbone-Kube module started - siteId: ${siteId}]`);
-    await sync.Start(sync.CLASS_BACKBONE, siteId, undefined, onNewPeer, onPeerLost, onStateChange, onStateRequest, onPing);
+exports.Start = async function(siteId, conn, _backbone_mode) {
+    backbone_mode = _backbone_mode;
+    Log(`[Sync-Site-Kube module started]`);
+    await sync.Start(backbone_mode ? sync.CLASS_BACKBONE : sync.CLASS_MEMBER, siteId, undefined, onNewPeer, onPeerLost, onStateChange, onStateRequest, onPing);
     await sync.AddTarget(common.API_CONTROLLER_ADDRESS);
     await sync.AddConnection(undefined, conn);
 }

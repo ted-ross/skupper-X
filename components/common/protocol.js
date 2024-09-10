@@ -68,10 +68,11 @@ exports.AssertClaim = function(claimId, name) {
     };
 }
 
-exports.AssertClaimResponseSuccess = function(outgoingLinks, siteClient) {
+exports.AssertClaimResponseSuccess = function(siteId, outgoingLinks, siteClient) {
     return {
         statusCode        : 200,
         statusDescription : 'OK',
+        siteId            : siteId,
         outgoingLinks     : outgoingLinks,
         siteClient        : siteClient,
     };

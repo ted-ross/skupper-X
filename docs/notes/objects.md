@@ -45,6 +45,7 @@ The tls-ordinal and tls-oldest-valid annotations are used to manage the rotation
  - metadata
    - name skx-access-<ACCESS_POINT_ID>
           skx-link-<LINK_ID>
+          skx-member
    - annotations
      - skx/state-type: [accesspoint|link]
      - skx/state-id: Database ID of the associated AccessPoint or Link
@@ -59,3 +60,5 @@ The tls-ordinal and tls-oldest-valid annotations are used to manage the rotation
    - host
    - port
    - cost
+ - data (for member)
+   - siteId

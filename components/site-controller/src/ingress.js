@@ -44,9 +44,8 @@
 const kube        = require('./common/kube.js');
 const Log         = require('./common/log.js').Log;
 const common      = require('./common/common.js');
-const sync        = require('./sync-backbone-kube.js');
+const sync        = require('./sync-site-kube.js');
 const router_port = require('./router-port.js');
-const util        = require('./common/util.js');
 const crypto      = require('crypto');
 const { setTimeout } = require('timers/promises');
 
@@ -64,7 +63,6 @@ exports.GetTargetPort = function(apid) {
 }
 
 const new_access_point = function(apid, kind) {
-    Log(`new_access_point: ${apid}`);
     const port = router_port.AllocatePort();
     let value = {
         kind       : kind,
@@ -81,7 +79,6 @@ const new_access_point = function(apid, kind) {
 }
 
 const free_access_point = function(apid) {
-    Log(`free_access_point: ${apid}`);
     const ap = accessPoints[apid];
     if (ap) {
         router_port.FreePort(ap.routerPort);
@@ -153,7 +150,6 @@ const backbone_route = function(apid) {
 }
 
 const do_reconcile_kube_service = async function() {
-    Log('INGRESS: do_reconcile_kube_service');
     reconcile_service_scheduled = false;
     let services = await kube.GetServices();
     let found    = false;
@@ -198,7 +194,6 @@ const reconcile_kube_service = async function() {
 }
 
 const do_reconcile_routes = async function() {
-    Log('INGRESS: do_reconcile_routes');
     reconcile_routes_scheduled = false;
     const all_routes = await kube.GetRoutes();
     let routes = {};
@@ -280,7 +275,6 @@ exports.GetInitialState = async function() {
 }
 
 const do_reconcile_config_maps = async function() {
-    Log('INGRESS: do_reconcile_config_maps');
     reconcile_config_map_scheduled = false;
     const all_config_maps = await kube.GetConfigmaps();
     let ingress_config_maps = {};

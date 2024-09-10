@@ -130,7 +130,7 @@ const blockForCompletion = function(memberId) {
             } else if (completion.error) {
                 reject(completion.error);
             } else {
-                reject(new Error(`ERROR:ClaimServer - spurious callback for memberId ${memberId}`));
+                reject(new Error(`ERROR:ClaimServer - Spurious callback for memberId ${memberId}`));
             }
         };
         if (memberCompletions[memberId].result || memberCompletions[memberId].error) {
@@ -187,7 +187,7 @@ const processClaim = async function(claimId, name) {
         await client.query("COMMIT");
     } catch (error) {
         await client.query("ROLLBACK");
-        Log(`INFO:ClaimServer - exception in claim processing for claim ${claimId}: ${error.message}`);
+        Log(`INFO:ClaimServer - Exception in claim processing for claim ${claimId}: ${error.message}`);
         statusCode        = 400;
         statusDescription = `Claim rejected: ${error.message}`;
     } finally {
@@ -205,7 +205,7 @@ const processClaim = async function(claimId, name) {
         }
     }
 
-    return [statusCode, statusDescription, outgoingLinks, siteClient];
+    return [statusCode, statusDescription, memberId, outgoingLinks, siteClient];
 }
 
 //=========================================================================================================================
@@ -226,16 +226,16 @@ const onMessage = function(backboneId, application_properties, body, onReply) {
             },
             async (claimId, name) => {          // onClaim
                 Log(`INFO:ClaimServer - Received claim for invitation ${claimId} via backbone ${backboneId}`);
-                let [statusCode, statusDescription, outgoingLinks, siteClient] = await processClaim(claimId, name);
+                let [statusCode, statusDescription, memberId, outgoingLinks, siteClient] = await processClaim(claimId, name);
                 if (statusCode == 200) {
-                    onReply({}, protocol.AssertClaimResponseSuccess(outgoingLinks, siteClient));
+                    onReply({}, protocol.AssertClaimResponseSuccess(memberId, outgoingLinks, siteClient));
                 } else {
                     onReply({}, protocol.ReponseFailure(statusCode, statusDescription));
                 }
             }
         );
     } catch (error) {
-        Log(`ERROR:ClaimServer - exception in onMessage: ${error.message}`);
+        Log(`ERROR:ClaimServer - Exception in onMessage: ${error.message}`);
     }
 }
 
@@ -244,7 +244,7 @@ const onMessage = function(backboneId, application_properties, body, onReply) {
 //=========================================================================================================================
 const onLinkAdded = async function(backboneId, conn) {
     if (backbones[backboneId]) {
-        Log(`WARNING:ClaimServer - received duplicate onLinkAdded for backbone ${backboneId}`);
+        Log(`WARNING:ClaimServer - Received duplicate onLinkAdded for backbone ${backboneId}`);
     } else {
         backbones[backboneId] = {
             conn     : conn,
@@ -258,7 +258,7 @@ const onLinkDeleted = async function(backboneId) {
     if (backbones[backboneId]) {
         delete backbones[backboneId];
     } else {
-        Log(`WARNING:ClaimServer - received spurious onLinkDeleted for non-existent backbone ${backboneId}`);
+        Log(`WARNING:ClaimServer - Received spurious onLinkDeleted for non-existent backbone ${backboneId}`);
     }
 }
 
@@ -281,7 +281,7 @@ exports.CompleteMember = async function(memberId) {
         }
         // END Critical Section
     } else {
-        Log(`ERROR:ClaimServer - member completion received for an unknown memberId ${memberId}`);
+        Log(`ERROR:ClaimServer - Member completion received for an unknown memberId ${memberId}`);
     }
 }
 

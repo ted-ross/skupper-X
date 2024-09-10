@@ -115,6 +115,8 @@ const onHeartbeat = async function(connectionKey, peerClass, peerId, hashset, ad
         // Send a heartbeat back to the newly discovered peer with the local hash-state.
         //
         sendHeartbeat(peerId);
+    } else {
+        onPing(peerId);
     }
 
     //
