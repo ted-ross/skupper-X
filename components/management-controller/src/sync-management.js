@@ -314,7 +314,7 @@ const getStateBackboneLink = async function(linkId) {
     try {
         await client.query("BEGIN");
         const result = await client.query("SELECT Cost, BackboneAccessPoints.Hostname, BackboneAccessPoints.Port FROM InterRouterLinks " +
-                                          "JOIN BackboneAccessPoints ON BackboneAccessPoint.Id = AccessPoint " +
+                                          "JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = AccessPoint " +
                                           "WHERE InterRouterLinks.Id = $1 AND Lifecycle = 'ready'", [linkId]);
         if (result.rowCount == 1) {
             const link = result.rows[0];
@@ -343,7 +343,7 @@ const getStateMemberLink = async function(linkId) {
     try {
         await client.query("BEGIN");
         const result = await client.query("SELECT BackboneAccessPoints.Hostname, BackboneAccessPoints.Port FROM EdgeLinks " +
-                                          "JOIN BackboneAccessPoints ON BackboneAccessPoint.Id = AccessPoint " +
+                                          "JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = AccessPoint " +
                                           "WHERE EdgeLinks.Id = $1 AND Lifecycle = 'ready'", [linkId]);
         if (result.rowCount == 1) {
             const link = result.rows[0];

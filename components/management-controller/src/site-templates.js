@@ -35,8 +35,10 @@ const DEPLOYMENT_NAME   = 'skupperx-site';
 
 exports.HashOfData = function(data) {
     let text = '';
-    for (const [key, value] of Object.entries(data)) {
-        text += key + value;
+    let keys = Object.keys(data);
+    keys.sort();
+    for (const key of keys) {
+        text += key + data[key];
     }
     return crypto.createHash('sha1').update(text).digest('hex');
 }

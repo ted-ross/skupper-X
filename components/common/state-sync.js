@@ -132,7 +132,7 @@ const onHeartbeat = async function(connectionKey, peerClass, peerId, hashset, ad
         //
         let toRequestStateKeys = [];
         let toDeleteStateKeys = {};
-        for (const [key, hash] of Object.entries(peers[peerId].remoteState)) {
+        for (const key of Object.keys(peers[peerId].remoteState)) {
             toDeleteStateKeys[key] = true;
         }
         for (const [key, hash] of Object.entries(hashset)) {

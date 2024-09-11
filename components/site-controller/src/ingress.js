@@ -213,7 +213,7 @@ const do_reconcile_routes = async function() {
             if (route.spec.host) {
                 data = {
                     host : route.spec.host,
-                    port : 443,
+                    port : '443',
                 };
                 hash = ingressHash(data);
                 if (hash != ap.syncHash) {
@@ -249,7 +249,7 @@ const ingressHash = function(data) {
         return null;
     }
 
-    let text = data.host + data.port.toString();
+    let text = 'host' + data.host + 'port' + data.port;
     return crypto.createHash('sha1').update(text).digest('hex');
 }
 
