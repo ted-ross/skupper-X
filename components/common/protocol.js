@@ -85,15 +85,22 @@ exports.ReponseFailure = function(code, description) {
     };
 }
 
-exports.DispatchMessage = function(body, onHeartbeat, onGet, onClaim) {
+exports.SourceSite = function(body) {
+    if (body.op == OP_HEARTBEAT || body.op == OP_GET) {
+        return body.site;
+    }
+    throw Error('Can not determine source site-id from message');
+}
+
+exports.DispatchMessage = async function(body, onHeartbeat, onGet, onClaim) {
     if (body.version != VERSION) {
         throw Error(`Unsupported protocol version ${body.version}`);
     }
 
     switch (body.op) {
-    case OP_HEARTBEAT : onHeartbeat(body.sclass, body.site, body.hashset, body.address);  break;
-    case OP_GET       : onGet(body.site, body.statekey);  break;
-    case OP_CLAIM     : onClaim(body.claim, body.name);     break;
+    case OP_HEARTBEAT : await onHeartbeat(body.sclass, body.site, body.hashset, body.address);  break;
+    case OP_GET       : await onGet(body.site, body.statekey);  break;
+    case OP_CLAIM     : await onClaim(body.claim, body.name);   break;
     default:
         throw Error(`Unknown op-code ${body.op}`);
     }

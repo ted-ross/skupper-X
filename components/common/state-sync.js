@@ -214,9 +214,9 @@ const onAddress = function(connectionKey, address) {
     }
 }
 
-const onMessage = function(connectionKey, application_properties, body, onReply) {
+const processMessage = async function(connectionKey, body, onReply) {
     try {
-        protocol.DispatchMessage(body,
+        await protocol.DispatchMessage(body,
             async (sclass, site, hashset, address) => { // onHeartbeat
                 await onHeartbeat(connectionKey, sclass, site, hashset, address);
             },
@@ -229,7 +229,34 @@ const onMessage = function(connectionKey, application_properties, body, onReply)
             }
         );
     } catch (error) {
-        Log(`Exception in onMessage: ${error.message}`);
+        Log(`Exception in sync message processing: ${error.message}`);
+    }
+}
+
+var processingContext = {};  // peerId => {workQueue, processing}
+
+const processWorkQueue = async function(siteId) {
+    while (processingContext[siteId].processing) {
+        const [connectionKey, body, onReply] = processingContext[siteId].workQueue.shift();
+        await processMessage(connectionKey, body, onReply);
+        processingContext[siteId].processing = processingContext[siteId].workQueue.length > 0;
+    }
+}
+
+const onMessage = function(connectionKey, application_properties, body, onReply) {
+    const siteId = protocol.SourceSite(body);
+
+    if (!processingContext[siteId]) {
+        processingContext[siteId] = {
+            workQueue  : [],
+            processing : false,
+        };
+    }
+
+    processingContext[siteId].workQueue.push([connectionKey, body, onReply]);
+    if (!processingContext[siteId].processing) {
+        processingContext[siteId].processing = true;
+        processWorkQueue(siteId);
     }
 }
 
