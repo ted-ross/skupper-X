@@ -90,6 +90,7 @@ const onNewBackboneSite = async function(peerId) {
     // Remote state:
     //   - accessstatus-<id> - Host/Port for an access point  {host: <>, port: <>}
     //
+    Log(`Detected new backbone site: ${peerId}`);
     var localState  = {};
     var remoteState = {};
     const client    = await db.ClientFromPool();
@@ -397,6 +398,7 @@ const onNewMember = async function(peerId) {
     //
     // Remote state: none
     //
+    Log(`Detected new member site: ${peerId}`);
     var localState  = {};
     var remoteState = {};
     const client    = await db.ClientFromPool();

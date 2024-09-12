@@ -27,20 +27,27 @@ const FIRST_EPHEMERAL_PORT = 1050;
 const API_PORT             = 1040;          // The port for the site-controller API
 const reserved_ports       = [5672, 9090];  // Ports that must never be allocated
 
-var next_port = FIRST_EPHEMERAL_PORT;
-var free_list = [];
+var next_port      = FIRST_EPHEMERAL_PORT;
+var free_list      = [];  // Ports that were freed and may be re-allocated
+var pre_taken_list = [];  // Ports that were pre-allocated and must not be allocated (ports greater than next_port)
 
 exports.GetApiPort = function() {
     return API_PORT;
 }
 
+exports.TakePort = function(port) {
+    if (port >= next_port) {
+        pre_taken_list.push(port);
+    }
+}
+
 exports.AllocatePort = function() {
     var new_port;
     if (free_list.length > 0) {
-        new_port = free_list.pop();
+        new_port = free_list.shift();
     } else {
         new_port = next_port;
-        while(reserved_ports.includes(new_port)) {
+        while (reserved_ports.includes(new_port) || pre_taken_list.includes(new_port)) {
             next_port += 1;
             new_port = next_port;
         }

@@ -364,8 +364,34 @@ const onServiceWatch = async function(type, apiObj) {
     }
 }
 
+//
+// At startup only: Pre-load the accessPoints array from the router service so we use the same ports that were allocated in previous runs.
+//
+const preloadAccessPoints = async function() {
+    try {
+        const service = await kube.LoadService(common.ROUTER_SERVICE_NAME);
+        if (kube.Controlled(service)) {
+            for (const servicePort of service.spec.ports) {
+                const divider = servicePort.name.indexOf('-');
+                const kind    = servicePort.name.substring(0, divider);
+                const apid    = servicePort.name.substring(divider + 1);
+                accessPoints[apid] = {
+                    kind       : kind,
+                    routerPort : servicePort.port,
+                    syncHash   : null,
+                    syncData   : {},
+                    toDelete   : false,
+                };
+                router_port.TakePort(servicePort.port);
+            }
+        }
+    } catch (error) {
+    }
+}
+
 exports.Start = async function(siteId) {
     Log('[Ingress module started]');
+    await preloadAccessPoints();
     await do_reconcile_config_maps();
     await do_reconcile_routes();
     kube.WatchConfigMaps(onConfigMapWatch);
