@@ -70,15 +70,16 @@ const startClaim = async function(configMap, secret) {
     var host       = configMap.data.host;
     var port       = configMap.data.port;
     
-    claimState.namePrefix = configMap.data.namePrefix || '';
-    if (!claimState.siteName) {
-        claimState.siteName = claimState.namePrefix + process.env.HOSTNAME;
+    claimState.namePrefix = configMap.data.namePrefix ? configMap.data.namePrefix + '-' : '';
+    if (!claimState.siteName || claimState.siteName == '') {
+        claimState.siteName = process.env.HOSTNAME;
     }
+    claimState.siteName = claimState.namePrefix + claimState.siteName;
 
     //
     // Open the AMQP connection and sender for claim-assertion
     //
-    Log(`Asserting claim ${claimId} via amqps://${host}:${port}`);
+    Log(`Asserting claim ${claimId} for site ${claimState.siteName} via amqps://${host}:${port}`);
     let claimConnection = amqp.OpenConnection('Claim', host, port, 'tls', tls_ca, tls_cert, tls_key);
     let claimSender     = await amqp.OpenSender('Claim', claimConnection, common.CLAIM_ASSERT_ADDRESS);
 
@@ -195,15 +196,31 @@ exports.GetClaimState = function () {
     return claimState;
 }
 
-exports.StartClaim = async function (name) {
+var interactiveClaimComplete;
+
+exports.SetInteractiveName = async function (name) {
     if (claimState.status == 'awaiting-name') {
-        claimState.siteName = claimState.namePrefix + name;
-        await checkClaimState();
+        claimState.siteName = name || process.env.HOSTNAME;
+        const siteId = await checkClaimState();
+        if (siteId) {
+            interactiveClaimComplete(siteId);
+        }
     }
+
+    return claimState.siteName;
 }
 
-exports.Start = async function () {
-    Log('[Claim module started]')
-    const site_id = await checkClaimState();
-    return site_id;
+exports.Start = function () {
+    return new Promise((resolve, reject) => {
+        Log('[Claim module started]')
+        checkClaimState()
+        .then((siteId) => {
+            if (siteId) {
+                resolve(siteId);
+            } else {
+                interactiveClaimComplete = (sid) => resolve(sid);
+            }
+        })
+        .catch(error => reject(error));
+    });
 }

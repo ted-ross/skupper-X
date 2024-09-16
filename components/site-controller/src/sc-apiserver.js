@@ -52,12 +52,12 @@ const startClaim = async function(req, res) {
     try {
         const [fields, files] = await form.parse(req);
         const norm = util.ValidateAndNormalizeFields(fields, {
-            'name' : {type: 'string', optional: false},
+            'name' : {type: 'dnsname', optional: false},
         });
 
-        await claim.StartClaim(norm.name);
+        const actualName = await claim.SetInteractiveName(norm.name);
         returnStatus = 201;
-        res.status(returnStatus).json({ name : norm.name });
+        res.status(returnStatus).json({ name : actualName });
     } catch (error) {
         returnStatus = 400;
         res.status(returnStatus).json({ message : error.message });
