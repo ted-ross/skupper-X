@@ -73,8 +73,8 @@ const createBackboneSite = async function(req, res) {
 
         const [fields, files] = await form.parse(req)
         const norm = util.ValidateAndNormalizeFields(fields, {
-            'name'     : {type: 'string', optional: false},
-            'metadata' : {type: 'string', optional: true, default: null},
+            'name'     : {type: 'dnsname', optional: false},
+            'metadata' : {type: 'string',  optional: true, default: null},
         });
 
         const client = await db.ClientFromPool();
@@ -82,6 +82,16 @@ const createBackboneSite = async function(req, res) {
             await client.query("BEGIN");
             var extraCols = "";
             var extraVals = "";
+
+            //
+            // If the name is not unique within the backbone, modify it to be unique.
+            //
+            const namesResult = await client.query("SELECT Name FROM InteriorSites WHERE Backbone = $1", [bid]);
+            var existingNames = [];
+            for (const row of namesResult.rows) {
+                existingNames.push(row.name);
+            }
+            const uniqueName = util.UniquifyName(norm.name, existingNames);
 
             //
             // Handle the optional metadata
@@ -94,7 +104,7 @@ const createBackboneSite = async function(req, res) {
             //
             // Create the site
             //
-            const result = await client.query(`INSERT INTO InteriorSites(Name, Backbone${extraCols}) VALUES ($1, $2${extraVals}) RETURNING Id`, [norm.name, bid]);
+            const result = await client.query(`INSERT INTO InteriorSites(Name, Backbone${extraCols}) VALUES ($1, $2${extraVals}) RETURNING Id`, [uniqueName, bid]);
             const siteId = result.rows[0].id;
             await client.query("COMMIT");
 

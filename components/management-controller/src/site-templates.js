@@ -131,7 +131,7 @@ roleRef:
 `;
 }
 
-exports.ConfigMapYaml = function(mode, vanId = null) {
+exports.ConfigMapYaml = function(mode, sitename, vanId = null) {
     return `---
 apiVersion: v1
 kind: ConfigMap
@@ -143,7 +143,7 @@ data:
         [
             "router",
             {
-                "id": "skx-\${HOSTNAME}",
+                "id": "${sitename ? sitename : 'skx-${HOSTNAME}'}",
                 "mode": "${mode}",
 ${vanId ? `                "vanId": "${vanId}",` : ''}
                 "helloMaxAgeSeconds": "3",

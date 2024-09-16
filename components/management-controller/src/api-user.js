@@ -32,9 +32,13 @@ const createVan = async function(bid, req, res) {
     var returnStatus;
     const form = new formidable.IncomingForm();
     try {
-        const [fields, files] = await form.parse(req)
+        if (!util.IsValidUuid(bid)) {
+            throw(Error('Backbone-Id is not a valid uuid'));
+        }
+
+        const [fields, files] = await form.parse(req);
         const norm = util.ValidateAndNormalizeFields(fields, {
-            'name'        : {type: 'string',     optional: false},
+            'name'        : {type: 'dnsname',    optional: false},
             'starttime'   : {type: 'timestampz', optional: true, default: null},
             'endtime'     : {type: 'timestampz', optional: true, default: null},
             'deletedelay' : {type: 'interval',   optional: true, default: null},
@@ -43,6 +47,16 @@ const createVan = async function(bid, req, res) {
         const client = await db.ClientFromPool();
         try {
             await client.query("BEGIN");
+
+            //
+            // If the name is not unique within the backbone, modify it to be unique.
+            //
+            const namesResult = await client.query("SELECT Name FROM ApplicationNetworks WHERE Backbone = $1", [bid]);
+            var existingNames = [];
+            for (const row of namesResult.rows) {
+                existingNames.push(row.name);
+            }
+            const uniqueName = util.UniquifyName(norm.name, existingNames);
 
             var extraCols = "";
             var extraVals = "";
@@ -68,7 +82,7 @@ const createVan = async function(bid, req, res) {
             //
             // Create the application network
             //
-            const result = await client.query(`INSERT INTO ApplicationNetworks(Name, Backbone${extraCols}) VALUES ($1, $2${extraVals}) RETURNING Id`, [norm.name, bid]);
+            const result = await client.query(`INSERT INTO ApplicationNetworks(Name, Backbone${extraCols}) VALUES ($1, $2${extraVals}) RETURNING Id`, [uniqueName, bid]);
             const vanId = result.rows[0].id;
             await client.query("COMMIT");
 
@@ -93,9 +107,13 @@ const createInvitation = async function(vid, req, res) {
     var returnStatus;
     const form = new formidable.IncomingForm();
     try {
+        if (!util.IsValidUuid(vid)) {
+            throw(Error('VAN-Id is not a valid uuid'));
+        }
+
         const [fields, files] = await form.parse(req)
         const norm = util.ValidateAndNormalizeFields(fields, {
-            'name'            : {type: 'string',     optional: false},
+            'name'            : {type: 'dnsname',    optional: false},
             'claimaccess'     : {type: 'uuid',       optional: false},
             'primaryaccess'   : {type: 'uuid',       optional: false},
             'secondaryaccess' : {type: 'uuid',       optional: true, default: null},
@@ -103,12 +121,22 @@ const createInvitation = async function(vid, req, res) {
             'siteclass'       : {type: 'string',     optional: true, default: null},
             'instancelimit'   : {type: 'number',     optional: true, default: null},
             'interactive'     : {type: 'bool',       optional: true, default: false},
-            'prefix'          : {type: 'string',     optional: true, default: null},
+            'prefix'          : {type: 'dnsname',    optional: true, default: null},
         });
 
         const client = await db.ClientFromPool();
         try {
             await client.query("BEGIN");
+
+            //
+            // If the name is not unique within the backbone, modify it to be unique.
+            //
+            const namesResult = await client.query("SELECT Name FROM MemberInvitations WHERE MemberOf = $1", [vid]);
+            var existingNames = [];
+            for (const row of namesResult.rows) {
+                existingNames.push(row.name);
+            }
+            const uniqueName = util.UniquifyName(norm.name, existingNames);
 
             var extraCols = "";
             var extraVals = "";
@@ -130,7 +158,7 @@ const createInvitation = async function(vid, req, res) {
             // Create the application network
             //
             const result = await client.query(`INSERT INTO MemberInvitations(Name, MemberOf, ClaimAccess, InteractiveClaim${extraCols}) ` +
-                                              `VALUES ($1, $2, $3, $4${extraVals}) RETURNING Id`, [norm.name, vid, norm.claimaccess, norm.interactive]);
+                                              `VALUES ($1, $2, $3, $4${extraVals}) RETURNING Id`, [uniqueName, vid, norm.claimaccess, norm.interactive]);
             const invitationId = result.rows[0].id;
 
             await client.query("INSERT INTO EdgeLinks(AccessPoint, EdgeToken, Priority) VALUES ($1, $2, 1)", [norm.primaryaccess, invitationId]);

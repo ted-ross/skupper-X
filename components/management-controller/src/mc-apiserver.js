@@ -114,7 +114,7 @@ const fetchInvitationKube = async function (iid, res) {
             text += siteTemplates.ServiceAccountYaml();
             text += siteTemplates.MemberRoleYaml();
             text += siteTemplates.RoleBindingYaml();
-            text += siteTemplates.ConfigMapYaml('edge', row.vanid);
+            text += siteTemplates.ConfigMapYaml('edge', null, row.vanid);
             text += siteTemplates.DeploymentYaml(iid, false);
             text += siteTemplates.SiteApiServiceYaml();
             text += siteTemplates.SecretYaml(secret, 'skupperx-claim', false);
@@ -145,7 +145,7 @@ const fetchBackboneSiteKube = async function (siteId, res) {
     try {
         await client.query('BEGIN');
         const result = await client.query(
-            'SELECT InteriorSites.Certificate, InteriorSites.Lifecycle, InteriorSites.DeploymentState, TlsCertificates.ObjectName as secret_name FROM InteriorSites ' +
+            'SELECT InteriorSites.Name as sitename, InteriorSites.Certificate, InteriorSites.Lifecycle, InteriorSites.DeploymentState, TlsCertificates.ObjectName as secret_name FROM InteriorSites ' +
             'JOIN TlsCertificates ON InteriorSites.Certificate = TlsCertificates.Id WHERE Interiorsites.Id = $1', [siteId]);
         if (result.rowCount == 1) {
             if (result.rows[0].deploymentstate == 'deployed') {
@@ -159,7 +159,7 @@ const fetchBackboneSiteKube = async function (siteId, res) {
             text += siteTemplates.ServiceAccountYaml();
             text += siteTemplates.BackboneRoleYaml();
             text += siteTemplates.RoleBindingYaml();
-            text += siteTemplates.ConfigMapYaml('interior');
+            text += siteTemplates.ConfigMapYaml('interior', result.rows[0].sitename);
             text += siteTemplates.DeploymentYaml(siteId, true);
             text += siteTemplates.SecretYaml(secret, `skx-site-${siteId}`, common.INJECT_TYPE_SITE, `tls-site-${siteId}`);
 

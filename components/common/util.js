@@ -75,7 +75,7 @@ exports.allSettled = function(plist) {
 }
 
 const uuidRegex = RegExp("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
-const dnsRegex  = RegExp("^((?!-)[A-Za-z0-9-]{1,63}(?<!-)\\.)+[A-Za-z]{2,6}$");
+const dnsRegex  = RegExp("^[A-Za-z][A-Za-z0-9-\.]{1,63}$");
 
 exports.IsValidUuid = function(text) {
     return uuidRegex.test(text);
@@ -109,7 +109,7 @@ exports.ValidateAndNormalizeFields = function(fields, table) {
             if (dnsRegex.test(value)) {
                 normalized[key] = value;
             } else {
-                throw(Error(`Expected valid DNS name for key ${key}`));
+                throw(Error(`Expected valid DNS name for key ${key} (got ${value})`));
             }
             break;
 
@@ -164,4 +164,16 @@ exports.ValidateAndNormalizeFields = function(fields, table) {
     }
 
     return normalized;
+}
+
+exports.UniquifyName = function(name, existingNames) {
+    if (existingNames.indexOf(name) < 0) {
+        return name;
+    }
+
+    var ordinal = 2;
+    while (existingNames.indexOf(`${name}.${ordinal}`) >= 0) {
+        ordinal++;
+    }
+    return `${name}.${ordinal}`;
 }
