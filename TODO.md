@@ -46,13 +46,13 @@
  - ~~Simplify the JSON fields in the bootstrap process to remove unneeded fields and depth~~
  - ~~Add a shell command in one of the site containers that extracts the host info for bootstrap-deployment~~
  - ~~Delete orphaned TlsCertificate records when their owners are deleted~~
+ - ~~Use router names that are more descriptive and derived from the backbone site name~~
  - Clean up the async structure of the "prune" module
  - Add an entry point in the "prune" module to clean things up after objects are deleted
  - Add ingress capability for non-OpenShift kubernetes
  - Consider replacing the boolean ingress indication with "no-ingress", "any", or ingress-style suggestions
  - Add a PUT to allow backbones to be renamed
  - Add a "platform" column for sites - probably enumerated for formality
- - Use router names that are more descriptive and derived from the backbone site name
  - Return an error on the ingress-post (during bootstrap) if the input is not validated
  - Consider invitation-templates for backbones
    - Every new application network automatically comes with a set of pre-definied invitations which can be deleted or added-to
@@ -68,6 +68,7 @@
  - Design the member API
    - ~~Site status and site activation~~
    - Active and inactive application state
+ - Allow users to rename member sites (affects site-scope addressing) - Alternatively, consider a separate site-scope-prefix field.
  - Bug: Invitation can be created with a primary access that is not a 'member' access-point
 
 ## Application Definition Tasks

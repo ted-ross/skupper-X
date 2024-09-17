@@ -242,16 +242,6 @@ CREATE TABLE ApplicationNetworks (
 );
 
 --
--- VAN-specific site classes
---
-CREATE TABLE SiteClasses (
-    Id UUID PRIMARY KEY,
-    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
-    Name text,
-    Description text
-);
-
---
 -- Content of an invitation-to-participate in a VAN
 --
 CREATE TABLE MemberInvitations (
@@ -263,7 +253,7 @@ CREATE TABLE MemberInvitations (
 
     ClaimAccess UUID REFERENCES BackboneAccessPoints,
     JoinDeadline timestamptz,
-    MemberClass UUID REFERENCES SiteClasses,
+    MemberClasses text ARRAY,
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
     InstanceLimit integer,                    -- NULL => no limit
     InstanceCount integer DEFAULT 0,
@@ -297,7 +287,7 @@ CREATE TABLE MemberSites (
 
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
     Invitation UUID REFERENCES MemberInvitations ON DELETE CASCADE,
-    SiteClass UUID REFERENCES SiteClasses,
+    SiteClasses text ARRAY,
     ActiveAccessPoint UUID REFERENCES BackboneAccessPoints
 );
 
@@ -353,11 +343,9 @@ CREATE TABLE CertificateRequests (
 
 --
 -- Available process images
--- RENAME: ComponentTypes
 --
 CREATE TABLE ComponentTypes (
     Id UUID PRIMARY KEY,
-    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE, -- optional in case of image-library
     Name text,
     Description text,
     KubernetesConfig text
@@ -365,15 +353,15 @@ CREATE TABLE ComponentTypes (
 
 --
 -- Services offered by processes
--- RENAME: InterfaceTypes
 --
 CREATE TABLE InterfaceTypes (
     Id UUID PRIMARY KEY,
-    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE, -- optional in case of service-library
     Name text,
     Description text,
-    Protocol text,
+    TransportProtocol text,   -- tcp, udp, amqp, sctp, etc.   (used to assign adaptor)
+    ApplicationProtocol text, -- http, smtp, jdbc, etc.       (optional)
     DefaultPort text,
+    Roles RoleType ARRAY,     -- Set of supported roles
     StickyMechanism StickyMechanismType DEFAULT 'none',
     Distribution DistributionType DEFAULT 'anycast',
     AddressScope AddressScopeType DEFAULT 'van'
@@ -381,11 +369,9 @@ CREATE TABLE InterfaceTypes (
 
 --
 -- Mapping of services to the components that participate in that service
--- RENAME: Interfaces
 --
 CREATE TABLE Interfaces (
     Id UUID PRIMARY KEY,
-    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE, -- optional
     ComponentType UUID REFERENCES ComponentTypes,
     InterfaceType UUID REFERENCES InterfaceTypes,
     Role RoleType,
@@ -394,39 +380,49 @@ CREATE TABLE Interfaces (
 );
 
 --
+-- A templated definition of a distributed application
+--
+CREATE TABLE ApplicationTemplates (
+    Id UUID PRIMARY KEY,
+    Name text,
+    Description text
+);
+
+--
+-- The instantiation of an application template onto an application network
+--
+CREATE TABLE Applications (
+    Id UUID PRIMARY KEY,
+    ApplicationTemplate UUID REFERENCES ApplicationTemplates,
+    ApplicationNetwork  UUID REFERENCES ApplicationNetworks
+);
+
+--
 -- A Component is an instance of a participant in a ServicLink that is allocated to
 -- one or more sites in an ApplicationNetwork.
 --
 CREATE TABLE Components (
     Id UUID PRIMARY KEY,
-    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
-    SiteClass UUID REFERENCES SiteClasses,
-    Site UUID REFERENCES MemberSites,
     ComponentType UUID REFERENCES ComponentTypes,
-    IngressHost text
+    ApplicationTemplate UUID REFERENCES ApplicationTemplates ON DELETE CASCADE,
+    SiteClass text
 );
 
 --
 -- Specific interconnect between running images and endpoints
--- RENAME: Bindings
 --
 CREATE TABLE Bindings (
     Id UUID PRIMARY KEY,
-    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
     InterfaceType UUID REFERENCES InterfaceTypes,
+    ApplicationTemplate UUID REFERENCES ApplicationTemplates ON DELETE CASCADE,
     VanAddress text,
     Distribution DistributionType DEFAULT 'anycast',
-    Scope AddressScopeType DEFAULT 'van'
-);
+    Scope AddressScopeType DEFAULT 'van',
 
---
--- RENAME: InterfaceBindings - This table needs to be re-thinked
---
-CREATE TABLE InterfaceBindings (
-    MemberOf   UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
-    Component  UUID REFERENCES Components          ON DELETE CASCADE, -- Should this be a ServiceAttach?
-    Interface  UUID REFERENCES Interfaces          ON DELETE CASCADE, -- Is this needed?
-    Role RoleType
+    RoleA RoleType,
+    RoleB RoleType,
+    RoleAInterfaces UUID ARRAY,
+    RoleBInterfaces UUID ARRAY
 );
 
 

@@ -12,9 +12,10 @@
  * limitations under the License.
  */
 
-DROP TABLE InterfaceBindings;
 DROP TABLE Bindings;
 DROP TABLE Components;
+DROP TABLE Applications;
+DROP TABLE ApplicationTemplates;
 DROP TABLE Interfaces;
 DROP TABLE InterfaceTypes;
 DROP TABLE ComponentTypes;
@@ -22,7 +23,6 @@ DROP TABLE CertificateRequests;
 DROP TABLE MemberSites;
 DROP TABLE EdgeLinks;
 DROP TABLE MemberInvitations;
-DROP TABLE SiteClasses;
 DROP TABLE ApplicationNetworks;
 DROP TABLE ManagementControllers;
 DROP TABLE InterRouterLinks;
