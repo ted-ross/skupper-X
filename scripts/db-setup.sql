@@ -352,9 +352,9 @@ CREATE TABLE ComponentTypes (
 );
 
 --
--- Services offered by processes
+-- Ways in which software components interact with one another
 --
-CREATE TABLE InterfaceTypes (
+CREATE TABLE InterconnectTypes (
     Id UUID PRIMARY KEY,
     Name text,
     Description text,
@@ -373,7 +373,7 @@ CREATE TABLE InterfaceTypes (
 CREATE TABLE Interfaces (
     Id UUID PRIMARY KEY,
     ComponentType UUID REFERENCES ComponentTypes,
-    InterfaceType UUID REFERENCES InterfaceTypes,
+    InterconnectType UUID REFERENCES InterconnectTypes,
     Role RoleType,
     HostNameUsed text,
     ActualPort text
@@ -413,7 +413,7 @@ CREATE TABLE Components (
 --
 CREATE TABLE Bindings (
     Id UUID PRIMARY KEY,
-    InterfaceType UUID REFERENCES InterfaceTypes,
+    InterconnectType UUID REFERENCES InterconnectTypes,
     ApplicationTemplate UUID REFERENCES ApplicationTemplates ON DELETE CASCADE,
     VanAddress text,
     Distribution DistributionType DEFAULT 'anycast',

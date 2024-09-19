@@ -17,7 +17,7 @@ DROP TABLE Components;
 DROP TABLE Applications;
 DROP TABLE ApplicationTemplates;
 DROP TABLE Interfaces;
-DROP TABLE InterfaceTypes;
+DROP TABLE InterconnectTypes;
 DROP TABLE ComponentTypes;
 DROP TABLE CertificateRequests;
 DROP TABLE MemberSites;
