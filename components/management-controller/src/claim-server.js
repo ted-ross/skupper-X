@@ -172,8 +172,8 @@ const processClaim = async function(claimId, name) {
         //
         // Create a new member from the invitation
         //
-        const memberResult = await client.query("INSERT INTO MemberSites (Name, MemberOf, Invitation, SiteClass) VALUES ($1, $2, $3, $4) RETURNING Id",
-                                                [name, claim.memberof, claim.id, claim.memberclass]);
+        const memberResult = await client.query("INSERT INTO MemberSites (Name, MemberOf, Invitation, SiteClasses) VALUES ($1, $2, $3, $4) RETURNING Id",
+                                                [name, claim.memberof, claim.id, claim.memberclasses]);
         memberId = memberResult.rows[0].id;
 
         //

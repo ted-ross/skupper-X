@@ -145,8 +145,8 @@ const createInvitation = async function(vid, req, res) {
             // Handle the optional fields
             //
             if (norm.siteclass) {
-                extraCols += ', MemberClass';
-                extraVals += `, '${norm.siteclass}'`;
+                extraCols += ', MemberClasses';
+                extraVals += `, ARRAY['${norm.siteclass}']`;
             }
 
             if (norm.instancelimit) {

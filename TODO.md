@@ -79,3 +79,4 @@
  - Implement the synchronization of the kube-state to the management controller
  - Implement APIs to access the full application definition
  - Implement site-scoped service addressing
+ - Consider pre-loading a directory tree of sync-state in the management controller and separating the sync processing from the database (to reduce load on the DB)

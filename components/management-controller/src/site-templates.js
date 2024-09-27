@@ -51,6 +51,17 @@ exports.HashOfConfigMap = function(cm) {
     return exports.HashOfData(cm.data);
 }
 
+exports.HashOfObjectNoChildren = function(obj) {
+    let data = {};
+    for (const [key, value] of Object.entries(obj)) {
+        if (typeof value != 'object') {
+            data[key] = value;
+        }
+    }
+
+    return exports.HashOfData(data);
+}
+
 exports.ServiceAccountYaml = function() {
     return `---
 apiVersion: v1

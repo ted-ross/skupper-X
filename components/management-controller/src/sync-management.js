@@ -32,6 +32,7 @@ const util       = require('./common/util.js');
 const db         = require('./db.js');
 const kube       = require('./common/kube.js');
 const sync       = require('./common/state-sync.js');
+const syncApp    = require('./sync-application.js');
 const bbLinks    = require('./backbone-links.js');
 const templates  = require('./site-templates.js');
 const deployment = require('./site-deployment-state.js');
@@ -450,6 +451,12 @@ const onNewMember = async function(peerId) {
     } finally {
         client.release();
     }
+
+    //
+    // Add any required state for the member's application content
+    //
+    [localState, remoteState] = syncApp.onMewMember(peerId, localState, remoteState);
+
     return [localState, remoteState];
 }
 
@@ -470,7 +477,7 @@ const onStateRequestMember = async function(peerId, stateKey) {
     } else if (stateKey.substring(0, 5) == 'link-') {
         [hash, data] = await getStateMemberLink(stateKey.substring(5));
     } else {
-        Log(`Invalid stateKey for onStateRequestMember processing: ${stateKey}`);
+        [hash, data] = await syncApp.StateRequest(peerId, stateKey);
     }
 
     return [hash, data];

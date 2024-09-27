@@ -62,3 +62,25 @@ The tls-ordinal and tls-oldest-valid annotations are used to manage the rotation
    - cost
  - data (for member)
    - siteId
+
+## Applications
+
+### ConfigMaps
+
+ - metadata
+   - name skx-connect-<ORDINAL>-<BINDING_ID>
+          skx-accept-<BINDING_ID>
+   - annotations
+     - skx/state-id: Database ID of the associated binding
+     - skx/ordinal: Ordinal to distinguish multiple local binding points
+     - skx/state-key:
+     - skx/state-hash:
+     - skx/state-dir: remote
+ - data (for connect)
+   - host
+   - port
+   - routingKey
+ - data (for accept)
+   - host
+   - port
+   - routingKey

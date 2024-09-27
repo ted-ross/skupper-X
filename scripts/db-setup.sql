@@ -348,7 +348,10 @@ CREATE TABLE ComponentTypes (
     Id UUID PRIMARY KEY,
     Name text,
     Description text,
-    KubernetesConfig text
+    KubernetesConfig text,
+    ImageName text,
+    DefaultImageTag text,
+    SourceRepository text
 );
 
 --
@@ -405,7 +408,8 @@ CREATE TABLE Components (
     Id UUID PRIMARY KEY,
     ComponentType UUID REFERENCES ComponentTypes,
     ApplicationTemplate UUID REFERENCES ApplicationTemplates ON DELETE CASCADE,
-    SiteClass text
+    ImageTag text,
+    SiteClasses text ARRAY
 );
 
 --
@@ -418,11 +422,7 @@ CREATE TABLE Bindings (
     VanAddress text,
     Distribution DistributionType DEFAULT 'anycast',
     Scope AddressScopeType DEFAULT 'van',
-
-    RoleA RoleType,
-    RoleB RoleType,
-    RoleAInterfaces UUID ARRAY,
-    RoleBInterfaces UUID ARRAY
+    Interfaces UUID ARRAY
 );
 
 
