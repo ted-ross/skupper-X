@@ -36,6 +36,7 @@ var certificateWatch;
 var configMapWatch;
 var routeWatch;
 var serviceWatch;
+var podWatch;
 var watchErrorCount = 0;
 var lastWatchError;
 var namespace = 'default';
@@ -78,6 +79,7 @@ exports.Start = async function (k8s_mod, fs_mod, yaml_mod, in_cluster) {
     configMapWatch   = new k8s.Watch(kc);
     routeWatch       = new k8s.Watch(kc);
     serviceWatch     = new k8s.Watch(kc);
+    podWatch         = new k8s.Watch(kc);
 
     try {
         if (in_cluster) {
@@ -191,6 +193,24 @@ exports.ReplaceConfigmap = async function(name, obj) {
 
 exports.DeleteConfigmap = async function(name) {
     await v1Api.deleteNamespacedConfigMap(name, namespace);
+}
+
+exports.GetPods = async function() {
+    let list = await v1Api.listNamespacedPod(namespace);
+    return list.body.items;
+}
+
+exports.LoadPod = async function(name) {
+    let pod = await v1Api.readNamespacedPod(name, namespace);
+    return pod.body;
+}
+
+exports.ReplacePod = async function(name, obj) {
+    await v1Api.ReplaceNamespacedPod(name, namespace, obj);
+}
+
+exports.DeletePod = async function(name) {
+    await v1Api.DeleteNamespacedPod(name, namespace);
 }
 
 exports.GetDeployments = async function() {
@@ -393,6 +413,34 @@ exports.WatchServices = function(callback) {
     }
 }
 
+var podWatches = [];
+
+const startWatchPods = function() {
+    podWatch.watch(
+        `/api/v1/namespaces/${namespace}/pods`,
+        {},
+        (type, apiObj, watchObj) => {
+            for (const callback of podWatches) {
+                callback(type, apiObj);
+            }
+        },
+        (err) => {
+            if (err) {
+                watchErrorCount++;
+                lastWatchError = `Pods: ${err}`;
+            }
+            startWatchPods();
+        }
+    )
+}
+
+exports.WatchPods = function(callback) {
+    podWatches.push(callback);
+    if (podWatches.length == 1) {
+        startWatchPods();
+    }
+}
+
 exports.ApplyObject = async function(obj) {
     try {
         if (obj.metadata.annotations == undefined) {
@@ -422,7 +470,7 @@ const logWatchErrors = function() {
 }
 
 exports.ApplyYaml = async function(yaml) {
-    setTimeout(logWatchErrors, 60 * 1000);
+    setTimeout(logWatchErrors, 60 * 1000);  // TODO - Check this.  It's probably not right
     let obj = YAML.parse(yaml);
     return await ApplyObject(obj);
 }
