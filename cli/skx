@@ -1,4 +1,4 @@
-#!/usr/bin/env /usr/bin/python3.10
+#!/usr/bin/env /usr/bin/python3.12
 
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -584,6 +584,9 @@ def main():
     parser.add_argument('--prefix', action='store', required=False)
     parser.add_argument('--siteclass', action='store', required=False)
     args   = parser.parse_args()
+    if len(args.pos) < 2:
+        print("Please specify at least an object and a verb")
+        exit(1)
     object = args.pos[0]
     verb   = args.pos[1]
     global VERBOSE
