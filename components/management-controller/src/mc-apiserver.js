@@ -26,6 +26,7 @@ const kcConnect  = require('keycloak-connect');
 const cors       = require('cors');
 const formidable = require('formidable');
 const yaml       = require('js-yaml');
+const bodyParser = require('body-parser');
 const crypto     = require('crypto');
 const db         = require('./db.js');
 const siteTemplates = require('./site-templates.js');
@@ -38,8 +39,10 @@ const userApi    = require('./api-user.js');
 const util       = require('./common/util.js');
 const common     = require('./common/common.js');
 const path       = require('path');
+const compose    = require('./compose.js');
 
 const API_PREFIX = '/api/v1alpha1/';
+const COMPOSE_PREFIX = '/compose/v1alpha1/';
 const API_PORT   = 8085;
 const app = express();
 //const memoryStore = new session.MemoryStore();
@@ -413,6 +416,11 @@ exports.Start = async function() {
 
     app.post(API_PREFIX + 'backbonesite/:bsid/ingress', async (req, res) => {
         await postBackboneIngress(req.params.bsid, req, res);
+    });
+
+    app.use(bodyParser.text({ type: ['application/yaml', 'application/x-yaml', 'application/yml', 'application/x-yml', 'text/yaml', 'text/yml', 'text/x-yaml', 'text/x-yml'] }));
+    app.post(COMPOSE_PREFIX + 'application/:apid/submit', async (req, res) => {
+        await compose.PostYaml(req.params.apid, req, res);
     });
 
     adminApi.Initialize(app, keycloak);

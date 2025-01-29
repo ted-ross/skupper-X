@@ -33,6 +33,7 @@ const apiserver   = require('./mc-apiserver.js');
 const sync        = require('./sync-management.js');
 const amqp        = require('./common/amqp.js');
 const claims      = require('./claim-server.js');
+const compose     = require('./compose.js');
 const Log         = require('./common/log.js').Log;
 const Flush       = require('./common/log.js').Flush;
 
@@ -58,6 +59,7 @@ exports.Main = async function() {
         await bbLinks.Start(CONTROLLER);
         await sync.Start();
         await claims.Start();
+        await compose.Start();
         Log("[Management controller initialization completed successfully]");
     } catch (reason) {
         Log(`Management controller initialization failed: ${reason.stack}`)
