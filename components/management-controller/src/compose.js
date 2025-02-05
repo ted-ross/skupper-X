@@ -70,19 +70,7 @@ class BlockInterface {
     }
 
     toString() {
-        return `BlockInterface ${this.ownerRef.name()}.${this.name} (${this.role}) ${this.polarity}`;
-    }
-
-    role() {
-        return this.role;
-    }
-
-    polarity() {
-        return this.polarity;
-    }
-
-    blockType() {
-        return this.blockType;
+        return `BlockInterface ${this.ownerRef.name}.${this.name} (${this.role}) ${this.polarity ? 'N' : 'S'}`;
     }
 
     setBinding(binding) {
@@ -115,6 +103,14 @@ class InstanceBlock {
 
     setLabel(key, value) {
         this.labels[key] = value;
+    }
+
+    object() {
+        return this.libraryBlock.object();
+    }
+
+    findInterface(name) {
+        return this.interfaces[name];
     }
 }
 
@@ -181,20 +177,20 @@ class LibraryBlock {
 
 class InterfaceBinding {
     constructor(left, right) {
-        if (left.polarity() == right.polarity()) {
+        if (left.polarity == right.polarity) {
             throw new Error(`Attempting to bind interfaces with the same polarity: ${left}, ${right}`);
         }
 
-        this.northRef = left.polarity() ? left : right;
-        this.southRef = left.polarity() ? right : left;
+        this.northRef = left.polarity ? left : right;
+        this.southRef = left.polarity ? right : left;
 
-        for (const ref in [this.southRef, this.northRef]) {
+        for (const ref of [this.southRef, this.northRef]) {
             if (ref.hasBinding()) {
                 throw new Error(`Attempting to bind and already bound interface: ${ref}`);
             }
         }
 
-        if (this.southRef.role() != this.northRef.role()) {
+        if (this.southRef.role != this.northRef.role) {
             throw new Error(`Attempting to bind interfaces with different roles: ${this.southRef}, ${this.northRef}`);
         }
 
@@ -374,7 +370,10 @@ class Application {
             //
             // Iterate again through the children and recursively process them.
             //
-            // TODO
+            for (const child of body.composite.blocks) {
+                const libraryChild = this.componentLibrary[child.block] || this.connectorLibrary[child.block] || this.mixedLibrary[child.block];
+                this.instantiateComponent(path + child.name + '/', libraryChild, child.name);
+            }
         } else {
             // This space intentionally left blank.
         }
@@ -386,7 +385,42 @@ class Application {
     // Throw an error if the interface cannot be found.
     //
     findBaseInterface(instanceBlock, interfaceName) {
-        // TODO
+        const spec = instanceBlock.object().spec;
+        if (spec.interfaces) {
+            for (const specif of spec.interfaces) {
+                if (specif.name == interfaceName) {
+                    //
+                    // We have verified that the instance has an interface with the desired name.
+                    // If this is a monolithic block, return the interface instance for this interface, otherwise
+                    // find the sub-block that binds this interface and recurse down into it.
+                    //
+                    if (spec.body && typeof(spec.body) == 'object' && spec.body.composite) {
+                        //
+                        // The referenced block is a composite.  We must find a sub-block that binds to this interface.
+                        // Note that the name of the sub-block interface may differ from the interface on this block.
+                        //
+                        for (const cblock of spec.body.composite.blocks) {
+                            if (cblock.bindings) {
+                                for (const cbinding of cblock.bindings) {
+                                    if (cbinding.super == interfaceName) {
+                                        const recurseBlock         = this.instanceBlocks[cblock.name];
+                                        const recurseInterfaceName = cbinding.interface;
+                                        return this.findBaseInterface(recurseBlock, recurseInterfaceName);
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        const result = instanceBlock.findInterface(interfaceName);
+                        if (result) {
+                            return result;
+                        }
+                    }
+                }
+            }
+        }
+
+        throw new Error(`Base Interface ${interfaceName} not found in block ${instanceBlock}`);
     }
 
     //
