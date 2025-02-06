@@ -26,6 +26,7 @@ const API_VERSION = 'skupperx.io/compose/v1alpha1';
 const TYPE_COMPONENT = 'skupperx.io/component';
 const TYPE_CONNECTOR = 'skupperx.io/connector';
 const TYPE_MIXED     = 'skupperx.io/mixed';
+const TYPE_INGRESS   = 'skupperx.io/ingress';
 
 var storedApplications = {};
 
@@ -67,10 +68,12 @@ class BlockInterface {
         this.polarity  = polarity;
         this.blockType = blockType;
         this.binding   = undefined;
+
+        Log(`Constructed: ${this}`);
     }
 
     toString() {
-        return `BlockInterface ${this.ownerRef.name}.${this.name} (${this.role}) ${this.polarity ? 'N' : 'S'}`;
+        return `BlockInterface ${this.ownerRef.name}.${this.name} (${this.blockType}.${this.role}) ${this.polarity ? 'N' : 'S'}`;
     }
 
     setBinding(binding) {
@@ -90,15 +93,17 @@ class InstanceBlock {
         this.interfaces   = {};
 
         const ilist = libraryBlock.object().spec.interfaces;
-        for (const iface of ilist) {
-            this.interfaces[iface.name] = new BlockInterface(this, iface.name, iface.role, iface.polarity, iface.blockType);
+        if (ilist) {
+            for (const iface of ilist) {
+                this.interfaces[iface.name] = new BlockInterface(this, iface.name, iface.role, iface.polarity, iface.blockType);
+            }
         }
 
         Log(`Constructed: ${this}`);
     }
 
     toString() {
-        return `InstanceBlock: ${this.name} (${this.libraryBlock})`;
+        return `InstanceBlock: ${this.name} [${this.libraryBlock}]`;
     }
 
     setLabel(key, value) {
@@ -137,7 +142,7 @@ class LibraryBlock {
 
         if (this.blockType == TYPE_COMPONENT) {
             expectedPolarity = true;
-        } else if (this.blockType == TYPE_CONNECTOR) {
+        } else if (this.blockType == TYPE_CONNECTOR || this.blockType == TYPE_INGRESS) {
             expectedPolarity = false;
         }
 
@@ -203,7 +208,7 @@ class InterfaceBinding {
     }
 
     toString() {
-        return `InterfaceBinding north: ${this.northRef} south: ${this.southRef}`;
+        return `InterfaceBinding north: [${this.northRef}] south: [${this.southRef}]`;
     }
 }
 
@@ -214,7 +219,6 @@ class Application {
         this.connectorLibrary = {}; // Connector blocks indexed by name
         this.mixedLibrary     = {}; // Mixed blocks indexed by name
         this.ingressLibrary   = {}; // Ingresses indexed by name
-        this.egressLibrary    = {}; // Egresses indexed by name
 
         this.instanceBlocks      = {}; // Blocks referenced in the application tree by their deployed names
         this.bindings            = []; // List of north/south interface bindings
@@ -235,13 +239,11 @@ class Application {
                         this.connectorLibrary[name] = new LibraryBlock(item, TYPE_CONNECTOR);
                     } else if (item.type == TYPE_MIXED) {
                         this.mixedLibrary[name] = new LibraryBlock(item, TYPE_MIXED);
+                    } else if (item.type == TYPE_INGRESS) {
+                        this.ingressLibrary[name] = new LibraryBlock(item, TYPE_INGRESS);
                     } else {
                         Log(`Unrecognized block type: ${item.type}`);
                     }
-                } else if (item.kind == 'Ingress') {
-                    this.ingressLibrary[name] = item;
-                } else if (item.kind == 'Egress') {
-                    this.egressLibrary[name] = item;
                 } else if (item.kind == 'Application') {
                     if (this.application) {
                         throw new Error(`More than one Application record supplied`);
@@ -265,7 +267,7 @@ class Application {
         //
         // If any of the objects use inheritance, expand/flatten them so they are each fully specified.
         //
-        for (var list of [this.componentLibrary, this.connectorLibrary, this.mixedLibrary]) {
+        for (var list of [this.componentLibrary, this.connectorLibrary, this.mixedLibrary, this.ingressLibrary]) {
             for (const block of Object.values(list)) {
                 this.expandInheritance(list, block);
 
@@ -312,12 +314,25 @@ class Application {
         const path      = '/' + this.name();
         this.instanceBlocks[path] = new InstanceBlock(rootBlock, path);
         this.instantiateComponent(path + '/', rootBlock, rootName);
+
+        //
+        // Build a list of unpaired interfaces.
+        //
+        for (const block of Object.values(this.instanceBlocks)) {
+            for (const iface of Object.values(block.interfaces)) {
+                if (!iface.hasBinding()) {
+                    this.unmatchedInterfaces.push(iface);
+                    Log(`Unbound interface: ${iface}`);
+                }
+            }
+        }
     }
 
     //
     // Recursive component instantiation function.
     //
     instantiateComponent(path, libraryBlock, instanceName) {
+        Log(`instantiateComponent: path=${path} libarayBlock=${libraryBlock}`);
         const body = libraryBlock.body();
         if (body.composite) {
             //
@@ -327,12 +342,13 @@ class Application {
                 if (!child.name || !child.block) {
                     throw new Error(`Invalid item in composite blocks for ${instanceName}`);
                 }
-                const libraryChild = this.componentLibrary[child.block] || this.connectorLibrary[child.block] || this.mixedLibrary[child.block];
+                const libraryChild = this.componentLibrary[child.block] || this.connectorLibrary[child.block] || this.mixedLibrary[child.block] || this.ingressLibrary[child.block];
                 if (!libraryChild) {
                     throw new Error(`Composite component ${instanceName} references a nonexistent library block ${child.block}`);
                 }
                 const subPath = path + child.name;
                 this.instanceBlocks[subPath] = new InstanceBlock(libraryChild, subPath);
+                this.instantiateComponent(subPath + '/', libraryChild, child.name);
             }
 
             //
@@ -346,6 +362,7 @@ class Application {
                             //
                             // This is a binding to the containing composite block.
                             //
+                            // TODO - Do _something_ here
                         } else {
                             //
                             // This is a binding between child blocks within this composite.
@@ -366,14 +383,6 @@ class Application {
                     }
                 }
             }
-
-            //
-            // Iterate again through the children and recursively process them.
-            //
-            for (const child of body.composite.blocks) {
-                const libraryChild = this.componentLibrary[child.block] || this.connectorLibrary[child.block] || this.mixedLibrary[child.block];
-                this.instantiateComponent(path + child.name + '/', libraryChild, child.name);
-            }
         } else {
             // This space intentionally left blank.
         }
@@ -385,6 +394,7 @@ class Application {
     // Throw an error if the interface cannot be found.
     //
     findBaseInterface(instanceBlock, interfaceName) {
+        Log(`findBaseInterface: ${instanceBlock}, ${interfaceName}`);
         const spec = instanceBlock.object().spec;
         if (spec.interfaces) {
             for (const specif of spec.interfaces) {
@@ -405,7 +415,8 @@ class Application {
                                     if (cbinding.super == interfaceName) {
                                         const recurseBlock         = this.instanceBlocks[cblock.name];
                                         const recurseInterfaceName = cbinding.interface;
-                                        return this.findBaseInterface(recurseBlock, recurseInterfaceName);
+                                        const result = this.findBaseInterface(recurseBlock, recurseInterfaceName);
+                                        return result;
                                     }
                                 }
                             }
@@ -414,7 +425,7 @@ class Application {
                         const result = instanceBlock.findInterface(interfaceName);
                         if (result) {
                             return result;
-                        }
+                        } // else fall through to the throw at the end of the function.
                     }
                 }
             }
@@ -460,15 +471,6 @@ const processItems = async function(apid, items) {
     storedApplications[name] = application;
 
     Log(`Application processed: ${application}`);
-
-    //
-    // Flatten composites into a non-hierarchical set of component blocks
-    //
-
-    //
-    // Annotate all interfaces with peer (opposite polarity) interfaces.
-    // Make a list of unused interfaces to report.
-    //
 
     //
     // Assign routing keys to each connector
