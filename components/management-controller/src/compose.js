@@ -22,7 +22,7 @@
 const yaml = require('js-yaml');
 const Log  = require('./common/log.js').Log;
 
-const API_VERSION = 'skupperx.io/compose/v1alpha1';
+const API_VERSION    = 'skupperx.io/compose/v1alpha1';
 const TYPE_COMPONENT = 'skupperx.io/component';
 const TYPE_CONNECTOR = 'skupperx.io/connector';
 const TYPE_MIXED     = 'skupperx.io/mixed';
@@ -62,26 +62,31 @@ const deepAppend = function(base, overlay) {
 
 class BlockInterface {
     constructor(ownerRef, name, role, polarity, blockType) {
-        this.ownerRef  = ownerRef;
-        this.name      = name;
-        this.role      = role;
-        this.polarity  = polarity;
-        this.blockType = blockType;
-        this.binding   = undefined;
+        this.ownerRef     = ownerRef;
+        this.name         = name;
+        this.role         = role;
+        this.polarity     = polarity;
+        this.blockType    = blockType;
+        this.binding      = undefined;
+        this.boundThrough = false;
 
         Log(`Constructed: ${this}`);
     }
 
     toString() {
-        return `BlockInterface ${this.ownerRef.name}.${this.name} (${this.blockType}.${this.role}) ${this.polarity ? 'N' : 'S'}`;
+        return `BlockInterface ${this.ownerRef.name}.${this.name} (${this.blockType}.${this.role}) ${this.polarity ? 'north' : 'south'}`;
     }
 
     setBinding(binding) {
         this.binding = binding;
     }
 
+    setBoundThrough() {
+        this.boundThrough = true;
+    }
+
     hasBinding() {
-        return !!this.binding;
+        return !!this.binding || this.boundThrough;
     }
 }
 
@@ -103,7 +108,7 @@ class InstanceBlock {
     }
 
     toString() {
-        return `InstanceBlock: ${this.name} [${this.libraryBlock}]`;
+        return `InstanceBlock ${this.name} [${this.libraryBlock}]`;
     }
 
     setLabel(key, value) {
@@ -191,7 +196,7 @@ class InterfaceBinding {
 
         for (const ref of [this.southRef, this.northRef]) {
             if (ref.hasBinding()) {
-                throw new Error(`Attempting to bind and already bound interface: ${ref}`);
+                throw new Error(`Attempting to bind an interface that is already bound: ${ref}`);
             }
         }
 
@@ -208,7 +213,7 @@ class InterfaceBinding {
     }
 
     toString() {
-        return `InterfaceBinding north: [${this.northRef}] south: [${this.southRef}]`;
+        return `InterfaceBinding [${this.northRef}] <=> [${this.southRef}]`;
     }
 }
 
@@ -287,7 +292,7 @@ class Application {
     }
 
     toString() {
-        return `Application: ${this.name()}`;
+        return `Application ${this.name()}`;
     }
 
     name() {
@@ -332,7 +337,6 @@ class Application {
     // Recursive component instantiation function.
     //
     instantiateComponent(path, libraryBlock, instanceName) {
-        Log(`instantiateComponent: path=${path} libarayBlock=${libraryBlock}`);
         const body = libraryBlock.body();
         if (body.composite) {
             //
@@ -362,7 +366,6 @@ class Application {
                             //
                             // This is a binding to the containing composite block.
                             //
-                            // TODO - Do _something_ here
                         } else {
                             //
                             // This is a binding between child blocks within this composite.
@@ -394,7 +397,6 @@ class Application {
     // Throw an error if the interface cannot be found.
     //
     findBaseInterface(instanceBlock, interfaceName) {
-        Log(`findBaseInterface: ${instanceBlock}, ${interfaceName}`);
         const spec = instanceBlock.object().spec;
         if (spec.interfaces) {
             for (const specif of spec.interfaces) {
@@ -413,9 +415,17 @@ class Application {
                             if (cblock.bindings) {
                                 for (const cbinding of cblock.bindings) {
                                     if (cbinding.super == interfaceName) {
-                                        const recurseBlock         = this.instanceBlocks[cblock.name];
+                                        const recurseBlock         = this.instanceBlocks[instanceBlock.name + '/' + cblock.name];
                                         const recurseInterfaceName = cbinding.interface;
                                         const result = this.findBaseInterface(recurseBlock, recurseInterfaceName);
+
+                                        //
+                                        // Mark the intermediate interface as bound-through.  This will prevent it from being flagged
+                                        // later as an unbound interface.
+                                        //
+                                        const throughInterface = instanceBlock.findInterface(cbinding.super);
+                                        throughInterface.setBoundThrough();
+
                                         return result;
                                     }
                                 }
