@@ -5,7 +5,7 @@ mkdir app
 mkdir app/src
 mkdir app/src/common
 uglifyjs index.js -c -m -o app/index.js
-for MODULE in api-member ingress links sc-apiserver sc-main claim router-port sync-site-kube hash
+for MODULE in api-member ingress links sc-apiserver sc-main claim router-port sync-site-kube hash pod-connector
 do
     cp src/$MODULE.js app/src/$MODULE.js
 #    uglifyjs src/$MODULE.js --toplevel -c -m -o app/src/$MODULE.js

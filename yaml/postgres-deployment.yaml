@@ -13,12 +13,12 @@ spec:
       labels:
         app: postgres
     spec:
-      securityContext:
-        fsGroup: 1000820000
-        fsGroupChangePolicy: "Always"
-        runAsNonRoot: true
-        seccompProfile:
-          type: RuntimeDefault
+#      securityContext:
+#        fsGroup: 1000820000
+#        fsGroupChangePolicy: "Always"
+#        runAsNonRoot: true
+#        seccompProfile:
+#          type: RuntimeDefault
       containers:
         - name: postgres
           image: postgres:15 # Sets Image
@@ -31,13 +31,13 @@ spec:
           volumeMounts:
             - mountPath: /var/lib/postgresql/data
               name: postgresdb
-          securityContext:
-            fsGroup: 1000820000
-            fsGroupChangePolicy: "Always"
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: [ALL]
-              runAsNonRoot: true
+#          securityContext:
+#            fsGroup: 1000820000
+#            fsGroupChangePolicy: "Always"
+#            allowPrivilegeEscalation: false
+#            capabilities:
+#              drop: [ALL]
+#              runAsNonRoot: true
       volumes:
         - name: postgresdb
           emptyDir:

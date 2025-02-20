@@ -21,6 +21,38 @@
 
 //
 // This is a standalone module (no API besides the Start function).  It is a reconciliation loop that monitors
-// ConfigMaps for "accept" interfaces and Pods looking for pods that match the selectors for the interfaces.
-// Matching pods have router connectors configured to reach them.
+// ConfigMaps for "accept" interfaces and Pods looking for selector matches.  Matching pods have router connectors
+// configured to reach them.
 //
+
+const Log    = require('./common/log.js').Log;
+const kube   = require('./common/kube.js');
+const router = require('./common/router.js');
+
+var accept_interfaces = {};
+var select_pods       = {};
+var router_connectors = {};
+
+//
+// Reconcile the local state.  The only tool available to this function is to add and remove router_connectors.
+//
+const reconcile = async function() {
+}
+
+//
+// Maintain the accept_interfaces list and reconcile if there are any changes.
+//
+const onConfigMapWatch = async function(action, apiObj) {
+}
+
+//
+// Maintain the select_pods list and reconcile if there are any changes.
+//
+const onPodWatch = async function(action, apiObj) {
+}
+
+exports.Start = async function() {
+    kube.WatchConfigMaps(onConfigMapWatch);
+    kube.WatchPods(onPodWatch);
+    Log('[Pod/Connector reconciliation module started]');
+}

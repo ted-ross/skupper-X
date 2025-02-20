@@ -24,9 +24,9 @@
 // member sites.
 //
 // Member-site application state:
-//   Pods       - Represent allocated components for which there is an image spec            [ skx-<id> ]
-//   Connectors - Config maps representing interfaces exposed from this site (role: accept)  [ skx-connector-<ordinal>-<id> ]
-//   Listeners  - Config maps representing interfaces uses from this site    (role: connect) [ skx-listener-<id> ]
+//   Components - Represent allocated components for which there is an image spec            [ component-<id> ]
+//   Inferfaces - Config maps representing interfaces exposed from this site (role: accept)  [ iface-accept-<id> ]
+//   Interfaces - Config maps representing interfaces uses from this site    (role: connect) [ iface-connect-<id> ]
 //
 
 const Log        = require('./common/log.js').Log;
@@ -35,6 +35,8 @@ const util       = require('./common/util.js');
 const db         = require('./db.js');
 const kube       = require('./common/kube.js');
 const templates  = require('./site-templates.js');
+
+var stateCache = {}; // peerId => {stateKey => [hash, data]}
 
 const getMemberInfo_TX = async function(client, memberId) {
     const siteResult = await client.query("SELECT MemberOf, SiteClasses FROM MemberSites WHERE Id = $1", [memberId]);
@@ -72,7 +74,7 @@ const getAppForSite_TX = async function(client, vanId, siteClasses) {
         // Query for every component from this application template that is allocated to this site
         //
         const cResult = await client.query(
-            "SELECT Components.Id as cid, ComponentTypes.Id as ctid, Name, ImageName, DefaultImageTag, ImageTag " +
+            "SELECT Components.Id as cid, ComponentTypes.Id as ctid, Name, Format, Spec " +
             "FROM Components " +
             "JOIN ComponentTypes ON ComponentTypes.Id = ComponentType " +
             "WHERE ApplicationTemplate = $1 AND SiteClasses && $2",
@@ -84,8 +86,8 @@ const getAppForSite_TX = async function(client, vanId, siteClasses) {
                 id         : c.cid,
                 typeId     : c.ctid,
                 name       : c.name,
-                imageName  : c.imagename,
-                imageTag   : c.imagetag || c.defaultimagetag,
+                format     : c.format,
+                spec       : c.spec,
                 interfaces : [],
             };
 
@@ -130,6 +132,17 @@ const classMatch = function (leftClasses, rightClasses) {
     return false;
 }
 
+const dataOfObjectNoChildren = function (obj) {
+    let data = {};
+    for (const [key, value] of Object.entries(obj)) {
+        if (typeof value != 'object') {
+            data[key] = value;
+        }
+    }
+
+    return data;
+}
+
 const getStateHashesForSite_TX = async function(client, memberId, vanId, siteClasses) {
     let stateHashes = {};
     const siteData = await getAppForSite_TX(client, vanId, siteClasses);
@@ -137,11 +150,21 @@ const getStateHashesForSite_TX = async function(client, memberId, vanId, siteCla
     Log('APP STATE:');
     Log(siteData);
 
+    if (!stateCache[memberId]) {
+        stateCache[memberId] = {};
+    }
+
     for (const appTemplate of siteData) {
         for (const component of appTemplate.components) {
-            stateHashes[`skx-pod-${component.id}`] = templates.HashOfObjectNoChildren(component);
+            const key  = `component-${component.id}`;
+            const hash = templates.HashOfObjectNoChildren(component);
+            stateCache[memberId][key] = [hash, dataOfObjectNoChildren(component)];
+            stateHashes[key] = hash;
             for (const iface of component.interfaces) {
-                stateHashes[`skx-${iface.role}-${iface.bindingId}`] = templates.HashOfObjectNoChildren(iface);
+                const key  = `iface-${iface.role}-${iface.bindingId}`;
+                const hash = templates.HashOfObjectNoChildren(iface);
+                stateCache[memberId][key] = [hash, dataOfObjectNoChildren(iface)];
+                stateHashes[key] = hash;
             }
         }
     }
@@ -150,7 +173,13 @@ const getStateHashesForSite_TX = async function(client, memberId, vanId, siteCla
 }
 
 const getStateForSite_TX = async function(client, memberId, vanId, siteClasses, stateKey) {
-    // TODO - Return [hash, data] for a particular stateKey.
+    try {
+        if (stateCache[memberId][stateKey]) {
+            return stateCache[memberId][stateKey];
+        }
+    } catch(error) {
+    }
+    return [null, {}];
 }
 
 exports.onMewMember = async function(memberId, localState, remoteState) {
@@ -164,7 +193,7 @@ exports.onMewMember = async function(memberId, localState, remoteState) {
 
         const state = await getStateHashesForSite_TX(client, memberId, vanId, siteClasses);
         for (const [key, hash] of Object.entries(state)) {
-            remoteState[key] = hash;
+            localState[key] = hash;
         }
     
         await client.query("COMMIT");

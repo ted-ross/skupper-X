@@ -90,6 +90,14 @@ const kubeObjectForState = function(stateKey) {
             objKind = 'InMemory';
             objDir = 'local';
             break;
+        case 'component':
+            objKind = 'Spec';
+            stateId = stateKey.substring(10); // text following 'component-'
+            break;
+        case 'iface':
+            objKind = 'ConfigMap';
+            const role = elements[1];
+            break;
         default:
             throw(Error(`Invalid stateKey prefix: ${elements[0]}`))
     }
@@ -124,10 +132,14 @@ const stateInMemory = function(local) {
 const getInitialHashState = async function() {
     var local  = {};
     var remote = {};
-    const secrets    = await kube.GetSecrets();
-    const configmaps = await kube.GetConfigmaps();
+    const secrets     = await kube.GetSecrets();
+    const configmaps  = await kube.GetConfigmaps();
+    const deployments = await kube.GetDeployments();
+    const pods        = await kube.GetPods();
     [local, remote] = stateForList(secrets, local, remote);
     [local, remote] = stateForList(configmaps, local, remote);
+    [local, remote] = stateForList(deployments, local, remote);
+    [local, remote] = stateForList(pods, local, remote);
     if (backbone_mode) {
         const ingressState = await ingress.GetInitialState();
         for (const [apid, state] of Object.entries(ingressState)) {
@@ -139,6 +151,10 @@ const getInitialHashState = async function() {
     }
     local = stateInMemory(local);
     return [local, remote];
+}
+
+const doStateChangeSpec = async function(hash, data) {
+    if (data.format)
 }
 
 const onNewPeer = async function(_peerId, peerClass) {
@@ -158,43 +174,49 @@ const onStateChange = async function(peerId, stateKey, hash, data) {
         throw(Error(`Protocol error: Received update for local state ${stateKey}`));
     }
 
-    if (!!hash) {
-        let obj = {
-            apiVersion : apiVersion,
-            kind       : objKind,
-            metadata   : {
-                name        : objName,
-                annotations : {
-                    [common.META_ANNOTATION_STATE_KEY]  : stateKey,
-                    [common.META_ANNOTATION_STATE_DIR]  : objDir,
-                    [common.META_ANNOTATION_STATE_HASH] : hash,
-                },
-            },
-            data : data,
-        };
-
-        if (objType) {
-            obj.type = objType;
-        }
-
-        if (stateType) {
-            obj.metadata.annotations[common.META_ANNOTATION_STATE_TYPE] = stateType;
-        }
-
-        if (stateId) {
-            obj.metadata.annotations[common.META_ANNOTATION_STATE_ID] = stateId;
-        }
-
-        if (inject) {
-            obj.metadata.annotations[common.META_ANNOTATION_TLS_INJECT] = inject;
-        }
-
-        await kube.ApplyObject(obj);
+    if (objName == 'spec') {
+        await doStateChangeSpec(hash, data);
     } else {
-        if (objKind == 'Secret') {
-            await kube.DeleteSecret(objName);
-        } else if (objKind == 'ConfigMap') {
-            await kube.DeleteConfigmap(objName);
+        if (!!hash) {
+            let obj = {
+                apiVersion : apiVersion,
+                kind       : objKind,
+                metadata   : {
+                    name        : objName,
+                    annotations : {
+                        [common.META_ANNOTATION_STATE_KEY]  : stateKey,
+                        [common.META_ANNOTATION_STATE_DIR]  : objDir,
+                        [common.META_ANNOTATION_STATE_HASH] : hash,
+                    },
+                },
+                data : data,
+            };
+
+            if (objType) {
+                obj.type = objType;
+            }
+
+            if (stateType) {
+                obj.metadata.annotations[common.META_ANNOTATION_STATE_TYPE] = stateType;
+            }
+
+            if (stateId) {
+                obj.metadata.annotations[common.META_ANNOTATION_STATE_ID] = stateId;
+            }
+
+            if (inject) {
+                obj.metadata.annotations[common.META_ANNOTATION_TLS_INJECT] = inject;
+            }
+
+            await kube.ApplyObject(obj);
+        } else {
+            if (objKind == 'Secret') {
+                await kube.DeleteSecret(objName);
+            } else if (objKind == 'ConfigMap') {
+                await kube.DeleteConfigmap(objName);
+            } else if (objKind == 'Deployment') {
+                await kube.DeleteDeployment(objName);
+            }
         }
     }
 }
@@ -209,10 +231,10 @@ const onStateRequest = async function(peerId, stateKey) {
     var hash;
 
     try {
-        if (objKind == 'Secret') {
+        if (objKind == 'Secret') {             // No local secrets currently
             obj  = await kube.LoadSecret(objName);
             hash = kube.Annotation(obj, common.META_ANNOTATION_STATE_HASH);
-        } else if (objKind == 'ConfigMap') {
+        } else if (objKind == 'ConfigMap') {   // No local configmaps currently
             obj  = await kube.LoadConfigmap(objName);
             hash = kube.Annotation(obj, common.META_ANNOTATION_STATE_HASH);
         } else if (objKind == 'InMemory') {

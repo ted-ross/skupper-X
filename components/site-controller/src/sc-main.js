@@ -34,6 +34,7 @@ const claim        = require('./claim.js');
 const memberapi    = require('./api-member.js');
 const Log          = require('./common/log.js').Log;
 const Flush        = require('./common/log.js').Flush;
+const pods         = require('./pod-connector.js');
 
 const VERSION       = '0.1.2';
 const STANDALONE    = (process.env.SKX_STANDALONE || 'NO') == 'YES';
@@ -75,6 +76,7 @@ exports.Main = async function() {
             await ingress.Start(site_id);
         }
         await syncKube.Start(site_id, conn, BACKBONE_MODE);
+        await pods.Start();
         Log("[Site controller initialization completed successfully]");
     } catch (error) {
         Log(`Site controller initialization failed: ${error.message}`)
