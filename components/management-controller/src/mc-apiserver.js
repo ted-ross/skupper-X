@@ -42,7 +42,6 @@ const path       = require('path');
 const compose    = require('./compose.js');
 
 const API_PREFIX = '/api/v1alpha1/';
-const COMPOSE_PREFIX = '/compose/v1alpha1/';
 const API_PORT   = 8085;
 const app = express();
 //const memoryStore = new session.MemoryStore();
@@ -418,13 +417,11 @@ exports.Start = async function() {
         await postBackboneIngress(req.params.bsid, req, res);
     });
 
-    app.use(bodyParser.text({ type: ['application/yaml', 'application/x-yaml', 'application/yml', 'application/x-yml', 'text/yaml', 'text/yml', 'text/x-yaml', 'text/x-yml'] }));
-    app.post(COMPOSE_PREFIX + 'application/:apid/submit', async (req, res) => {
-        await compose.PostYaml(req.params.apid, req, res);
-    });
+    app.use(bodyParser.text({ type: ['application/yaml'] }));
 
     adminApi.Initialize(app, keycloak);
     userApi.Initialize(app, keycloak);
+    compose.ApiInit(app);
 
     app.use((req, res) => {
         res.status(404).send('invalid path');

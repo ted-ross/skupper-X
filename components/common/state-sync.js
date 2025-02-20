@@ -230,6 +230,7 @@ const processMessage = async function(connectionKey, body, onReply) {
         );
     } catch (error) {
         Log(`Exception in sync message processing: ${error.message}`);
+        Log(error.stack);
     }
 }
 

@@ -13,30 +13,6 @@
  */
 
 --
--- AddressScopeType
---   van       All instances offering a service use the same address, VAN-wide.
---   site      Service addresses are site-specific. All instances at a site use the same address.
---   instance  Each instance of a service uses a site/instance-specific address.
---
-CREATE TYPE AddressScopeType AS ENUM ('van', 'site', 'instance');
-
---
--- StickyMechanismType
---   none           Client sessions are not sticky
---   sourceAddress  Client connections from the same address are sent to the same instance
---   cookie         Client proxy inserts a cookie to track clients and direct them to the same instance
---
-CREATE TYPE StickyMechanismType AS ENUM ('none', 'sourceAddress', 'cookie');
-
---
--- DistributionType
---   anycast    Payload will be delivered to exactly one service instance
---   multicast  Payload will de delivered to every service instance exactly once
---   forbidden  Payload will not be delivered
---
-CREATE TYPE DistributionType AS ENUM ('anycast', 'multicast', 'forbidden');
-
---
 -- CertificateRequestType
 --   mgmtController  Generate a client certificate, signed by the rootCA, to be used by the management controller to connect to backbones
 --   backboneCA      Generate a CA for an interior backbone, signed by the rootCA
@@ -56,18 +32,6 @@ CREATE TYPE CertificateRequestType AS ENUM ('mgmtController', 'backboneCA', 'int
 --   manage  Ingress for the management (normal) controller
 --
 CREATE TYPE AccessPointType AS ENUM ('claim', 'peer', 'member', 'manage');
-
---
--- RoleType
---   accept        Accepts incoming connections
---   connect       Initiates outgoing connections
---   send          Sends datagrams or messages
---   receive       Receives datagrams or messages
---   asyncRequest  Sends asynchronous requests
---   asyncReply    Replies asynchronously to requests
---   peer          Represents a host or subnet attached via a raw-IP encapsulation
---
-CREATE TYPE RoleType AS ENUM ('accept', 'connect', 'send', 'receive', 'asyncRequest', 'asyncReply', 'peer');
 
 --
 -- LifecycleType
@@ -341,90 +305,49 @@ CREATE TABLE CertificateRequests (
 -- Everything from this point down is in a more preliminary state than the stuff above.
 -- ===================================================================================
 
+CREATE TYPE InterfacePolarity AS ENUM ('north', 'south');
+
 --
--- Available process images
+-- Block Types
 --
-CREATE TABLE ComponentTypes (
-    Id UUID PRIMARY KEY,
-    Name text,
-    Description text,
-    KubernetesConfig text,
-    ImageName text,
-    DefaultImageTag text,
-    SourceRepository text
+CREATE TABLE BlockTypes (
+    Name text PRIMARY KEY
+);
+
+CREATE TABLE InterfaceRoles (
+    Name text PRIMARY KEY
 );
 
 --
--- Ways in which software components interact with one another
+-- Library Blocks
 --
-CREATE TABLE InterconnectTypes (
-    Id UUID PRIMARY KEY,
-    Name text,
-    Description text,
-    TransportProtocol text,   -- tcp, udp, amqp, sctp, etc.   (used to assign adaptor)
-    ApplicationProtocol text, -- http, smtp, jdbc, etc.       (optional)
-    DefaultPort text,
-    Roles RoleType ARRAY,     -- Set of supported roles
-    StickyMechanism StickyMechanismType DEFAULT 'none',
-    Distribution DistributionType DEFAULT 'anycast',
-    AddressScope AddressScopeType DEFAULT 'van'
+CREATE TABLE LibraryBlocks (
+    Id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    Type     text REFERENCES BlockTypes (Name),
+    Name     text,
+    Revision integer     DEFAULT 1,
+    Created  timestamptz DEFAULT CURRENT_TIMESTAMP,
+    SpecBody text
 );
 
 --
--- Mapping of services to the components that participate in that service
+-- Block Interface
 --
-CREATE TABLE Interfaces (
-    Id UUID PRIMARY KEY,
-    ComponentType UUID REFERENCES ComponentTypes,
-    InterconnectType UUID REFERENCES InterconnectTypes,
-    Role RoleType,
-    HostNameUsed text,
-    ActualPort text
-);
-
---
--- A templated definition of a distributed application
---
-CREATE TABLE ApplicationTemplates (
-    Id UUID PRIMARY KEY,
-    Name text,
-    Description text
+CREATE TABLE BlockInterfaces (
+    Block    UUID REFERENCES LibraryBlocks (Id),
+    Role     text REFERENCES InterfaceRoles (Name),
+    Polarity InterfacePolarity,
+    PeerSpec text
 );
 
 --
 -- The instantiation of an application template onto an application network
 --
-CREATE TABLE Applications (
-    Id UUID PRIMARY KEY,
-    ApplicationTemplate UUID REFERENCES ApplicationTemplates,
-    ApplicationNetwork  UUID REFERENCES ApplicationNetworks
+CREATE TABLE DeployedApplications (
+    Id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    RootBlock UUID REFERENCES LibraryBlocks(Id),
+    Van       UUID REFERENCES ApplicationNetworks(Id)
 );
-
---
--- A Component is an instance of a participant in a ServicLink that is allocated to
--- one or more sites in an ApplicationNetwork.
---
-CREATE TABLE Components (
-    Id UUID PRIMARY KEY,
-    ComponentType UUID REFERENCES ComponentTypes,
-    ApplicationTemplate UUID REFERENCES ApplicationTemplates ON DELETE CASCADE,
-    ImageTag text,
-    SiteClasses text ARRAY
-);
-
---
--- Specific interconnect between running images and endpoints
---
-CREATE TABLE Bindings (
-    Id UUID PRIMARY KEY,
-    InterconnectType UUID REFERENCES InterconnectTypes,
-    ApplicationTemplate UUID REFERENCES ApplicationTemplates ON DELETE CASCADE,
-    VanAddress text,
-    Distribution DistributionType DEFAULT 'anycast',
-    Scope AddressScopeType DEFAULT 'van',
-    Interfaces UUID ARRAY
-);
-
 
 --
 -- Pre-populate the database with some test data.
@@ -433,6 +356,11 @@ INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpir
     VALUES (0, 'skupperx-root', '30 days', '1 week', '1 year', 'quay.io/skupper/skupper-router:2.6.0', 'quay.io/tedlross/skupperx-site-controller:skx-0.1.2');
 INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 'tross@redhat.com', '18f4e1168a37a7a2d5ac2bff043c12c862d515a2cbb9ab5fe207ab4ef235e129c1a475ffca25c4cb3831886158c3836664d489c98f68c0ac7af5a8f6d35e04fa');
 INSERT INTO WebSessions (Id, UserId) VALUES (gen_random_uuid(), 1);
+
+INSERT INTO BlockTypes (Name) VALUES
+    ('skupperx.io/component'), ('skupperx.io/connector'), ('skupperx.io/mixed'), ('skupperx.io/ingress');
+INSERT INTO InterfaceRoles (Name) VALUES
+    ('accept'), ('connect');
 
 
 /*

@@ -12,13 +12,11 @@
  * limitations under the License.
  */
 
-DROP TABLE Bindings;
-DROP TABLE Components;
-DROP TABLE Applications;
-DROP TABLE ApplicationTemplates;
-DROP TABLE Interfaces;
-DROP TABLE InterconnectTypes;
-DROP TABLE ComponentTypes;
+DROP TABLE DeployedApplications;
+DROP TABLE BlockInterfaces;
+DROP TABLE LibraryBlocks;
+DROP TABLE InterfaceRoles;
+DROP TABLE BlockTypes;
 DROP TABLE CertificateRequests;
 DROP TABLE MemberSites;
 DROP TABLE EdgeLinks;
@@ -34,11 +32,8 @@ DROP TABLE WebSessions;
 DROP TABLE Users;
 DROP TABLE Configuration;
 
-DROP TYPE AddressScopeType;
-DROP TYPE StickyMechanismType;
-DROP TYPE DistributionType;
+DROP TYPE InterfacePolarity;
 DROP TYPE AccessPointType;
 DROP TYPE CertificateRequestType;
-DROP TYPE RoleType;
 DROP TYPE LifecycleType;
 DROP TYPE DeploymentStateType

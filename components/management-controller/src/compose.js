@@ -22,6 +22,7 @@
 const yaml = require('js-yaml');
 const Log  = require('./common/log.js').Log;
 
+const COMPOSE_PREFIX = '/compose/v1alpha1/';
 const API_VERSION    = 'skupperx.io/compose/v1alpha1';
 const TYPE_COMPONENT = 'skupperx.io/component';
 const TYPE_CONNECTOR = 'skupperx.io/connector';
@@ -230,8 +231,8 @@ class Application {
         this.unmatchedInterfaces = []; // List of (block-name; interface-name) for unconnected interfaces
 
         //
-        // Parse the items list and collate into objects for three kinds of Blocks, Ingresses, and Egresses.
-        // We also need to find exactly one Application objects.
+        // Parse the items list and collate into objects for various kinds of Blocks.
+        // We also need to find exactly one Application object.
         //
         for (const item of items) {
             item.status = {};
@@ -481,25 +482,13 @@ const processItems = async function(apid, items) {
     storedApplications[name] = application;
 
     Log(`Application processed: ${application}`);
-
-    //
-    // Assign routing keys to each connector
-    //
-
-    //
-    // Allocate components to sites
-    //
-
-    //
-    // Generate per-site Yaml:  Components, Skupper Listeners, Skupper Connectors, NetworkPolicies
-    //
 }
 
 exports.Start = async function() {
     Log('[Compose module starting]');
 }
 
-exports.PostYaml = async function(apid, req, res) {
+const postLibrary = async function(apid, req, res) {
     if (req.is('application/yaml')) {
         try {
             let items = yaml.loadAll(req.body);
@@ -511,4 +500,28 @@ exports.PostYaml = async function(apid, req, res) {
     } else {
         res.status(400).send('Not YAML');
     }
+}
+
+const postYaml = async function(apid, req, res) {
+    if (req.is('application/yaml')) {
+        try {
+            let items = yaml.loadAll(req.body);
+            await processItems(apid, items);
+            res.status(200).send('OK');
+        } catch (error) {
+            res.status(500).send(error.stack);
+        }
+    } else {
+        res.status(400).send('Not YAML');
+    }
+}
+
+exports.ApiInit = function(app) {
+    app.post(COMPOSE_PREFIX + 'library', async (req, res) => {
+        await postLibrary(req, res);
+    });
+
+    app.post(COMPOSE_PREFIX + 'application/:apid/submit', async (req, res) => {
+        await postYaml(req.params.apid, req, res);
+    });
 }
