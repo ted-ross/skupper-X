@@ -311,7 +311,9 @@ CREATE TYPE InterfacePolarity AS ENUM ('north', 'south');
 -- Block Types
 --
 CREATE TABLE BlockTypes (
-    Name text PRIMARY KEY
+    Name text PRIMARY KEY,
+    AllowNorth boolean,
+    AllowSouth boolean
 );
 
 CREATE TABLE InterfaceRoles (
@@ -322,22 +324,14 @@ CREATE TABLE InterfaceRoles (
 -- Library Blocks
 --
 CREATE TABLE LibraryBlocks (
-    Id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    Type     text REFERENCES BlockTypes (Name),
-    Name     text,
-    Revision integer     DEFAULT 1,
-    Created  timestamptz DEFAULT CURRENT_TIMESTAMP,
-    SpecBody text
-);
-
---
--- Block Interface
---
-CREATE TABLE BlockInterfaces (
-    Block    UUID REFERENCES LibraryBlocks (Id),
-    Role     text REFERENCES InterfaceRoles (Name),
-    Polarity InterfacePolarity,
-    PeerSpec text
+    Id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    Type       text REFERENCES BlockTypes (Name),
+    Name       text,
+    Revision   integer     DEFAULT 1,
+    Created    timestamptz DEFAULT CURRENT_TIMESTAMP,
+    Format     text,
+    Interfaces text,
+    SpecBody   text
 );
 
 --
@@ -357,10 +351,10 @@ INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpir
 INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 'tross@redhat.com', '18f4e1168a37a7a2d5ac2bff043c12c862d515a2cbb9ab5fe207ab4ef235e129c1a475ffca25c4cb3831886158c3836664d489c98f68c0ac7af5a8f6d35e04fa');
 INSERT INTO WebSessions (Id, UserId) VALUES (gen_random_uuid(), 1);
 
-INSERT INTO BlockTypes (Name) VALUES
-    ('skupperx.io/component'), ('skupperx.io/connector'), ('skupperx.io/mixed'), ('skupperx.io/ingress');
+INSERT INTO BlockTypes (Name, AllowNorth, AllowSouth) VALUES
+    ('skupperx.io/component', true, false), ('skupperx.io/connector', false, true), ('skupperx.io/mixed', true, true), ('skupperx.io/ingress', false, true);
 INSERT INTO InterfaceRoles (Name) VALUES
-    ('accept'), ('connect');
+    ('accept'), ('connect'), ('send'), ('receive'), ('request'), ('respond');
 
 
 /*

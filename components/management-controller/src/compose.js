@@ -21,6 +21,7 @@
 
 const yaml = require('js-yaml');
 const Log  = require('./common/log.js').Log;
+const db   = require('./db.js');
 
 const COMPOSE_PREFIX = '/compose/v1alpha1/';
 const API_VERSION    = 'skupperx.io/compose/v1alpha1';
@@ -484,22 +485,210 @@ const processItems = async function(apid, items) {
     Log(`Application processed: ${application}`);
 }
 
-exports.Start = async function() {
-    Log('[Compose module starting]');
+const validateBlock = async function(block, validTypes, validRoles, blockRevisions) {
+    if (typeof(block) != "object") {
+        return "Non-object element received";
+    }
+
+    if (block.apiVersion != API_VERSION) {
+        return `Unknown apiVersion: ${block.apiVersion}`;
+    }
+
+    if (block.kind != 'Block') {
+        return `Expected record of type Block, got ${block.kind}`;
+    }
+
+    if (typeof(block.metadata) != "object") {
+        return 'Record does not have metadata';
+    }
+
+    if (!block.metadata.name) {
+        return 'Record does not have metadata.name';
+    }
+
+    const name = block.metadata.name;
+
+    let allowNorth = false;
+    let allowSouth = false;
+    if (block.type && validTypes[block.type]) {
+        allowNorth = validTypes[block.type].allowNorth;
+        allowSouth = validTypes[block.type].allowSouth;
+    } else {
+        return `Invalid block type: ${block.type}`;
+    }
+
+    if (blockRevisions[name] && blockRevisions[name].btype != block.type) {
+        return `Block ${name} conflicts with another block of the same name but different type`;
+    }
+
+    const polarityMandatory    = allowNorth && allowSouth;
+    const defaultPolarityNorth = allowNorth;
+
+    if (typeof(block.spec) != "object") {
+        return 'Record does not have a spec';
+    }
+
+    if (block.spec.interfaces) {
+        for (const iface of block.spec.interfaces) {
+            if (!iface.name) {
+                return `Interface in block ${name} with no name`;
+            }
+
+            if (!iface.role || !(validRoles.indexOf(iface.role) >= 0)) {
+                return `Invalid role in block ${name}, interface ${iface.name}`;
+            }
+
+            if (iface.polarity === undefined) {
+                if (polarityMandatory) {
+                    return `Missing mandatory polarity for interface ${iface.name}, block ${name}`;
+                }
+
+                iface.polarity = defaultPolarityNorth ? 'north' : 'south';
+            } else {
+                if (iface.polarity != 'north' && iface.polarity != 'south') {
+                    return `Polarity must be 'north' or 'south' for interface ${iface.name}, block ${name}`
+                }
+
+                if (iface.polarity == 'north' && !allowNorth) {
+                    return `North polarity not permitted for interface ${iface.name}, block ${name}`;
+                }
+
+                if (iface.polarity == 'south' && !allowSouth) {
+                    return `South polarity not permitted for interface ${iface.name}, block ${name}`;
+                }
+            }
+        }
+    }
+
+    if (!block.spec.body) {
+        return `Record (${name}) does not have a spec.body`;
+    }
+
+    return undefined;
 }
 
-const postLibrary = async function(apid, req, res) {
+const importBlock = async function(client, block, blockRevisions) {
+    const name = block.metadata.name;
+
+    const newRevision = blockRevisions[name] ? blockRevisions[name].revision + 1 : 1;
+    await client.query("INSERT INTO LibraryBlocks (Type, Name, Revision, Format, Interfaces, SpecBody) VALUES ($1, $2, $3, 'application/yaml', $4, $5)",
+                       [block.type, name, newRevision, yaml.dump(block.spec.interfaces), yaml.dump(block.spec.body)]);
+}
+
+const postLibraryBlocks = async function(req, res) {
     if (req.is('application/yaml')) {
+        const client = await db.ClientFromPool();
         try {
+            await client.query("BEGIN");
             let items = yaml.loadAll(req.body);
-            await processItems(apid, items);
+
+            //
+            // Get the set of valid block types.
+            //
+            let validTypes = {};
+            const result = await client.query("SELECT Name, AllowNorth, AllowSouth FROM BlockTypes");
+            for (const row of result.rows) {
+                validTypes[row.name] = {
+                    allowNorth : row.allownorth,
+                    allowSoute : row.allowsouth
+                };
+            }
+
+            //
+            // Get the set of valid interface roles.
+            //
+            let validRoles = [];
+            const roleResult = await client.query("SELECT Name FROM InterfaceRoles");
+            for (const row of roleResult.rows) {
+                validRoles.push(row.name);
+            }
+
+            //
+            // Get a list of block names with their revision numbers
+            //
+            var blockRevisions = {};
+            const blockResult = await client.query("SELECT Name, Type, Revision FROM LibraryBlocks");
+            for (const br of blockResult.rows) {
+                if (!blockRevisions[br.name] || blockRevisions[br.name].revision < br.revision) {
+                    blockRevisions[br.name] = {
+                        revision : br.revision,
+                        btype    : br.type,
+                    };
+                }
+            }
+
+            //
+            // Validate the items.  Ensure they are all Blocks with valid types, names, and specs
+            //
+            for (const block of items) {
+                const errorText = await validateBlock(block, validTypes, validRoles, blockRevisions);
+                if (errorText) {
+                    res.status(400).send(`Bad Request - ${errorText}`);
+                    await client.query("ROLLBACK");
+                    return;
+                }
+            }
+
+            //
+            // Import the validated blocks into the database
+            //
+            for (const block of items) {
+                await importBlock(client, block, blockRevisions);
+            }
+            await client.query("COMMIT");
             res.status(200).send('OK');
         } catch (error) {
             res.status(500).send(error.stack);
+            await client.query("ROLLBACK");
+        } finally {
+            client.release();
         }
     } else {
         res.status(400).send('Not YAML');
     }
+}
+
+const listLibraryBlocks = async function(req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT Id, Type, Name, Revision, Created FROM LibraryBlocks");
+        res.status(returnStatus).json(result.rows);
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in listLibraryBlocks: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+}
+
+const getLibraryBlock = async function(blockid, req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT * FROM LibraryBlocks WHERE Id = $1", [blockid]);
+        if (result.rowCount == 1) {
+            res.status(returnStatus).json(result.rows[0]);
+        } else {
+            returnStatus = 404;
+            res.status(returnStatus).send('Not Found');
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in getLibraryBlock: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
 }
 
 const postYaml = async function(apid, req, res) {
@@ -517,11 +706,23 @@ const postYaml = async function(apid, req, res) {
 }
 
 exports.ApiInit = function(app) {
-    app.post(COMPOSE_PREFIX + 'library', async (req, res) => {
-        await postLibrary(req, res);
+    app.post(COMPOSE_PREFIX + 'library/blocks', async (req, res) => {
+        await postLibraryBlocks(req, res);
     });
 
-    app.post(COMPOSE_PREFIX + 'application/:apid/submit', async (req, res) => {
+    app.get(COMPOSE_PREFIX + 'library/blocks', async (req, res) => {
+        await listLibraryBlocks(req, res);
+    });
+
+    app.get(COMPOSE_PREFIX + 'library/block/:blockid', async (req, res) => {
+        await getLibraryBlock(req.params.blockid, req, res);
+    });
+
+    app.post(COMPOSE_PREFIX + 'application/:apid/submit', async (req, res) => {  // TODO - Deprecate this in favor of better workflow.
         await postYaml(req.params.apid, req, res);
     });
+}
+
+exports.Start = async function() {
+    Log('[Compose module starting]');
 }
