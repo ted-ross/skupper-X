@@ -334,13 +334,16 @@ CREATE TABLE LibraryBlocks (
     SpecBody   text
 );
 
+CREATE TYPE ApplicationLifecycle AS ENUM ('created', 'build-errors', 'built', 'deployed');
+
 --
 -- The instantiation of an application template onto an application network
 --
 CREATE TABLE DeployedApplications (
     Id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     RootBlock UUID REFERENCES LibraryBlocks(Id),
-    Van       UUID REFERENCES ApplicationNetworks(Id)
+    Van       UUID REFERENCES ApplicationNetworks(Id),
+    Lifecycle ApplicationLifecycle DEFAULT 'created'
 );
 
 --
@@ -352,9 +355,17 @@ INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 
 INSERT INTO WebSessions (Id, UserId) VALUES (gen_random_uuid(), 1);
 
 INSERT INTO BlockTypes (Name, AllowNorth, AllowSouth) VALUES
-    ('skupperx.io/component', true, false), ('skupperx.io/connector', false, true), ('skupperx.io/mixed', true, true), ('skupperx.io/ingress', false, true);
+    ('skupperx.io/component', true,  false),
+    ('skupperx.io/connector', false, true),
+    ('skupperx.io/mixed',     true,  true),
+    ('skupperx.io/ingress',   false, true),
+    ('skupperx.io/egress',    false, true);
+
 INSERT INTO InterfaceRoles (Name) VALUES
-    ('accept'), ('connect'), ('send'), ('receive'), ('request'), ('respond');
+    ('accept'),  ('connect'),
+    ('send'),    ('receive'),
+    ('produce'), ('consume'),
+    ('request'), ('respond');
 
 
 /*

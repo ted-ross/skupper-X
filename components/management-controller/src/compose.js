@@ -636,7 +636,7 @@ const postLibraryBlocks = async function(req, res) {
                 await importBlock(client, block, blockRevisions);
             }
             await client.query("COMMIT");
-            res.status(200).send('OK');
+            res.status(201).send('Created');
         } catch (error) {
             res.status(500).send(error.stack);
             await client.query("ROLLBACK");
@@ -691,18 +691,46 @@ const getLibraryBlock = async function(blockid, req, res) {
     return returnStatus;
 }
 
-const postYaml = async function(apid, req, res) {
-    if (req.is('application/yaml')) {
-        try {
-            let items = yaml.loadAll(req.body);
-            await processItems(apid, items);
-            res.status(200).send('OK');
-        } catch (error) {
-            res.status(500).send(error.stack);
+const deleteLibraryBlock = async function(blockid, req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("DELETE FROM LibraryBlocks WHERE Id = $1", [blockid]);
+        if (result.rowCount != 1) {
+            returnStatus = 404;
+            res.status(returnStatus).send('Not Found');
+        } else {
+            res.status(returnStatus).send('Deleted');
         }
-    } else {
-        res.status(400).send('Not YAML');
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in getLibraryBlock: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
     }
+    return returnStatus;
+}
+
+const postApplication = async function(req, res) {
+}
+
+const buildApplication = async function(apid, req, res) {
+}
+
+const deployApplication = async function(apid, req, res) {
+}
+
+const listApplications = async function(req, res) {
+}
+
+const getApplication = async function(apid, req, res) {
+}
+
+const deleteApplication = async function(apid, req, res) {
 }
 
 exports.ApiInit = function(app) {
@@ -718,9 +746,33 @@ exports.ApiInit = function(app) {
         await getLibraryBlock(req.params.blockid, req, res);
     });
 
-    app.post(COMPOSE_PREFIX + 'application/:apid/submit', async (req, res) => {  // TODO - Deprecate this in favor of better workflow.
-        await postYaml(req.params.apid, req, res);
+    app.delete(COMPOSE_PREFIX + 'library/block/:blockid', async (req, res) => {
+        await deleteLibraryBlock(req.params.blockid, req, res);
     });
+
+    app.post(COMPOSE_PREFIX + 'application', async (req, res) => {
+        await postApplication(req, res);
+    });
+
+    app.put(COMPOSE_PREFIX + 'application/:apid/build', async (req, res) => {
+        await buildApplication(req.params.apid, req, res);
+    });
+
+    app.put(COMPOSE_PREFIX + 'application/:apid/deploy', async (req, res) => {
+        await deployApplication(req.params.apid, req, res);
+    });
+
+    app.get(COMPOSE_PREFIX + 'applications', async (req, res) => {
+        await listApplications(req, res);
+    });
+
+    app.get(COMPOSE_PREFIX + 'application/:apid', async (req, res) => {
+        await getApplication(req.params.apid, req, res);
+    });
+
+    app.delete(COMPOSE_PREFIX + 'application/:apid', async (req, res) => {
+        await deleteApplication(req.params.apid, req, res);
+    })
 }
 
 exports.Start = async function() {

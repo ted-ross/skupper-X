@@ -31,6 +31,7 @@ DROP TABLE WebSessions;
 DROP TABLE Users;
 DROP TABLE Configuration;
 
+DROP TYPE ApplicationLifecycle;
 DROP TYPE InterfacePolarity;
 DROP TYPE AccessPointType;
 DROP TYPE CertificateRequestType;

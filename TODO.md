@@ -72,11 +72,7 @@
  - Bug: Invitation can be created with a primary access that is not a 'member' access-point
 
 ## Application Definition Tasks
- - Define the data structures to support Skupper-v2 equivalent functionality
- - Implement APIs to access v2-equivalent functions
- - Define the data structures to support full application definition
- - Design the kube-state representation of the above data
- - Implement the synchronization of the kube-state to the management controller
- - Implement APIs to access the full application definition
- - Implement site-scoped service addressing
+ - ~~Define the data structures to support full application definition~~
+ - ~~Design the kube-state representation of the above data~~
+ - ~~Implement APIs to access the full application definition~~
  - Consider pre-loading a directory tree of sync-state in the management controller and separating the sync processing from the database (to reduce load on the DB)
