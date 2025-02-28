@@ -334,7 +334,7 @@ CREATE TABLE LibraryBlocks (
     SpecBody   text
 );
 
-CREATE TYPE ApplicationLifecycle AS ENUM ('created', 'build-errors', 'built', 'deployed');
+CREATE TYPE ApplicationLifecycle AS ENUM ('created', 'building', 'build-errors', 'build-complete', 'deployed');
 
 --
 -- The instantiation of an application template onto an application network
@@ -343,7 +343,8 @@ CREATE TABLE DeployedApplications (
     Id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     RootBlock UUID REFERENCES LibraryBlocks(Id),
     Van       UUID REFERENCES ApplicationNetworks(Id),
-    Lifecycle ApplicationLifecycle DEFAULT 'created'
+    Lifecycle ApplicationLifecycle DEFAULT 'created',
+    BuildLog  text
 );
 
 --

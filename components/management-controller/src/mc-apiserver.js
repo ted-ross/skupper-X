@@ -425,7 +425,6 @@ exports.Start = async function() {
 
     app.use((req, res) => {
         res.status(404).send('invalid path');
-        apiLog(req, 404);
     });
 
     let server = app.listen(API_PORT, () => {

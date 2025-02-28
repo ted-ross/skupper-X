@@ -19,9 +19,11 @@
 
 "use strict";
 
-const yaml = require('js-yaml');
-const Log  = require('./common/log.js').Log;
-const db   = require('./db.js');
+const yaml       = require('js-yaml');
+const Log        = require('./common/log.js').Log;
+const db         = require('./db.js');
+const formidable = require('formidable');
+const util       = require('./common/util.js');
 
 const COMPOSE_PREFIX = '/compose/v1alpha1/';
 const API_VERSION    = 'skupperx.io/compose/v1alpha1';
@@ -127,63 +129,41 @@ class InstanceBlock {
 }
 
 class LibraryBlock {
-    constructor(item, blockType) {
-        this.item       = item;
-        this.blockName  = item.metadata.name;
-        this.blockType  = blockType;
-        this.interfaces = {};
-        this.labels     = {};
+    constructor(name, blockType, specInterfaces, specBody) {
+        this.item = {
+            apiVersion : 'skupperx.io/compose/v1alpha1',
+            kind       : 'Block',
+            type       : blockType,
+            metadata   : {
+                name : name,
+            },
+            spec : {
+                interfaces : specInterfaces,
+                body       : specBody,
+            }
+        };
 
         Log(`Constructed: ${this}`);
     }
 
     toString() {
-        return `LibraryBlock ${this.blockName} (${this.blockType})`;
-    }
-
-    //
-    // Create BlockInterface instances for each interface in the specification.
-    //
-    validateInterfaces() {
-        let expectedPolarity = undefined;
-
-        if (this.blockType == TYPE_COMPONENT) {
-            expectedPolarity = true;
-        } else if (this.blockType == TYPE_CONNECTOR || this.blockType == TYPE_INGRESS) {
-            expectedPolarity = false;
-        }
-
-        if (this.item.spec.interfaces) {
-            for (const iface of this.item.spec.interfaces) {
-                if (!iface.polarity) {
-                    if (expectedPolarity === undefined) {
-                        throw new Error(`Polarity must be specified for interface ${this.blockName}.${iface.name}`);
-                    } else {
-                        iface.polarity = expectedPolarity;
-                    }
-                } else {
-                    if (expectedPolarity !== undefined && iface.polarity != expectedPolarity) {
-                        throw new Error(`Invalid polarity for interface ${this.blockName}.${iface.name}`);
-                    }
-                }
-            }
-        }
+        return `LibraryBlock ${this.item.metadata.name} (${this.item.type})`;
     }
 
     name() {
-        return this.blockName;
+        return this.item.metadata.name;
     }
 
     object() {
         return this.item;
     }
 
-    body() {
-        return this.item.spec.body;
+    isDerivative() {
+        return !!this.item.spec.body.base;
     }
 
-    blockInterfaces() {
-        return this.interfaces;
+    body() {
+        return this.item.spec.body;
     }
 }
 
@@ -220,70 +200,13 @@ class InterfaceBinding {
 }
 
 class Application {
-    constructor(items) {
-        this.application = undefined;
-        this.componentLibrary = {}; // Component blocks indexed by name
-        this.connectorLibrary = {}; // Connector blocks indexed by name
-        this.mixedLibrary     = {}; // Mixed blocks indexed by name
-        this.ingressLibrary   = {}; // Ingresses indexed by name
-
+    constructor(rootBlock, van, libraryBlocks) {
+        this.rootBlock           = rootBlock;
+        this.van                 = van;
+        this.libraryBlocks       = libraryBlocks;
         this.instanceBlocks      = {}; // Blocks referenced in the application tree by their deployed names
         this.bindings            = []; // List of north/south interface bindings
         this.unmatchedInterfaces = []; // List of (block-name; interface-name) for unconnected interfaces
-
-        //
-        // Parse the items list and collate into objects for various kinds of Blocks.
-        // We also need to find exactly one Application object.
-        //
-        for (const item of items) {
-            item.status = {};
-            const name = item.metadata.name;
-            if (item.apiVersion == API_VERSION) {
-                if (item.kind == 'Block') {
-                    if (item.type == TYPE_COMPONENT) {
-                        this.componentLibrary[name] = new LibraryBlock(item, TYPE_COMPONENT);
-                    } else if (item.type == TYPE_CONNECTOR) {
-                        this.connectorLibrary[name] = new LibraryBlock(item, TYPE_CONNECTOR);
-                    } else if (item.type == TYPE_MIXED) {
-                        this.mixedLibrary[name] = new LibraryBlock(item, TYPE_MIXED);
-                    } else if (item.type == TYPE_INGRESS) {
-                        this.ingressLibrary[name] = new LibraryBlock(item, TYPE_INGRESS);
-                    } else {
-                        Log(`Unrecognized block type: ${item.type}`);
-                    }
-                } else if (item.kind == 'Application') {
-                    if (this.application) {
-                        throw new Error(`More than one Application record supplied`);
-                    }
-                    this.application = item;
-                } else {
-                    Log(`Unrecognized record kind: ${item.kind}`);
-                }
-            } else {
-                Log('Unrecognized API version');
-            }
-        }
-
-        //
-        // Fail out if we didn't see an Application object.
-        //
-        if (!this.application) {
-            throw new Error('Missing Application record');
-        }
-
-        //
-        // If any of the objects use inheritance, expand/flatten them so they are each fully specified.
-        //
-        for (var list of [this.componentLibrary, this.connectorLibrary, this.mixedLibrary, this.ingressLibrary]) {
-            for (const block of Object.values(list)) {
-                this.expandInheritance(list, block);
-
-                //
-                // Create BlockInterface objects in the Block
-                //
-                block.validateInterfaces();
-            }
-        }
 
         //
         // Create Bindings for each pairing of BlockInterfaces
@@ -348,7 +271,7 @@ class Application {
                 if (!child.name || !child.block) {
                     throw new Error(`Invalid item in composite blocks for ${instanceName}`);
                 }
-                const libraryChild = this.componentLibrary[child.block] || this.connectorLibrary[child.block] || this.mixedLibrary[child.block] || this.ingressLibrary[child.block];
+                const libraryChild = this.libraryBlocks[child.block];
                 if (!libraryChild) {
                     throw new Error(`Composite component ${instanceName} references a nonexistent library block ${child.block}`);
                 }
@@ -575,6 +498,62 @@ const importBlock = async function(client, block, blockRevisions) {
                        [block.type, name, newRevision, yaml.dump(block.spec.interfaces), yaml.dump(block.spec.body)]);
 }
 
+//
+// Recursive library loader
+//
+const loadLibraryBlock = async function(client, library, blockName) {
+    const result = await client.query("SELECT * FROM LibraryBlocks WHERE Name = $1 ORDER BY Revision DESC LIMIT 1", [blockName]);
+    if (result.rowCount == 0) {
+        throw new Error(`Library block ${blockName} not found`);
+    }
+
+    const block = result.rows[0];
+    const body  = yaml.parse(block.specbody);
+    library[block.name] = new LibraryBlock(block.name, block.type, yaml.parse(block.interfaces), body);
+
+    if (typeof(body.composite) == "object") {
+        for (const subblock of body.composite.blocks) {
+            loadLibraryBlock(client, library, subblock.block)
+        }
+    } else if (body.base) {
+        loadLibraryBlock(client, library, body.base);
+    }
+}
+
+//
+// Expand derivative library blocks, recursively if necessary.
+//
+const expandLibraryBlock = function(library, name) {
+
+}
+
+//
+// Given a root block, create a map of library blocks referenced by the tree rooted at the root block.
+// If any of the blocks are derived from other library blocks, expand those into their final form.
+//
+const loadLibrary = async function(rootBlockName) {
+    const client  = await db.ClientFromPool();
+    var   library = {};
+    try {
+        await client.query("BEGIN");
+        loadLibraryBlock(client, library, rootBlockName);
+
+        for (const [name, lblock] of Object.entries(library)) {
+            if (lblock.isDerivative()) {
+                expandLibraryBlock(library, name);
+            }
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        await client.query("ROLLBACK");
+        throw new Error(`Exception in library loading: ${error.message}`);
+    } finally {
+        client.release();
+    }
+
+    return library;
+}
+
 const postLibraryBlocks = async function(req, res) {
     if (req.is('application/yaml')) {
         const client = await db.ClientFromPool();
@@ -705,7 +684,7 @@ const deleteLibraryBlock = async function(blockid, req, res) {
         }
         await client.query("COMMIT");
     } catch (error) {
-        Log(`Exception in getLibraryBlock: ${error.message}`);
+        Log(`Exception in deleteLibraryBlock: ${error.message}`);
         await client.query("ROLLBACK");
         returnStatus = 500;
         res.status(returnStatus).send(error.message);
@@ -716,6 +695,36 @@ const deleteLibraryBlock = async function(blockid, req, res) {
 }
 
 const postApplication = async function(req, res) {
+    var returnStatus = 201;
+    const client = await db.ClientFromPool();
+    const form = new formidable.IncomingForm();
+    try {
+        await client.query("BEGIN");
+        const [fields, files] = await form.parse(req);
+        const norm = util.ValidateAndNormalizeFields(fields, {
+            'rootblock' : {type: 'uuid', optional: false},
+            'van'       : {type: 'uuid', optional: false},
+        });
+
+        const result = await client.query("INSERT INTO DeployedApplications (RootBlock, Van) VALUES ($1, $2) RETURNING Id",
+                                          [norm.rootblock, norm.van]);
+        if (result.rowCount == 1) {
+            res.status(returnStatus).json(result.rows[0]);
+        } else {
+            returnStatus = 400;
+            res.status(returnStatus).send(result.error);
+        }
+
+        await client.query("COMMIT");
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).send(error.message);
+        await client.query("ROLLBACK");
+    } finally {
+        client.release();
+    }
+
+    return returnStatus;
 }
 
 const buildApplication = async function(apid, req, res) {
@@ -725,12 +734,70 @@ const deployApplication = async function(apid, req, res) {
 }
 
 const listApplications = async function(req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT Id, RootBlock, Van, Lifecycle FROM DeployedApplications");
+        res.status(returnStatus).json(result.rows);
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in listApplications: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
 }
 
 const getApplication = async function(apid, req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT * FROM DeployedApplications WHERE Id = $1", [apid]);
+        if (result.rowCount == 1) {
+            res.status(returnStatus).json(result.rows[0]);
+        } else {
+            returnStatus = 404;
+            res.status(returnStatus).send('Not Found');
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in getApplication: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
 }
 
 const deleteApplication = async function(apid, req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("DELETE FROM DeployedApplications WHERE Id = $1", [apid]);
+        if (result.rowCount != 1) {
+            returnStatus = 404;
+            res.status(returnStatus).send('Not Found');
+        } else {
+            res.status(returnStatus).send('Deleted');
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in deleteApplication: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
 }
 
 exports.ApiInit = function(app) {
