@@ -13,6 +13,8 @@
  */
 
 DROP TABLE DeployedApplications;
+DROP TABLE InstanceBlocks;
+DROP TABLE Applications;
 DROP TABLE LibraryBlocks;
 DROP TABLE InterfaceRoles;
 DROP TABLE BlockTypes;

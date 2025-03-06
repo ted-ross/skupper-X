@@ -307,6 +307,8 @@ CREATE TABLE CertificateRequests (
 
 CREATE TYPE InterfacePolarity AS ENUM ('north', 'south');
 
+CREATE TYPE ApplicationLifecycle AS ENUM ('created', 'building', 'build-errors', 'build-complete');
+
 --
 -- Block Types
 --
@@ -334,17 +336,30 @@ CREATE TABLE LibraryBlocks (
     SpecBody   text
 );
 
-CREATE TYPE ApplicationLifecycle AS ENUM ('created', 'building', 'build-errors', 'build-complete', 'deployed');
+CREATE TABLE Applications (
+    Id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    Name       text,
+    Created    timestamptz DEFAULT CURRENT_TIMESTAMP,
+    RootBlock  UUID REFERENCES LibraryBlocks(Id),
+    Lifecycle  ApplicationLifecycle DEFAULT 'created',
+    BuildLog   text,
+    Derivative text
+);
+
+CREATE TABLE InstanceBlocks (
+    Application  UUID REFERENCES Applications(Id),
+    LibraryBlock UUID REFERENCES LibraryBlocks(Id),
+    InstanceName text,
+    Derivative   text
+);
 
 --
 -- The instantiation of an application template onto an application network
 --
 CREATE TABLE DeployedApplications (
-    Id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    RootBlock UUID REFERENCES LibraryBlocks(Id),
-    Van       UUID REFERENCES ApplicationNetworks(Id),
-    Lifecycle ApplicationLifecycle DEFAULT 'created',
-    BuildLog  text
+    Id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    Application UUID REFERENCES Applications(Id),
+    Van         UUID REFERENCES ApplicationNetworks(Id)
 );
 
 --

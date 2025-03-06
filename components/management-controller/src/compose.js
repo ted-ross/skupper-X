@@ -27,10 +27,6 @@ const util       = require('./common/util.js');
 
 const COMPOSE_PREFIX = '/compose/v1alpha1/';
 const API_VERSION    = 'skupperx.io/compose/v1alpha1';
-const TYPE_COMPONENT = 'skupperx.io/component';
-const TYPE_CONNECTOR = 'skupperx.io/connector';
-const TYPE_MIXED     = 'skupperx.io/mixed';
-const TYPE_INGRESS   = 'skupperx.io/ingress';
 
 var storedApplications = {};
 
@@ -129,41 +125,55 @@ class InstanceBlock {
 }
 
 class LibraryBlock {
-    constructor(name, blockType, specInterfaces, specBody) {
+    constructor(dbRecord) {
         this.item = {
-            apiVersion : 'skupperx.io/compose/v1alpha1',
+            apiVersion : API_VERSION,
             kind       : 'Block',
-            type       : blockType,
+            type       : dbRecord.type,
             metadata   : {
-                name : name,
+                name     : dbRecord.name,
+                revision : dbRecord.revision,
             },
             spec : {
-                interfaces : specInterfaces,
-                body       : specBody,
+                interfaces : yaml.load(dbRecord.interfaces),
+                body       : yaml.load(dbRecord.specbody),
             }
         };
+        this.flag = false;
 
         Log(`Constructed: ${this}`);
     }
 
     toString() {
-        return `LibraryBlock ${this.item.metadata.name} (${this.item.type})`;
+        return `LibraryBlock ${this.name()} (${this.item.type})`;
     }
 
     name() {
-        return this.item.metadata.name;
+        return `${this.item.metadata.name};${this.item.metadata.revision}`;
     }
 
     object() {
         return this.item;
     }
 
-    isDerivative() {
-        return !!this.item.spec.body.base;
+    overWriteObject(updated) {
+        this.item = updated;
+    }
+
+    expandFrom() {
+        return this.item.spec.body.base;
     }
 
     body() {
         return this.item.spec.body;
+    }
+
+    setFlag(value) {
+        this.flag = !!value;
+    }
+
+    isFlagSet() {
+        return this.flag;
     }
 }
 
@@ -290,6 +300,9 @@ class Application {
                         if (binding.super) {
                             //
                             // This is a binding to the containing composite block.
+                            // No action is needed here because "super" bindings are
+                            // resolved downward from composite blocks that instantiate
+                            // this composite sub-block.
                             //
                         } else {
                             //
@@ -367,35 +380,6 @@ class Application {
         }
 
         throw new Error(`Base Interface ${interfaceName} not found in block ${instanceBlock}`);
-    }
-
-    //
-    // Fully specify any blocks that inherit content from other blocks.
-    //
-    expandInheritance(list, block) {
-        let   expanded = block.object();
-        const spec     = expanded.spec;
-        if (spec.base) {
-            const parentBlock = list[spec.base];
-            if (!parentBlock) {
-                throw new Error(`Base reference not found: ${spec.base}`);
-            }
-
-            const parent = parentBlock.object();
-            expanded.spec = deepCopy(parent.spec);
-            if (spec.transformOverwrite) {
-                expanded.spec = deepAppend(expanded.spec, spec.transformOverwrite);
-            }
-            if (spec.transformDelete) {
-                // TODO - array of paths to be removed from the base
-                throw new Error('transformDelete not implemented');
-            }
-            if (spec.transformListItem) {
-                // TODO - array of path/index/transform[Overwrite|Delete|ListItem]
-                throw new Error('transformListItem not implemented');
-            }
-        }
-        block.item = expanded;
     }
 }
 
@@ -499,56 +483,145 @@ const importBlock = async function(client, block, blockRevisions) {
 }
 
 //
-// Recursive library loader
+// Recursive library loader by library block name
+// Name syntax:  <blockname>         - latest revision
+//               <blockname>;<rev>   - specified revision
 //
 const loadLibraryBlock = async function(client, library, blockName) {
-    const result = await client.query("SELECT * FROM LibraryBlocks WHERE Name = $1 ORDER BY Revision DESC LIMIT 1", [blockName]);
-    if (result.rowCount == 0) {
-        throw new Error(`Library block ${blockName} not found`);
+    const elements = blockName.split(';');
+    const latest   = elements.length == 1;
+
+    if (elements.length > 2) {
+        throw new Error(`Malformed library block name: ${blockName}`);
     }
 
-    const block = result.rows[0];
-    const body  = yaml.parse(block.specbody);
-    library[block.name] = new LibraryBlock(block.name, block.type, yaml.parse(block.interfaces), body);
+    //
+    // Fetch all revisions of this block from the database.
+    //
+    const result = await client.query("SELECT * FROM LibraryBlocks WHERE Name = $1 ORDER BY Revision DESC", [elements[0]]);
 
+    if (result.rowCount == 0) {
+        throw new Error(`Library block ${elements[0]} not found`);
+    }
+
+    //
+    // Identify the desired revision and get the latest and desired row records (they may be the same).
+    //
+    const revision = latest ? result.rows[0].revision : parseInt(elements[1]);
+    const latestBlock = result.rows[0];
+    var revisionBlock;
+
+    for (var row of result.rows) {
+        if (row.revision == revision) {
+            revisionBlock = row;
+            break;
+        }
+    }
+
+    if (!revisionBlock) {
+        throw new Error(`Revision of library block not found: ${elements[0]};${revision}`);
+    }
+
+    //
+    // Populate the library map with the latest and desired blocks.  If they are the same, alias the one object.
+    // Don't overwrite any blocks already in the library.
+    //
+    if (!library[elements[0]]) {
+        library[elements[0]] = new LibraryBlock(latestBlock);
+        library[`${elements[0]};${latestBlock.revision}`] = library[elements[0]];
+    }
+
+    if (latestBlock.revision != revisionBlock.revision && !library[`${elements[0]};${revision}`]) {
+        library[`${elements[0]};${revision}`] = new LibraryBlock(revisionBlock);
+    }
+
+    //
+    // If the body of the desired block references other blocks (it's composite or derived), load those into the map as well.
+    //
+    const body = yaml.load(revisionBlock.specbody);
     if (typeof(body.composite) == "object") {
         for (const subblock of body.composite.blocks) {
-            loadLibraryBlock(client, library, subblock.block)
+            await loadLibraryBlock(client, library, subblock.block)
         }
     } else if (body.base) {
-        loadLibraryBlock(client, library, body.base);
+        await loadLibraryBlock(client, library, body.base);
+    }
+}
+
+//
+// Recursive block expander
+//
+const expandBlock = function(library, blockName) {
+    const block         = library[blockName];
+    const baseBlockName = block.expandFrom();
+    if (!!baseBlockName) {
+        if (block.isFlagSet()) {
+            throw new Error(`Circular dependencies detected in hierarchy for block ${blockName}`);
+        }
+        block.setFlag(true);
+
+        //
+        // If the base block is unexpanded, recursively expand it before using it as a base.
+        //
+        const baseBlock = library[baseBlockName];
+        if (!!baseBlock.expandFrom()) {
+            expandBlock(library, baseBlock.name());
+        }
+
+        Log(`Expanding block ${block.name()} from base ${baseBlock.name()}`);
+
+        //
+        // Do the expansion from the base.
+        //
+        let   expanded = block.object();
+        const specbody = deepCopy(expanded.spec.body);
+        if (specbody.base) {
+            const parent = baseBlock.object();
+            expanded.spec.body = deepCopy(parent.spec.body);
+            if (specbody.transformOverwrite) {
+                expanded.spec.body = deepAppend(expanded.spec.body, specbody.transformOverwrite);
+            }
+            if (specbody.transformDelete) {
+                // TODO - array of paths to be removed from the base
+                throw new Error('transformDelete not implemented');
+            }
+            if (specbody.transformListItem) {
+                // TODO - array of path/index/transform[Overwrite|Delete|ListItem]
+                throw new Error('transformListItem not implemented');
+            }
+        }
+        block.overWriteObject(expanded);
+        block.setFlag(false);
     }
 }
 
 //
 // Expand derivative library blocks, recursively if necessary.
+// Ensure that no block is derived from another not-yet-expanded derivative block.
+// Detect and throw an error for circular derivation conditions.
 //
-const expandLibraryBlock = function(library, name) {
-
+const expandLibraryBlocks = function(library) {
+    for (const name of Object.keys(library)) {
+        //
+        // We will only process revisioned (non-aliased) blocks.
+        //
+        if (name.indexOf(';') > 0) {
+            expandBlock(library, name);
+        }
+    }
 }
 
 //
 // Given a root block, create a map of library blocks referenced by the tree rooted at the root block.
 // If any of the blocks are derived from other library blocks, expand those into their final form.
 //
-const loadLibrary = async function(rootBlockName) {
-    const client  = await db.ClientFromPool();
+const loadLibrary = async function(client, rootBlockName) {
     var   library = {};
     try {
-        await client.query("BEGIN");
-        loadLibraryBlock(client, library, rootBlockName);
-
-        for (const [name, lblock] of Object.entries(library)) {
-            if (lblock.isDerivative()) {
-                expandLibraryBlock(library, name);
-            }
-        }
-        await client.query("COMMIT");
+        await loadLibraryBlock(client, library, rootBlockName);
+        expandLibraryBlocks(library);
     } catch (error) {
-        await client.query("ROLLBACK");
         throw new Error(`Exception in library loading: ${error.message}`);
-    } finally {
-        client.release();
     }
 
     return library;
@@ -702,12 +775,12 @@ const postApplication = async function(req, res) {
         await client.query("BEGIN");
         const [fields, files] = await form.parse(req);
         const norm = util.ValidateAndNormalizeFields(fields, {
-            'rootblock' : {type: 'uuid', optional: false},
-            'van'       : {type: 'uuid', optional: false},
+            'name'      : {type: 'string', optional: false},
+            'rootblock' : {type: 'uuid',   optional: false},
         });
 
-        const result = await client.query("INSERT INTO DeployedApplications (RootBlock, Van) VALUES ($1, $2) RETURNING Id",
-                                          [norm.rootblock, norm.van]);
+        const result = await client.query("INSERT INTO Applications (Name, RootBlock) VALUES ($1, $2) RETURNING Id",
+                                          [norm.name, norm.rootblock]);
         if (result.rowCount == 1) {
             res.status(returnStatus).json(result.rows[0]);
         } else {
@@ -728,6 +801,29 @@ const postApplication = async function(req, res) {
 }
 
 const buildApplication = async function(apid, req, res) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT LibraryBlocks.Name as lbname, LibraryBlocks.Revision FROM Applications " +
+                                          "JOIN LibraryBlocks ON LibraryBlocks.Id = RootBlock " +
+                                          "WHERE Applications.Id = $1", [apid]);
+        if (result.rowCount == 1) {
+            const library = await loadLibrary(client, `${result.rows[0].lbname};${result.rows[0].revision}`);
+            console.log('Library Keys:');
+            console.log(Object.keys(library));
+        }
+        await client.query("COMMIT");
+        res.status(returnStatus).send('Ok');
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).send(error.message);
+        await client.query("ROLLBACK");
+    } finally {
+        client.release();
+    }
+
+    return returnStatus;
 }
 
 const deployApplication = async function(apid, req, res) {
