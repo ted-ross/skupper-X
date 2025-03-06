@@ -65,7 +65,7 @@ class BlockInterface {
         this.ownerRef     = ownerRef;
         this.name         = name;
         this.role         = role;
-        this.polarity     = polarity;
+        this.polarity     = polarity == 'north';
         this.blockType    = blockType;
         this.binding      = undefined;
         this.boundThrough = false;
@@ -96,11 +96,12 @@ class InstanceBlock {
         this.name         = name;
         this.labels       = {};
         this.interfaces   = {};
+        this.derivative   = {};
 
         const ilist = libraryBlock.object().spec.interfaces;
         if (ilist) {
             for (const iface of ilist) {
-                this.interfaces[iface.name] = new BlockInterface(this, iface.name, iface.role, iface.polarity, iface.blockType);
+                this.interfaces[iface.name] = new BlockInterface(this, iface.name, iface.role, iface.polarity, iface.blockType || libraryBlock.nameNoRev());
             }
         }
 
@@ -115,12 +116,28 @@ class InstanceBlock {
         this.labels[key] = value;
     }
 
+    addDerivative(key, value) {
+        this.derivative[key] = value;
+    }
+
+    getDerivative() {
+        return this.derivative;
+    }
+
     object() {
         return this.libraryBlock.object();
     }
 
     findInterface(name) {
         return this.interfaces[name];
+    }
+
+    getLibraryBlock() {
+        return this.libraryBlock;
+    }
+
+    libraryBlockDatabaseId() {
+        return this.libraryBlock.databaseId();
     }
 }
 
@@ -140,6 +157,7 @@ class LibraryBlock {
             }
         };
         this.flag = false;
+        this.dbid = dbRecord.id;
 
         Log(`Constructed: ${this}`);
     }
@@ -150,6 +168,18 @@ class LibraryBlock {
 
     name() {
         return `${this.item.metadata.name};${this.item.metadata.revision}`;
+    }
+
+    nameNoRev() {
+        return this.item.metadata.name;
+    }
+
+    getType() {
+        return this.item.type;
+    }
+
+    databaseId() {
+        return this.dbid;
     }
 
     object() {
@@ -210,8 +240,9 @@ class InterfaceBinding {
 }
 
 class Application {
-    constructor(rootBlock, van, libraryBlocks) {
-        this.rootBlock           = rootBlock;
+    constructor(rootBlockName, appName, van, libraryBlocks) {
+        this.rootBlockName       = rootBlockName;
+        this.appName             = appName;
         this.van                 = van;
         this.libraryBlocks       = libraryBlocks;
         this.instanceBlocks      = {}; // Blocks referenced in the application tree by their deployed names
@@ -231,7 +262,11 @@ class Application {
     }
 
     name() {
-        return this.application.metadata.name;
+        return this.appName;
+    }
+
+    getInstanceBlocks() {
+        return this.instanceBlocks;
     }
 
     //
@@ -246,14 +281,13 @@ class Application {
         //
         // Recursively connect all of the interfaces
         //
-        const rootName = this.application.spec.rootBlock;
-        if (!this.componentLibrary[rootName]) {
-            throw new Error(`Application references non-existant root block: ${rootName}`);
+        if (!this.libraryBlocks[this.rootBlockName]) {
+            throw new Error(`Application references non-existant root block: ${this.rootBlockName}`);
         }
-        const rootBlock = this.componentLibrary[rootName];
+        const rootBlock = this.libraryBlocks[this.rootBlockName];
         const path      = '/' + this.name();
         this.instanceBlocks[path] = new InstanceBlock(rootBlock, path);
-        this.instantiateComponent(path + '/', rootBlock, rootName);
+        this.instantiateComponent(path + '/', rootBlock, this.rootBlockName);
 
         //
         // Build a list of unpaired interfaces.
@@ -627,6 +661,25 @@ const loadLibrary = async function(client, rootBlockName) {
     return library;
 }
 
+const generateDerivativeData = function(application) {
+    const instanceBlocks = application.getInstanceBlocks();
+    for (const [name, block] of Object.entries(instanceBlocks)) {
+        const libraryBlock  = block.getLibraryBlock();
+        const libraryRecord = libraryBlock.object();
+        const body          = libraryRecord.spec.body;
+
+        if (typeof(body) == "object") {
+            if (body.address) {
+                const rkey = `${body.address.keyPrefix || ''}${name}`;
+                block.addDerivative('routingKey', rkey);
+            }
+        }
+    }
+}
+
+//=========================================================================================================
+// API Functions
+//=========================================================================================================
 const postLibraryBlocks = async function(req, res) {
     if (req.is('application/yaml')) {
         const client = await db.ClientFromPool();
@@ -805,19 +858,49 @@ const buildApplication = async function(apid, req, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT LibraryBlocks.Name as lbname, LibraryBlocks.Revision FROM Applications " +
+        const result = await client.query("SELECT LibraryBlocks.Name as lbname, LibraryBlocks.Revision, Applications.Name as appname FROM Applications " +
                                           "JOIN LibraryBlocks ON LibraryBlocks.Id = RootBlock " +
                                           "WHERE Applications.Id = $1", [apid]);
         if (result.rowCount == 1) {
-            const library = await loadLibrary(client, `${result.rows[0].lbname};${result.rows[0].revision}`);
-            console.log('Library Keys:');
-            console.log(Object.keys(library));
+            const app = result.rows[0];
+
+            //
+            // Get an in-memory cache of the library blocks referenced from the root block.
+            //
+            const rootBlockName = `${app.lbname};${app.revision}`;
+            const library = await loadLibrary(client, rootBlockName);
+
+            //
+            // Construct the application, resolving all of the inter-block bindings.
+            //
+            const application = new Application(rootBlockName, app.appname, null, library);
+            storedApplications[apid] = application;
+
+            //
+            // Generate the derivative data
+            //
+            generateDerivativeData(application);
+
+            //
+            // Generate database entries for the instance blocks.
+            //
+            await client.query("DELETE FROM InstanceBlocks WHERE Application = $1", [apid]);
+            const instanceBlocks = application.getInstanceBlocks();
+            for (const [name, block] of Object.entries(instanceBlocks)) {
+                await client.query("INSERT INTO InstanceBlocks (Application, LibraryBlock, InstanceName, Derivative) VALUES ($1, $2, $3, $4)",
+                                   [apid, block.libraryBlockDatabaseId(), name, JSON.stringify(block.getDerivative())]);
+            }
+
+            //
+            // Update the lifecycle of the application.
+            //
+            await client.query("UPDATE Applications SET Lifecycle = 'build-complete' WHERE Id = $1", [apid]);
         }
         await client.query("COMMIT");
         res.status(returnStatus).send('Ok');
     } catch (error) {
         returnStatus = 400;
-        res.status(returnStatus).send(error.message);
+        res.status(returnStatus).send(error.stack);
         await client.query("ROLLBACK");
     } finally {
         client.release();

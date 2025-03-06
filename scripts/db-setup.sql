@@ -307,7 +307,7 @@ CREATE TABLE CertificateRequests (
 
 CREATE TYPE InterfacePolarity AS ENUM ('north', 'south');
 
-CREATE TYPE ApplicationLifecycle AS ENUM ('created', 'building', 'build-errors', 'build-complete');
+CREATE TYPE ApplicationLifecycle AS ENUM ('created', 'build-errors', 'build-complete');
 
 --
 -- Block Types
