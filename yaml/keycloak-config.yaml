@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    description: keycloak service
+  labels:
+    application: 'keycloak'
+  name: 'keycloak'
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+  selector:
+    app: 'keycloak'
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    application: 'keycloak'
+  name: 'keycloak'
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: 'keycloak'
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        application: 'keycloak'
+        app: 'keycloak'
+    spec:
+      containers:
+        - env:
+            - name: KEYCLOAK_ADMIN
+              value: 'admin'
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              value: 'admin'
+            - name: KC_PROXY
+              value: 'edge'
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: 'jdbc:postgresql://postgres/studiodb'
+            - name: KC_DB_USERNAME
+              value: 'access'
+            - name: KC_DB_PASSWORD
+              value: 'password'
+          image: quay.io/keycloak/keycloak:24.0.4
+          livenessProbe:
+            failureThreshold: 300
+            httpGet:
+              path: /
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 120
+          name: 'keycloak'
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 300
+            httpGet:
+              path: /
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 120
+          securityContext:
+            privileged: false
+          volumeMounts:
+            - mountPath: /opt/keycloak/data
+              name: empty
+          args: ["start-dev"]
+      volumes:
+        - name: empty
+          emptyDir: {}
