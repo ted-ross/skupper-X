@@ -307,15 +307,16 @@ CREATE TABLE CertificateRequests (
 
 CREATE TYPE InterfacePolarity AS ENUM ('north', 'south');
 
-CREATE TYPE ApplicationLifecycle AS ENUM ('created', 'build-warnings', 'build-errors', 'build-complete');
+CREATE TYPE ApplicationLifecycle AS ENUM ('created', 'build-warnings', 'build-errors', 'build-complete', 'deployed');
 
 --
 -- Block Types
 --
 CREATE TABLE BlockTypes (
-    Name text PRIMARY KEY,
-    AllowNorth boolean,
-    AllowSouth boolean
+    Name           text PRIMARY KEY,
+    AllowNorth     boolean,
+    AllowSouth     boolean,
+    AllocateToSite boolean
 );
 
 CREATE TABLE InterfaceRoles (
@@ -347,6 +348,7 @@ CREATE TABLE Applications (
 );
 
 CREATE TABLE InstanceBlocks (
+    Id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     Application  UUID REFERENCES Applications(Id),
     LibraryBlock UUID REFERENCES LibraryBlocks(Id),
     InstanceName text,
@@ -362,6 +364,12 @@ CREATE TABLE DeployedApplications (
     Van         UUID REFERENCES ApplicationNetworks(Id)
 );
 
+CREATE TABLE BlockAllocations (
+    DeployedApplication UUID REFERENCES DeployedApplications(Id),
+    InstanceBlock       UUID REFERENCES InstanceBlocks(Id),
+    MemberSite          UUID REFERENCES MemberSites(Id)
+);
+
 --
 -- Pre-populate the database with some test data.
 --
@@ -370,12 +378,12 @@ INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpir
 INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 'tross@redhat.com', '18f4e1168a37a7a2d5ac2bff043c12c862d515a2cbb9ab5fe207ab4ef235e129c1a475ffca25c4cb3831886158c3836664d489c98f68c0ac7af5a8f6d35e04fa');
 INSERT INTO WebSessions (Id, UserId) VALUES (gen_random_uuid(), 1);
 
-INSERT INTO BlockTypes (Name, AllowNorth, AllowSouth) VALUES
-    ('skupperx.io/component', true,  false),
-    ('skupperx.io/connector', false, true),
-    ('skupperx.io/mixed',     true,  true),
-    ('skupperx.io/ingress',   false, true),
-    ('skupperx.io/egress',    false, true);
+INSERT INTO BlockTypes (Name, AllowNorth, AllowSouth, AllocateToSite) VALUES
+    ('skupperx.io/component', true,  false, true),
+    ('skupperx.io/connector', false, true,  false),
+    ('skupperx.io/mixed',     true,  true,  false),
+    ('skupperx.io/ingress',   false, true,  false),
+    ('skupperx.io/egress',    false, true,  false);
 
 INSERT INTO InterfaceRoles (Name) VALUES
     ('accept'),  ('connect'),

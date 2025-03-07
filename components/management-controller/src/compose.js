@@ -128,6 +128,7 @@ class InstanceBlock {
         this.labels       = {};
         this.interfaces   = {};
         this.derivative   = {};
+        this.dbid         = null;
 
         const ilist = libraryBlock.object().spec.interfaces;
         if (ilist) {
@@ -141,6 +142,14 @@ class InstanceBlock {
 
     toString() {
         return `InstanceBlock ${this.name} [${this.libraryBlock}]`;
+    }
+
+    setDatabaseId(id) {
+        this.dbid = id;
+    }
+
+    databaseId() {
+        return this.dbid;
     }
 
     setLabel(key, value) {
@@ -702,6 +711,14 @@ const generateDerivativeData = function(application, buildLog) {
                 block.addDerivative('routingKey', rkey);
             }
         }
+
+        //
+        // TODO - Generate an allocateToSite flag for appropriate blocks.
+        //
+        // Appropriate if:
+        //    - The allocateToSite flag is TRUE for the block type
+        //    - The block is not composite
+        //
     }
 }
 
@@ -887,11 +904,18 @@ const buildApplication = async function(apid, req, res) {
     let   buildLog = new BuildLog();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT LibraryBlocks.Name as lbname, LibraryBlocks.Revision, Applications.Name as appname FROM Applications " +
+        const result = await client.query("SELECT LibraryBlocks.Name as lbname, LibraryBlocks.Revision, Applications.Name, Lifecycle as appname FROM Applications " +
                                           "JOIN LibraryBlocks ON LibraryBlocks.Id = RootBlock " +
                                           "WHERE Applications.Id = $1", [apid]);
         if (result.rowCount == 1) {
-            const app      = result.rows[0];
+            const app = result.rows[0];
+
+            //
+            // Prevent against re-building applications that are deployed.  This needs to be well thought-through.
+            //
+            if (app.lifecycle == 'deployed') {
+                buildLog.error('Cannot build an application that is deployed');
+            }
 
             //
             // Get an in-memory cache of the library blocks referenced from the root block.
@@ -906,6 +930,10 @@ const buildApplication = async function(apid, req, res) {
             storedApplications[apid] = application;
 
             //
+            // TODO Get the block types to feed into the derivative generator.
+            //
+
+            //
             // Generate the derivative data
             //
             generateDerivativeData(application, buildLog);
@@ -916,8 +944,11 @@ const buildApplication = async function(apid, req, res) {
             await client.query("DELETE FROM InstanceBlocks WHERE Application = $1", [apid]);
             const instanceBlocks = application.getInstanceBlocks();
             for (const [name, block] of Object.entries(instanceBlocks)) {
-                await client.query("INSERT INTO InstanceBlocks (Application, LibraryBlock, InstanceName, Derivative) VALUES ($1, $2, $3, $4)",
-                                   [apid, block.libraryBlockDatabaseId(), name, JSON.stringify(block.getDerivative())]);
+                const result = await client.query("INSERT INTO InstanceBlocks (Application, LibraryBlock, InstanceName, Derivative) VALUES ($1, $2, $3, $4) RETURNING Id",
+                                                  [apid, block.libraryBlockDatabaseId(), name, JSON.stringify(block.getDerivative())]);
+                if (result.rowCount == 1) {
+                    block.setDatabaseId(result.rows[0].id);
+                }
             }
 
             //

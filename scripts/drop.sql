@@ -12,6 +12,7 @@
  * limitations under the License.
  */
 
+DROP TABLE BlockAllocations;
 DROP TABLE DeployedApplications;
 DROP TABLE InstanceBlocks;
 DROP TABLE Applications;
