@@ -27,6 +27,7 @@ const util       = require('./common/util.js');
 
 const COMPOSE_PREFIX = '/compose/v1alpha1/';
 const API_VERSION    = 'skupperx.io/compose/v1alpha1';
+const BUILD_ERROR    = 'build-error';
 
 var storedApplications = {};
 
@@ -60,8 +61,38 @@ const deepAppend = function(base, overlay) {
     }
 }
 
+class BuildLog {
+    constructor() {
+        this.text   = "";
+        this.result = 'build-complete';
+    }
+
+    log(line) {
+        this.text += line + '\n';
+    }
+
+    warning(line) {
+        this.result = 'build-warnings';
+        this.text += 'WARNING: ' + line + '\n';
+    }
+
+    error(line) {
+        this.result = 'build-errors';
+        this.text += 'ERROR: ' + line + '\n';
+        throw new Error(BUILD_ERROR);
+    }
+
+    getText() {
+        return this.text;
+    }
+
+    getResult() {
+        return this.result;
+    }
+}
+
 class BlockInterface {
-    constructor(ownerRef, name, role, polarity, blockType) {
+    constructor(ownerRef, name, role, polarity, blockType, buildLog) {
         this.ownerRef     = ownerRef;
         this.name         = name;
         this.role         = role;
@@ -70,7 +101,7 @@ class BlockInterface {
         this.binding      = undefined;
         this.boundThrough = false;
 
-        Log(`Constructed: ${this}`);
+        buildLog.log(`Constructed: ${this}`);
     }
 
     toString() {
@@ -91,7 +122,7 @@ class BlockInterface {
 }
 
 class InstanceBlock {
-    constructor(libraryBlock, name) {
+    constructor(libraryBlock, name, buildLog) {
         this.libraryBlock = libraryBlock;
         this.name         = name;
         this.labels       = {};
@@ -101,11 +132,11 @@ class InstanceBlock {
         const ilist = libraryBlock.object().spec.interfaces;
         if (ilist) {
             for (const iface of ilist) {
-                this.interfaces[iface.name] = new BlockInterface(this, iface.name, iface.role, iface.polarity, iface.blockType || libraryBlock.nameNoRev());
+                this.interfaces[iface.name] = new BlockInterface(this, iface.name, iface.role, iface.polarity, iface.blockType || libraryBlock.nameNoRev(), buildLog);
             }
         }
 
-        Log(`Constructed: ${this}`);
+        buildLog.log(`Constructed: ${this}`);
     }
 
     toString() {
@@ -142,7 +173,7 @@ class InstanceBlock {
 }
 
 class LibraryBlock {
-    constructor(dbRecord) {
+    constructor(dbRecord, buildLog) {
         this.item = {
             apiVersion : API_VERSION,
             kind       : 'Block',
@@ -159,7 +190,7 @@ class LibraryBlock {
         this.flag = false;
         this.dbid = dbRecord.id;
 
-        Log(`Constructed: ${this}`);
+        buildLog.log(`Constructed: ${this}`);
     }
 
     toString() {
@@ -208,9 +239,9 @@ class LibraryBlock {
 }
 
 class InterfaceBinding {
-    constructor(left, right) {
+    constructor(left, right, buildLog) {
         if (left.polarity == right.polarity) {
-            throw new Error(`Attempting to bind interfaces with the same polarity: ${left}, ${right}`);
+            buildLog.error(`Attempting to bind interfaces with the same polarity: ${left}, ${right}`)
         }
 
         this.northRef = left.polarity ? left : right;
@@ -218,12 +249,12 @@ class InterfaceBinding {
 
         for (const ref of [this.southRef, this.northRef]) {
             if (ref.hasBinding()) {
-                throw new Error(`Attempting to bind an interface that is already bound: ${ref}`);
+                buildLog.error(`Attempting to bind an interface that is already bound: ${ref}`)
             }
         }
 
         if (this.southRef.role != this.northRef.role) {
-            throw new Error(`Attempting to bind interfaces with different roles: ${this.southRef}, ${this.northRef}`);
+            buildLog.error(`Attempting to bind interfaces with different roles: ${this.southRef}, ${this.northRef}`)
         }
 
         // TODO - check the compatibility of the block-types
@@ -231,7 +262,7 @@ class InterfaceBinding {
         this.northRef.setBinding(this);
         this.southRef.setBinding(this);
 
-        Log(`Constructed: ${this}`);
+        buildLog.log(`Constructed: ${this}`);
     }
 
     toString() {
@@ -240,7 +271,7 @@ class InterfaceBinding {
 }
 
 class Application {
-    constructor(rootBlockName, appName, van, libraryBlocks) {
+    constructor(rootBlockName, appName, van, libraryBlocks, buildLog) {
         this.rootBlockName       = rootBlockName;
         this.appName             = appName;
         this.van                 = van;
@@ -248,13 +279,14 @@ class Application {
         this.instanceBlocks      = {}; // Blocks referenced in the application tree by their deployed names
         this.bindings            = []; // List of north/south interface bindings
         this.unmatchedInterfaces = []; // List of (block-name; interface-name) for unconnected interfaces
+        this.derivative          = {};
 
         //
         // Create Bindings for each pairing of BlockInterfaces
         //
-        this.pairInterfaces();
+        this.pairInterfaces(buildLog);
 
-        Log(`Constructed: ${this}`);
+        buildLog.log(`Constructed: ${this}`);
     }
 
     toString() {
@@ -263,6 +295,14 @@ class Application {
 
     name() {
         return this.appName;
+    }
+
+    addDerivative(key, value) {
+        this.derivative[key] = value;
+    }
+
+    getDerivative() {
+        return this.derivative;
     }
 
     getInstanceBlocks() {
@@ -274,7 +314,7 @@ class Application {
     // The matched interfaces must involve monolithic (non-composite) components and connectors.
     // When complete, make a list of unmatched interfaces for reference.
     //
-    pairInterfaces() {
+    pairInterfaces(buildLog) {
         this.bindings = [];
         this.unmatchedInterfaces = [];
 
@@ -282,12 +322,12 @@ class Application {
         // Recursively connect all of the interfaces
         //
         if (!this.libraryBlocks[this.rootBlockName]) {
-            throw new Error(`Application references non-existant root block: ${this.rootBlockName}`);
+            buildLog.error(`Application references non-existant root block: ${this.rootBlockName}`)
         }
         const rootBlock = this.libraryBlocks[this.rootBlockName];
         const path      = '/' + this.name();
-        this.instanceBlocks[path] = new InstanceBlock(rootBlock, path);
-        this.instantiateComponent(path + '/', rootBlock, this.rootBlockName);
+        this.instanceBlocks[path] = new InstanceBlock(rootBlock, path, buildLog);
+        this.instantiateSubComponents(path + '/', rootBlock, this.rootBlockName, buildLog);
 
         //
         // Build a list of unpaired interfaces.
@@ -296,7 +336,7 @@ class Application {
             for (const iface of Object.values(block.interfaces)) {
                 if (!iface.hasBinding()) {
                     this.unmatchedInterfaces.push(iface);
-                    Log(`Unbound interface: ${iface}`);
+                    buildLog.warning(`Unbound interface: ${iface}`);
                 }
             }
         }
@@ -305,7 +345,7 @@ class Application {
     //
     // Recursive component instantiation function.
     //
-    instantiateComponent(path, libraryBlock, instanceName) {
+    instantiateSubComponents(path, libraryBlock, instanceName, buildLog) {
         const body = libraryBlock.body();
         if (body.composite) {
             //
@@ -313,15 +353,15 @@ class Application {
             //
             for (const child of body.composite.blocks) {
                 if (!child.name || !child.block) {
-                    throw new Error(`Invalid item in composite blocks for ${instanceName}`);
+                    buildLog.error(`Invalid item in composite blocks for ${instanceName}`)
                 }
                 const libraryChild = this.libraryBlocks[child.block];
                 if (!libraryChild) {
-                    throw new Error(`Composite component ${instanceName} references a nonexistent library block ${child.block}`);
+                    buildLog.error(`Composite component ${instanceName} references a nonexistent library block ${child.block}`)
                 }
                 const subPath = path + child.name;
-                this.instanceBlocks[subPath] = new InstanceBlock(libraryChild, subPath);
-                this.instantiateComponent(subPath + '/', libraryChild, child.name);
+                this.instanceBlocks[subPath] = new InstanceBlock(libraryChild, subPath, buildLog);
+                this.instantiateSubComponents(subPath + '/', libraryChild, child.name, buildLog);
             }
 
             //
@@ -349,17 +389,19 @@ class Application {
                             const childInstance  = this.instanceBlocks[childPath];
                             const remoteInstance = this.instanceBlocks[remoteBlockPath];
 
-                            const childInterface  = this.findBaseInterface(childInstance, childInterfaceName);
-                            const remoteInterface = this.findBaseInterface(remoteInstance, remoteBlockInterfaceName);
+                            if (!remoteInstance) {
+                                buildLog.error(`Unknown reference ${remoteBlockPath} in ${libraryBlock}`);
+                            }
 
-                            const ifBinding = new InterfaceBinding(childInterface, remoteInterface);
+                            const childInterface  = this.findBaseInterface(childInstance, childInterfaceName, buildLog);
+                            const remoteInterface = this.findBaseInterface(remoteInstance, remoteBlockInterfaceName, buildLog);
+
+                            const ifBinding = new InterfaceBinding(childInterface, remoteInterface, buildLog);
                             this.bindings.push(ifBinding);
                         }
                     }
                 }
             }
-        } else {
-            // This space intentionally left blank.
         }
     }
 
@@ -368,7 +410,7 @@ class Application {
     // If the instance block is composite, it may be necessary to recurse downward until a monolithic block is found.
     // Throw an error if the interface cannot be found.
     //
-    findBaseInterface(instanceBlock, interfaceName) {
+    findBaseInterface(instanceBlock, interfaceName, buildLog) {
         const spec = instanceBlock.object().spec;
         if (spec.interfaces) {
             for (const specif of spec.interfaces) {
@@ -413,17 +455,8 @@ class Application {
             }
         }
 
-        throw new Error(`Base Interface ${interfaceName} not found in block ${instanceBlock}`);
+        buildLog.error(`Base Interface ${interfaceName} not found in block ${instanceBlock}`)
     }
-}
-
-const processItems = async function(apid, items) {
-    let application = new Application(items);
-    let name        = application.name();
-
-    storedApplications[name] = application;
-
-    Log(`Application processed: ${application}`);
 }
 
 const validateBlock = async function(block, validTypes, validRoles, blockRevisions) {
@@ -521,12 +554,12 @@ const importBlock = async function(client, block, blockRevisions) {
 // Name syntax:  <blockname>         - latest revision
 //               <blockname>;<rev>   - specified revision
 //
-const loadLibraryBlock = async function(client, library, blockName) {
+const loadLibraryBlock = async function(client, library, blockName, buildLog) {
     const elements = blockName.split(';');
     const latest   = elements.length == 1;
 
     if (elements.length > 2) {
-        throw new Error(`Malformed library block name: ${blockName}`);
+        buildLog.error(`Malformed library block name: ${blockName}`)
     }
 
     //
@@ -535,7 +568,7 @@ const loadLibraryBlock = async function(client, library, blockName) {
     const result = await client.query("SELECT * FROM LibraryBlocks WHERE Name = $1 ORDER BY Revision DESC", [elements[0]]);
 
     if (result.rowCount == 0) {
-        throw new Error(`Library block ${elements[0]} not found`);
+        buildLog.error(`Library block ${elements[0]} not found`)
     }
 
     //
@@ -553,7 +586,7 @@ const loadLibraryBlock = async function(client, library, blockName) {
     }
 
     if (!revisionBlock) {
-        throw new Error(`Revision of library block not found: ${elements[0]};${revision}`);
+        buildLog.error(`Revision of library block not found: ${elements[0]};${revision}`)
     }
 
     //
@@ -561,12 +594,12 @@ const loadLibraryBlock = async function(client, library, blockName) {
     // Don't overwrite any blocks already in the library.
     //
     if (!library[elements[0]]) {
-        library[elements[0]] = new LibraryBlock(latestBlock);
+        library[elements[0]] = new LibraryBlock(latestBlock, buildLog);
         library[`${elements[0]};${latestBlock.revision}`] = library[elements[0]];
     }
 
     if (latestBlock.revision != revisionBlock.revision && !library[`${elements[0]};${revision}`]) {
-        library[`${elements[0]};${revision}`] = new LibraryBlock(revisionBlock);
+        library[`${elements[0]};${revision}`] = new LibraryBlock(revisionBlock, buildLog);
     }
 
     //
@@ -575,22 +608,22 @@ const loadLibraryBlock = async function(client, library, blockName) {
     const body = yaml.load(revisionBlock.specbody);
     if (typeof(body.composite) == "object") {
         for (const subblock of body.composite.blocks) {
-            await loadLibraryBlock(client, library, subblock.block)
+            await loadLibraryBlock(client, library, subblock.block, buildLog)
         }
     } else if (body.base) {
-        await loadLibraryBlock(client, library, body.base);
+        await loadLibraryBlock(client, library, body.base, buildLog);
     }
 }
 
 //
 // Recursive block expander
 //
-const expandBlock = function(library, blockName) {
+const expandBlock = function(library, blockName, buildLog) {
     const block         = library[blockName];
     const baseBlockName = block.expandFrom();
     if (!!baseBlockName) {
         if (block.isFlagSet()) {
-            throw new Error(`Circular dependencies detected in hierarchy for block ${blockName}`);
+            buildLog.error(`Circular dependencies detected in hierarchy for block ${blockName}`)
         }
         block.setFlag(true);
 
@@ -599,10 +632,8 @@ const expandBlock = function(library, blockName) {
         //
         const baseBlock = library[baseBlockName];
         if (!!baseBlock.expandFrom()) {
-            expandBlock(library, baseBlock.name());
+            expandBlock(library, baseBlock.name(), buildLog);
         }
-
-        Log(`Expanding block ${block.name()} from base ${baseBlock.name()}`);
 
         //
         // Do the expansion from the base.
@@ -617,15 +648,17 @@ const expandBlock = function(library, blockName) {
             }
             if (specbody.transformDelete) {
                 // TODO - array of paths to be removed from the base
-                throw new Error('transformDelete not implemented');
+                buildLog.error(`transformDelete not implemented in ${block}`);
             }
             if (specbody.transformListItem) {
                 // TODO - array of path/index/transform[Overwrite|Delete|ListItem]
-                throw new Error('transformListItem not implemented');
+                buildLog.error(`ERROR: transformListItem not implemented in ${block}`);
             }
         }
         block.overWriteObject(expanded);
         block.setFlag(false);
+
+        buildLog.log(`Expanded block ${block.name()} from base ${baseBlock.name()}`);
     }
 }
 
@@ -634,13 +667,13 @@ const expandBlock = function(library, blockName) {
 // Ensure that no block is derived from another not-yet-expanded derivative block.
 // Detect and throw an error for circular derivation conditions.
 //
-const expandLibraryBlocks = function(library) {
+const expandLibraryBlocks = function(library, buildLog) {
     for (const name of Object.keys(library)) {
         //
         // We will only process revisioned (non-aliased) blocks.
         //
         if (name.indexOf(';') > 0) {
-            expandBlock(library, name);
+            expandBlock(library, name, buildLog);
         }
     }
 }
@@ -649,19 +682,14 @@ const expandLibraryBlocks = function(library) {
 // Given a root block, create a map of library blocks referenced by the tree rooted at the root block.
 // If any of the blocks are derived from other library blocks, expand those into their final form.
 //
-const loadLibrary = async function(client, rootBlockName) {
+const loadLibrary = async function(client, rootBlockName, buildLog) {
     var   library = {};
-    try {
-        await loadLibraryBlock(client, library, rootBlockName);
-        expandLibraryBlocks(library);
-    } catch (error) {
-        throw new Error(`Exception in library loading: ${error.message}`);
-    }
-
+    await loadLibraryBlock(client, library, rootBlockName, buildLog);
+    expandLibraryBlocks(library, buildLog);
     return library;
 }
 
-const generateDerivativeData = function(application) {
+const generateDerivativeData = function(application, buildLog) {
     const instanceBlocks = application.getInstanceBlocks();
     for (const [name, block] of Object.entries(instanceBlocks)) {
         const libraryBlock  = block.getLibraryBlock();
@@ -855,31 +883,32 @@ const postApplication = async function(req, res) {
 
 const buildApplication = async function(apid, req, res) {
     var returnStatus = 200;
-    const client = await db.ClientFromPool();
+    const client   = await db.ClientFromPool();
+    let   buildLog = new BuildLog();
     try {
         await client.query("BEGIN");
         const result = await client.query("SELECT LibraryBlocks.Name as lbname, LibraryBlocks.Revision, Applications.Name as appname FROM Applications " +
                                           "JOIN LibraryBlocks ON LibraryBlocks.Id = RootBlock " +
                                           "WHERE Applications.Id = $1", [apid]);
         if (result.rowCount == 1) {
-            const app = result.rows[0];
+            const app      = result.rows[0];
 
             //
             // Get an in-memory cache of the library blocks referenced from the root block.
             //
             const rootBlockName = `${app.lbname};${app.revision}`;
-            const library = await loadLibrary(client, rootBlockName);
+            const library = await loadLibrary(client, rootBlockName, buildLog);
 
             //
             // Construct the application, resolving all of the inter-block bindings.
             //
-            const application = new Application(rootBlockName, app.appname, null, library);
+            const application = new Application(rootBlockName, app.appname, null, library, buildLog);
             storedApplications[apid] = application;
 
             //
             // Generate the derivative data
             //
-            generateDerivativeData(application);
+            generateDerivativeData(application, buildLog);
 
             //
             // Generate database entries for the instance blocks.
@@ -892,16 +921,36 @@ const buildApplication = async function(apid, req, res) {
             }
 
             //
-            // Update the lifecycle of the application.
+            // Add final success log
             //
-            await client.query("UPDATE Applications SET Lifecycle = 'build-complete' WHERE Id = $1", [apid]);
+            if (buildLog.getResult() == 'build-warnings') {
+                buildLog.log("WARNING: Build completed with warnings");
+            } else {
+                buildLog.log("SUCCESS: Build completed successfully");
+            }
+
+            //
+            // Update the lifecycle of the application and add the build log.
+            //
+            await client.query("UPDATE Applications SET Lifecycle = $3, BuildLog = $2 WHERE Id = $1", [apid, buildLog.getText(), buildLog.getResult()]);
         }
         await client.query("COMMIT");
-        res.status(returnStatus).send('Ok');
+        res.status(returnStatus).send('Ok - See build log for details');
     } catch (error) {
-        returnStatus = 400;
-        res.status(returnStatus).send(error.stack);
-        await client.query("ROLLBACK");
+        console.log(`EXCEPTION: ${error.message}`);
+        if (error.message == BUILD_ERROR) {
+            //
+            // If we got a build error, update the build log for user visibility.
+            //
+            await client.query("UPDATE Applications SET Lifecycle = $3, BuildLog = $2 WHERE Id = $1", [apid, buildLog.getText(), buildLog.getResult()]);
+            await client.query("COMMIT");
+            returnStatus = 200;
+            res.status(returnStatus).send("Ok - See build log for build errors");
+        } else {
+            await client.query("ROLLBACK");
+            returnStatus = 400;
+            res.status(returnStatus).send(error.stack);
+        }
     } finally {
         client.release();
     }
