@@ -63,7 +63,7 @@ const deepAppend = function(base, overlay) {
 
 class BuildLog {
     constructor() {
-        this.text   = "";
+        this.text   = `Build log started ${new Date().toISOString()}\n`;
         this.result = 'build-complete';
     }
 
@@ -101,7 +101,7 @@ class BlockInterface {
         this.binding      = undefined;
         this.boundThrough = false;
 
-        buildLog.log(`Constructed: ${this}`);
+        buildLog.log(`   ${this}`);
     }
 
     toString() {
@@ -130,14 +130,21 @@ class InstanceBlock {
         this.derivative   = {};
         this.dbid         = null;
 
+        buildLog.log(`${this}`);
+
         const ilist = libraryBlock.object().spec.interfaces;
         if (ilist) {
             for (const iface of ilist) {
-                this.interfaces[iface.name] = new BlockInterface(this, iface.name, iface.role, iface.polarity, iface.blockType || libraryBlock.nameNoRev(), buildLog);
+                this.interfaces[iface.name] = new BlockInterface(
+                    this,
+                    iface.name,
+                    iface.role,
+                    iface.polarity,
+                    iface.blockType || libraryBlock.nameNoRev(),
+                    buildLog
+                );
             }
         }
-
-        buildLog.log(`Constructed: ${this}`);
     }
 
     toString() {
@@ -199,7 +206,7 @@ class LibraryBlock {
         this.flag = false;
         this.dbid = dbRecord.id;
 
-        buildLog.log(`Constructed: ${this}`);
+        buildLog.log(`${this}`);
     }
 
     toString() {
@@ -224,6 +231,10 @@ class LibraryBlock {
 
     object() {
         return this.item;
+    }
+
+    isComposite() {
+        return !!this.item.spec.body.composite;
     }
 
     overWriteObject(updated) {
@@ -271,7 +282,7 @@ class InterfaceBinding {
         this.northRef.setBinding(this);
         this.southRef.setBinding(this);
 
-        buildLog.log(`Constructed: ${this}`);
+        buildLog.log(`${this}`);
     }
 
     toString() {
@@ -295,7 +306,7 @@ class Application {
         //
         this.pairInterfaces(buildLog);
 
-        buildLog.log(`Constructed: ${this}`);
+        buildLog.log(`${this}`);
     }
 
     toString() {
@@ -440,7 +451,7 @@ class Application {
                                     if (cbinding.super == interfaceName) {
                                         const recurseBlock         = this.instanceBlocks[instanceBlock.name + '/' + cblock.name];
                                         const recurseInterfaceName = cbinding.interface;
-                                        const result = this.findBaseInterface(recurseBlock, recurseInterfaceName);
+                                        const result = this.findBaseInterface(recurseBlock, recurseInterfaceName, buildLog);
 
                                         //
                                         // Mark the intermediate interface as bound-through.  This will prevent it from being flagged
@@ -698,7 +709,7 @@ const loadLibrary = async function(client, rootBlockName, buildLog) {
     return library;
 }
 
-const generateDerivativeData = function(application, buildLog) {
+const generateDerivativeData = function(application, buildLog, blockTypes) {
     const instanceBlocks = application.getInstanceBlocks();
     for (const [name, block] of Object.entries(instanceBlocks)) {
         const libraryBlock  = block.getLibraryBlock();
@@ -713,12 +724,16 @@ const generateDerivativeData = function(application, buildLog) {
         }
 
         //
-        // TODO - Generate an allocateToSite flag for appropriate blocks.
+        // Generate an allocateToSite flag for appropriate blocks.
         //
         // Appropriate if:
         //    - The allocateToSite flag is TRUE for the block type
         //    - The block is not composite
         //
+        const btype = libraryBlock.getType();
+        if (blockTypes[btype].allocatetosite && !libraryBlock.isComposite()) {
+            block.addDerivative('allocateToSite', true);
+        }
     }
 }
 
@@ -904,7 +919,7 @@ const buildApplication = async function(apid, req, res) {
     let   buildLog = new BuildLog();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT LibraryBlocks.Name as lbname, LibraryBlocks.Revision, Applications.Name, Lifecycle as appname FROM Applications " +
+        const result = await client.query("SELECT LibraryBlocks.Name as lbname, LibraryBlocks.Revision, Applications.Name as appname, Lifecycle FROM Applications " +
                                           "JOIN LibraryBlocks ON LibraryBlocks.Id = RootBlock " +
                                           "WHERE Applications.Id = $1", [apid]);
         if (result.rowCount == 1) {
@@ -930,13 +945,18 @@ const buildApplication = async function(apid, req, res) {
             storedApplications[apid] = application;
 
             //
-            // TODO Get the block types to feed into the derivative generator.
+            // Get the block types to feed into the derivative generator.
             //
+            const btypes = await client.query("SELECT * FROM BlockTypes");
+            let   blockTypes = {};
+            for (const rec of btypes.rows) {
+                blockTypes[rec.name] = rec;
+            }
 
             //
             // Generate the derivative data
             //
-            generateDerivativeData(application, buildLog);
+            generateDerivativeData(application, buildLog, blockTypes);
 
             //
             // Generate database entries for the instance blocks.
@@ -968,7 +988,6 @@ const buildApplication = async function(apid, req, res) {
         await client.query("COMMIT");
         res.status(returnStatus).send('Ok - See build log for details');
     } catch (error) {
-        console.log(`EXCEPTION: ${error.message}`);
         if (error.message == BUILD_ERROR) {
             //
             // If we got a build error, update the build log for user visibility.
@@ -997,7 +1016,7 @@ const listApplications = async function(req, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT Id, RootBlock, Van, Lifecycle FROM DeployedApplications");
+        const result = await client.query("SELECT Id, RootBlock, Van, Lifecycle FROM Applications");
         res.status(returnStatus).json(result.rows);
         await client.query("COMMIT");
     } catch (error) {
@@ -1016,7 +1035,7 @@ const getApplication = async function(apid, req, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT * FROM DeployedApplications WHERE Id = $1", [apid]);
+        const result = await client.query("SELECT * FROM Applications WHERE Id = $1", [apid]);
         if (result.rowCount == 1) {
             res.status(returnStatus).json(result.rows[0]);
         } else {
@@ -1040,7 +1059,8 @@ const deleteApplication = async function(apid, req, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        const result = await client.query("DELETE FROM DeployedApplications WHERE Id = $1", [apid]);
+        await client.query("DELETE FROM InstanceBlocks WHERE Application = $1", [apid]);
+        const result = await client.query("DELETE FROM Applications WHERE Id = $1", [apid]);
         if (result.rowCount != 1) {
             returnStatus = 404;
             res.status(returnStatus).send('Not Found');
