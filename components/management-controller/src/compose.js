@@ -92,32 +92,37 @@ class BuildLog {
 }
 
 class BlockInterface {
-    constructor(ownerRef, name, role, polarity, blockType, buildLog) {
+    constructor(ownerRef, ifaceSpec, blockType, buildLog) {
         this.ownerRef     = ownerRef;
-        this.name         = name;
-        this.role         = role;
-        this.polarity     = polarity == 'north';
+        this.name         = ifaceSpec.name;
+        this.role         = ifaceSpec.role;
+        this.polarity     = ifaceSpec.polarity == 'north';
         this.blockType    = blockType;
-        this.binding      = undefined;
+        this.maxBindings  = ifaceSpec.maxBindings ? ifaceSpec.maxBindings == 'unlimited' ? 0 : parseInt(ifaceSpec.maxBindings) : 1;
+        this.bindings     = [];
         this.boundThrough = false;
 
-        buildLog.log(`   ${this}`);
+        buildLog.log(`    ${this}`);
     }
 
     toString() {
-        return `BlockInterface ${this.ownerRef.name}.${this.name} (${this.blockType}.${this.role}) ${this.polarity ? 'north' : 'south'}`;
+        return `BlockInterface ${this.ownerRef.name}.${this.name} (${this.blockType}.${this.role}) ${this.polarity ? 'north' : 'south'} max:${this.maxBindings}`;
     }
 
-    setBinding(binding) {
-        this.binding = binding;
+    addBinding(binding) {
+        this.bindings.push(binding);
     }
 
     setBoundThrough() {
         this.boundThrough = true;
     }
 
+    canAcceptBinding() {
+        return this.maxBindings == 0 || this.bindings.length < this.maxBindings;
+    }
+
     hasBinding() {
-        return !!this.binding || this.boundThrough;
+        return this.bindings.length > 0 || this.boundThrough;
     }
 }
 
@@ -135,14 +140,7 @@ class InstanceBlock {
         const ilist = libraryBlock.object().spec.interfaces;
         if (ilist) {
             for (const iface of ilist) {
-                this.interfaces[iface.name] = new BlockInterface(
-                    this,
-                    iface.name,
-                    iface.role,
-                    iface.polarity,
-                    iface.blockType || libraryBlock.nameNoRev(),
-                    buildLog
-                );
+                this.interfaces[iface.name] = new BlockInterface(this, iface, iface.blockType || libraryBlock.nameNoRev(), buildLog);
             }
         }
     }
@@ -268,8 +266,8 @@ class InterfaceBinding {
         this.southRef = left.polarity ? right : left;
 
         for (const ref of [this.southRef, this.northRef]) {
-            if (ref.hasBinding()) {
-                buildLog.error(`Attempting to bind an interface that is already bound: ${ref}`)
+            if (!ref.canAcceptBinding()) {
+                buildLog.error(`Attempting to bind an interface that will exceed the interface's maxBinding count: ${ref}`)
             }
         }
 
@@ -279,8 +277,8 @@ class InterfaceBinding {
 
         // TODO - check the compatibility of the block-types
 
-        this.northRef.setBinding(this);
-        this.southRef.setBinding(this);
+        this.northRef.addBinding(this);
+        this.southRef.addBinding(this);
 
         buildLog.log(`${this}`);
     }
@@ -755,7 +753,7 @@ const postLibraryBlocks = async function(req, res) {
             for (const row of result.rows) {
                 validTypes[row.name] = {
                     allowNorth : row.allownorth,
-                    allowSoute : row.allowsouth
+                    allowSouth : row.allowsouth,
                 };
             }
 
