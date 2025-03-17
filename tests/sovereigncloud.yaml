@@ -1,0 +1,147 @@
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: skupperx.io/compose/v1alpha1
+kind: Block
+metadata:
+  name: country-dispatch
+type: skupperx.io/component
+spec:
+  interfaces:
+  - name: output
+    blockType: skx.io/http-simple
+    role: connect
+  - name: input
+    blockType: skx.io/http-simple
+    role: accept
+  body:
+    template:
+    - apiVersion: v1
+      kind: Pod
+      metadata:
+        name: country-dispatch
+      spec:
+        containers:
+        - name: country-dispatch
+          image: quay.io/tedlross/country-dispatch:latest
+          imagePullPolicy: Always
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 8000
+              scheme: HTTP
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          ports:
+          - containerPort: 8000
+
+---
+apiVersion: skupperx.io/compose/v1alpha1
+kind: Block
+metadata:
+  name: sovereigncloud/main
+type: skupperx.io/component
+spec:
+  interfaces:
+  - name: request
+    blockType: skx.io/http-simple
+    role: accept
+  - name: dbAccess
+    blockType: skx.io/postgres-balanced
+    role: accept
+  body:
+    composite:
+      blocks:
+      - name: database
+        block: postgresql-external
+        labels:
+          site: hq
+        bindings:
+        - interface: postgres
+          super: dbAccess
+      - name: worker
+        block: nearestprime
+        labels:
+          site: worksite
+      - name: dispatch
+        block: country-dispatch
+        labels:
+          site: hq
+        bindings:
+        - interface: input
+          super: request
+      - name: worker-to-database
+        block: skx.io/postgres-balanced
+        bindings:
+        - interface: connect
+          block: worker
+          blockInterface: postgres
+        - interface: accept
+          block: database
+          blockInterface: postgres
+      - name: dispatch-to-worker
+        block: skx.io/tcp-multichannel-country
+        bindings:
+        - interface: accept
+          block: worker
+          blockInterface: control
+        - interface: connect
+          block: dispatch
+          blockInterface: output
+
+---
+apiVersion: skupperx.io/compose/v1alpha1
+kind: Block
+metadata:
+  name: sovereigncloud/container
+type: skupperx.io/component
+spec:
+  body:
+    composite:
+      blocks:
+      - name: mainApp
+        block: sovereigncloud/main
+        labels:
+          site: hq
+      - name: requestIngress
+        block: tcpIngress
+        labels:
+          site: hq
+      - name: dbIngress
+        block: tcpIngress
+        labels:
+          site: hq
+      - name: request-ingress-to-main
+        block: skx.io/http-simple
+        bindings:
+        - interface: accept
+          block: mainApp
+          blockInterface: request
+        - interface: connect
+          block: requestIngress
+          blockInterface: connect
+      - name: db-ingress-to-main
+        block: skx.io/postgres-balanced
+        bindings:
+        - interface: accept
+          block: mainApp
+          blockInterface: dbAccess
+        - interface: connect
+          block: dbIngress
+          blockInterface: connect
+
+
