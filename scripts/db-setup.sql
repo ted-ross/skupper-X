@@ -252,7 +252,8 @@ CREATE TABLE MemberSites (
     MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE,
     Invitation UUID REFERENCES MemberInvitations ON DELETE CASCADE,
     SiteClasses text ARRAY,
-    ActiveAccessPoint UUID REFERENCES BackboneAccessPoints
+    ActiveAccessPoint UUID REFERENCES BackboneAccessPoints,
+    Metadata text
 );
 
 --

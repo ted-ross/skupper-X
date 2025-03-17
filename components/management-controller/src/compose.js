@@ -560,11 +560,27 @@ const validateBlock = async function(block, validTypes, validRoles, blockRevisio
 }
 
 const importBlock = async function(client, block, blockRevisions) {
-    const name = block.metadata.name;
-
+    const name        = block.metadata.name;
     const newRevision = blockRevisions[name] ? blockRevisions[name].revision + 1 : 1;
+    const ifObject    = yaml.dump(block.spec.interfaces);
+    const bodyObject  = yaml.dump(block.spec.body);
+
+    //
+    // If there's an existing revision of this block, check to see if it is the same as the new one.
+    // Only insert a new revision into the database if it is different from the current revision.
+    //
+    if (newRevision > 1) {
+        const mostRecent = await client.query("SELECT Interfaces, SpecBody FROM LibraryBlocks WHERE Name = $1 AND Revision = $2", [name, newRevision - 1]);
+        if (mostRecent.rowCount == 1
+            && ifObject   == mostRecent.rows[0].interfaces
+            && bodyObject == mostRecent.rows[0].specbody) {
+            return 0;
+        }
+    }
+
     await client.query("INSERT INTO LibraryBlocks (Type, Name, Revision, Format, Interfaces, SpecBody) VALUES ($1, $2, $3, 'application/yaml', $4, $5)",
-                       [block.type, name, newRevision, yaml.dump(block.spec.interfaces), yaml.dump(block.spec.body)]);
+                       [block.type, name, newRevision, ifObject, bodyObject]);
+    return 1;
 }
 
 //
@@ -718,6 +734,12 @@ const generateDerivativeData = function(application, buildLog, blockTypes) {
             if (body.address) {
                 const rkey = `${body.address.keyPrefix || ''}${name}`;
                 block.addDerivative('routingKey', rkey);
+            } else if (body.addresses) {
+                let value = [];
+                for (const address of body.addresses) {
+                    value.push(`${address.keyPrefix || ''}${name}`);
+                }
+                block.addDerivative('routingKeys', value);
             }
         }
 
@@ -795,11 +817,12 @@ const postLibraryBlocks = async function(req, res) {
             //
             // Import the validated blocks into the database
             //
+            let importCount = 0;
             for (const block of items) {
-                await importBlock(client, block, blockRevisions);
+                importCount += await importBlock(client, block, blockRevisions);
             }
             await client.query("COMMIT");
-            res.status(201).send('Created');
+            res.status(201).send(`Imported ${importCount} Blocks`);
         } catch (error) {
             res.status(500).send(error.stack);
             await client.query("ROLLBACK");
@@ -1014,7 +1037,7 @@ const listApplications = async function(req, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT Id, RootBlock, Van, Lifecycle FROM Applications");
+        const result = await client.query("SELECT Id, RootBlock, Lifecycle FROM Applications");
         res.status(returnStatus).json(result.rows);
         await client.query("COMMIT");
     } catch (error) {
@@ -1043,6 +1066,30 @@ const getApplication = async function(apid, req, res) {
         await client.query("COMMIT");
     } catch (error) {
         Log(`Exception in getApplication: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+}
+
+const getApplicationBuildLog = async function(apid, req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT BuildLog FROM Applications WHERE Id = $1", [apid]);
+        if (result.rowCount == 1) {
+            res.status(returnStatus).send(result.rows[0].buildlog);
+        } else {
+            returnStatus = 404;
+            res.status(returnStatus).send('Not Found');
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in getApplicationBuildLog: ${error.message}`);
         await client.query("ROLLBACK");
         returnStatus = 500;
         res.status(returnStatus).send(error.message);
@@ -1112,6 +1159,10 @@ exports.ApiInit = function(app) {
 
     app.get(COMPOSE_PREFIX + 'application/:apid', async (req, res) => {
         await getApplication(req.params.apid, req, res);
+    });
+
+    app.get(COMPOSE_PREFIX + 'application/:apid/log', async (req, res) => {
+        await getApplicationBuildLog(req.params.apid, req, res);
     });
 
     app.delete(COMPOSE_PREFIX + 'application/:apid', async (req, res) => {
