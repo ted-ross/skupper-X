@@ -1037,7 +1037,7 @@ const listApplications = async function(req, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT Id, RootBlock, Lifecycle FROM Applications");
+        const result = await client.query("SELECT Id, Name, RootBlock, Lifecycle FROM Applications");
         res.status(returnStatus).json(result.rows);
         await client.query("COMMIT");
     } catch (error) {
