@@ -102,6 +102,29 @@ spec:
 apiVersion: skupperx.io/compose/v1alpha1
 kind: Block
 metadata:
+  name: skx.io/tcp-multichannel-site
+type: skupperx.io/connector
+spec:
+  interfaces:
+  - name: accept
+    role: accept
+  - name: connect
+    role: connect
+  body:
+    addresses:
+    - keyPrefix: site-${site}
+      distribution: balanced
+      priority: default
+    - keyPrefix: allsites
+      distribution: balanced
+      priority: default
+    transport: tcp
+    protocol: tcp
+
+---
+apiVersion: skupperx.io/compose/v1alpha1
+kind: Block
+metadata:
   name: skx.io/tcp-multichannel-country
 type: skupperx.io/connector
 spec:
@@ -112,10 +135,10 @@ spec:
     role: connect
   body:
     addresses:
-    - keyPrefix: multi-${country}
+    - keyPrefix: country-${country}
       distribution: balanced
       priority: default
-    - keyPrefix: multi-all
+    - keyPrefix: allcountries
       distribution: balanced
       priority: default
     transport: tcp
