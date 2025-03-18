@@ -12,8 +12,9 @@
  * limitations under the License.
  */
 
-DROP TABLE BlockAllocations;
+DROP TABLE SiteData;
 DROP TABLE DeployedApplications;
+DROP TABLE Bindings;
 DROP TABLE InstanceBlocks;
 DROP TABLE Applications;
 DROP TABLE LibraryBlocks;

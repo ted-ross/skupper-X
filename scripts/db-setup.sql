@@ -223,7 +223,9 @@ CREATE TABLE MemberInvitations (
     InstanceCount integer DEFAULT 0,
     FetchCount integer DEFAULT 0,
     InteractiveClaim boolean DEFAULT false,   -- If true, don't assert the claim until the invitee intervenes
-    MemberNamePrefix text
+    MemberNamePrefix text,
+    RequiredMetadata text    -- A JSON map of metadata keys that must appear in the MemberSite and information about where
+                             -- that metadata should come from (supplied by local operator, supplied here, from environment, ...)
 );
 
 --
@@ -356,6 +358,14 @@ CREATE TABLE InstanceBlocks (
     Derivative   text
 );
 
+CREATE TABLE Bindings (
+    Application    UUID REFERENCES Applications(Id),
+    NorthBlock     UUID REFERENCES InstanceBlocks(Id),
+    NorthInterface text,
+    SouthBlock     UUID REFERENCES InstanceBlocks(Id),
+    SouthInterface text
+);
+
 --
 -- The instantiation of an application template onto an application network
 --
@@ -365,10 +375,14 @@ CREATE TABLE DeployedApplications (
     Van         UUID REFERENCES ApplicationNetworks(Id)
 );
 
-CREATE TABLE BlockAllocations (
+--
+-- VAN-Site-specific derived configuration
+--
+CREATE TABLE SiteData (
     DeployedApplication UUID REFERENCES DeployedApplications(Id),
-    InstanceBlock       UUID REFERENCES InstanceBlocks(Id),
-    MemberSite          UUID REFERENCES MemberSites(Id)
+    MemberSite          UUID REFERENCES MemberSites(Id),
+    Format              text,
+    Configuration       text
 );
 
 --

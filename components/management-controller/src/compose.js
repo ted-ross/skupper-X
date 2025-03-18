@@ -62,9 +62,10 @@ const deepAppend = function(base, overlay) {
 }
 
 class BuildLog {
-    constructor() {
-        this.text   = `Build log started ${new Date().toISOString()}\n`;
-        this.result = 'build-complete';
+    constructor(disabled) {
+        this.disabled = !!disabled;
+        this.text     = `Build log started ${new Date().toISOString()}\n`;
+        this.result   = 'build-complete';
     }
 
     log(line) {
@@ -79,7 +80,9 @@ class BuildLog {
     error(line) {
         this.result = 'build-errors';
         this.text += 'ERROR: ' + line + '\n';
-        throw new Error(BUILD_ERROR);
+        if (!this.disabled) {
+            throw new Error(BUILD_ERROR);
+        }
     }
 
     getText() {
@@ -107,6 +110,14 @@ class BlockInterface {
 
     toString() {
         return `BlockInterface ${this.ownerRef.name}.${this.name} (${this.blockType}.${this.role}) ${this.polarity ? 'north' : 'south'} max:${this.maxBindings}`;
+    }
+
+    getName() {
+        return this.name;
+    }
+
+    getOwner() {
+        return this.ownerRef;
     }
 
     addBinding(binding) {
@@ -286,6 +297,14 @@ class InterfaceBinding {
     toString() {
         return `InterfaceBinding [${this.northRef}] <=> [${this.southRef}]`;
     }
+
+    getNorthInterface() {
+        return this.northRef;
+    }
+
+    getSouthInterface() {
+        return this.southRef;
+    }
 }
 
 class Application {
@@ -325,6 +344,10 @@ class Application {
 
     getInstanceBlocks() {
         return this.instanceBlocks;
+    }
+
+    getBindings() {
+        return this.bindings;
     }
 
     //
@@ -757,6 +780,38 @@ const generateDerivativeData = function(application, buildLog, blockTypes) {
     }
 }
 
+//
+// For every instance block in the application, check for the allocateToSite flag.  If true,
+// generate the configuration to allocate the block to this site.
+//
+// For every block that is allocated to this site, run through the interfaces and find the bound
+// blocks for each interface.  Use the content of the bound blocks to generate interconnect configuration:
+//   - Skupper listeners and connectors
+//   - Deployed agents to handle active interconnect
+//   - Kubernetes network policies to restrict access to that specified
+//
+const addMemberSite = async function(client, app, site, depid) {
+}
+
+const deleteMemberSite = async function(client, app, site, depid) {
+}
+
+const preLoadApplication = async function(client, appid) {
+    if (storedApplications[appid]) {
+        return storedApplications[appid];
+    }
+
+    storedApplications[appid] = new Application()
+}
+
+const deployApplication = async function(client, appid, vanid, depid) {
+    const app    = await preLoadApplication(client, appid);
+    const result = await client.query("SELECT Id, Metadata, SiteClasses FROM MemberSites WHERE MemberOf = $1", [vanid]);
+    for (const site of result.rows) {
+        await addMemberSite(client, app, site, depid);
+    }
+}
+
 //=========================================================================================================
 // API Functions
 //=========================================================================================================
@@ -982,6 +1037,7 @@ const buildApplication = async function(apid, req, res) {
             //
             // Generate database entries for the instance blocks.
             //
+            await client.query("DELETE FROM Bindings WHERE Application = $1", [apid]);
             await client.query("DELETE FROM InstanceBlocks WHERE Application = $1", [apid]);
             const instanceBlocks = application.getInstanceBlocks();
             for (const [name, block] of Object.entries(instanceBlocks)) {
@@ -990,6 +1046,20 @@ const buildApplication = async function(apid, req, res) {
                 if (result.rowCount == 1) {
                     block.setDatabaseId(result.rows[0].id);
                 }
+            }
+
+            //
+            // Insert Bindings records into the database
+            //
+            const bindings = application.getBindings();
+            for (const binding of bindings) {
+                const northInterface = binding.getNorthInterface();
+                const northBlock     = northInterface.getOwner();
+                const southInterface = binding.getSouthInterface();
+                const southBlock     = southInterface.getOwner();
+                await client.query("INSERT INTO Bindings (Application, NorthBlock, NorthInterface, SouthBlock, SouthInterface) " +
+                                   "VALUES ($1, $2, $3, $4, $5)",
+                                   [apid, northBlock.databaseId(), northInterface.getName(), southBlock.databaseId(), southInterface.getName()]);
             }
 
             //
@@ -1027,9 +1097,6 @@ const buildApplication = async function(apid, req, res) {
     }
 
     return returnStatus;
-}
-
-const deployApplication = async function(apid, req, res) {
 }
 
 const listApplications = async function(req, res) {
@@ -1104,6 +1171,7 @@ const deleteApplication = async function(apid, req, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
+        await client.query("DELETE FROM Bindings WHERE Application = $1", [apid]);
         await client.query("DELETE FROM InstanceBlocks WHERE Application = $1", [apid]);
         const result = await client.query("DELETE FROM Applications WHERE Id = $1", [apid]);
         if (result.rowCount != 1) {
@@ -1115,6 +1183,140 @@ const deleteApplication = async function(apid, req, res) {
         await client.query("COMMIT");
     } catch (error) {
         Log(`Exception in deleteApplication: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+}
+
+const postDeployment = async function(req, res) {
+    var returnStatus = 201;
+    const client = await db.ClientFromPool();
+    const form = new formidable.IncomingForm();
+    try {
+        await client.query("BEGIN");
+        const [fields, files] = await form.parse(req);
+        const norm = util.ValidateAndNormalizeFields(fields, {
+            'app' : {type: 'uuid', optional: false},
+            'van' : {type: 'uuid', optional: false},
+        });
+
+        const result = await client.query("INSERT INTO DeployedApplications (Application, Van) VALUES ($1, $2) RETURNING Id",
+                                          [norm.app, norm.van]);
+        if (result.rowCount == 1) {
+            await deployApplication(client, norm.app, norm.van, result.rows[0].id);
+            res.status(returnStatus).json(result.rows[0]);
+        } else {
+            returnStatus = 400;
+            res.status(returnStatus).send(result.error);
+        }
+
+        await client.query("COMMIT");
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).send(error.message);
+        await client.query("ROLLBACK");
+    } finally {
+        client.release();
+    }
+
+    return returnStatus;
+}
+
+const listDeployments = async function(req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT Id, Application, Van FROM DeployedApplications");
+        res.status(returnStatus).json(result.rows);
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in listDeployments: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+}
+
+const getDeployment = async function(depid, req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT * FROM DeployedApplications WHERE Id = $1", [depid]);
+        if (result.rowCount == 1) {
+            res.status(returnStatus).json(result.rows[0]);
+        } else {
+            returnStatus = 404;
+            res.status(returnStatus).send('Not Found');
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in getDeployment: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+}
+
+const deleteDeployment = async function(depid, req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        await client.query("DELETE FROM SiteData WHERE DeployedApplication = $1", [depid]);
+        const result = await client.query("DELETE FROM DeployedApplications WHERE Id = $1 RETURNING Application", [depid]);
+        if (result.rowCount != 1) {
+            returnStatus = 404;
+            res.status(returnStatus).send('Not Found');
+        } else {
+            const appid = result.rows[0].application;
+            const listResult = await client.query("SELECT Id FROM DeployedApplications WHERE Application = $1", [appid]);
+            if (listResult.rowCount == 0) {
+                //
+                // If we just deleted the last deployment of the application, move its lifecycle back to 'build-complete'.
+                //
+                await client.query("UPDATE Applications SET LifeCycle = 'build-complete' WHERE Id = $1", [appid]);
+            }
+            res.status(returnStatus).send('Deleted');
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in deleteApplication: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+}
+
+const getSiteData = async function(depid, siteid, req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT Configuration FROM SiteData WHERE DeployedApplication = $1 AND MemberSite = $2", [depid, siteid]);
+        if (result.rowCount == 1) {
+            res.status(returnStatus).send(result.rows[0].configuration);
+        } else {
+            returnStatus = 404;
+            res.status(returnStatus).send('Not Found');
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in getSiteData: ${error.message}`);
         await client.query("ROLLBACK");
         returnStatus = 500;
         res.status(returnStatus).send(error.message);
@@ -1149,10 +1351,6 @@ exports.ApiInit = function(app) {
         await buildApplication(req.params.apid, req, res);
     });
 
-    app.put(COMPOSE_PREFIX + 'application/:apid/deploy', async (req, res) => {
-        await deployApplication(req.params.apid, req, res);
-    });
-
     app.get(COMPOSE_PREFIX + 'applications', async (req, res) => {
         await listApplications(req, res);
     });
@@ -1167,9 +1365,36 @@ exports.ApiInit = function(app) {
 
     app.delete(COMPOSE_PREFIX + 'application/:apid', async (req, res) => {
         await deleteApplication(req.params.apid, req, res);
-    })
+    });
+
+    app.post(COMPOSE_PREFIX + 'deployment', async (req, res) => {
+        await postDeployment(req, res);
+    });
+
+    app.get(COMPOSE_PREFIX + 'deployments', async (req, res) => {
+        await listDeployments(req, res);
+    });
+
+    app.get(COMPOSE_PREFIX + 'deployment/:depid', async (req, res) => {
+        await getDeployment(req.params.depid, req, res);
+    });
+
+    app.delete(COMPOSE_PREFIX + 'deployment/:depid', async (req, res) => {
+        await deleteDeployment(req.params.depid, req, res);
+    });
+
+    app.get(COMPOSE_PREFIX + 'deployment/:depid/sitedata/:siteid', async (req, res) => {
+        await getSiteData(req.params.depid, req.params.siteid, req, res);
+    });
 }
 
 exports.Start = async function() {
     Log('[Compose module starting]');
 }
+
+exports.AddMemberSite = async function(siteid) {
+}
+
+exports.DeleteMemberSite = async function(siteid) {
+}
+
