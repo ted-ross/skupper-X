@@ -138,26 +138,46 @@ class BlockInterface {
 }
 
 class InstanceBlock {
-    constructor(libraryBlock, name, buildLog) {
-        this.libraryBlock = libraryBlock;
-        this.name         = name;
+    constructor() {
+        this.libraryBlock = undefined;
+        this.name         = undefined;
         this.labels       = {};
         this.interfaces   = {};
         this.derivative   = {};
         this.dbid         = null;
+    }
 
-        buildLog.log(`${this}`);
-
-        const ilist = libraryBlock.object().spec.interfaces;
+    _buildInterfaces(buildLog) {
+        const ilist = this.libraryBlock.interfaces();
         if (ilist) {
             for (const iface of ilist) {
-                this.interfaces[iface.name] = new BlockInterface(this, iface, iface.blockType || libraryBlock.nameNoRev(), buildLog);
+                this.interfaces[iface.name] = new BlockInterface(this, iface, iface.blockType || this.libraryBlock.nameNoRev(), buildLog);
             }
         }
     }
 
+    buildFromApi(libraryBlock, name, buildLog) {
+        this.libraryBlock = libraryBlock;
+        this.name         = name;
+
+        buildLog.log(`${this}`);
+        this._buildInterfaces(buildLog);
+    }
+
+    buildFromDatabase(row, libraryBlock, buildLog) {
+        this.libraryBlock = libraryBlock;
+        this.name         = row.instancename;
+        this.dbid         = row.id;
+        this.derivative   = JSON.parse(row.derivative);
+        this._buildInterfaces(buildLog);
+    }
+
     toString() {
         return `InstanceBlock ${this.name} [${this.libraryBlock}]`;
+    }
+
+    getName() {
+        return this.name;
     }
 
     setDatabaseId(id) {
@@ -254,6 +274,10 @@ class LibraryBlock {
         return this.item.spec.body.base;
     }
 
+    interfaces() {
+        return this.item.spec.interfaces;
+    }
+
     body() {
         return this.item.spec.body;
     }
@@ -308,15 +332,21 @@ class InterfaceBinding {
 }
 
 class Application {
-    constructor(rootBlockName, appName, van, libraryBlocks, buildLog) {
-        this.rootBlockName       = rootBlockName;
-        this.appName             = appName;
-        this.van                 = van;
-        this.libraryBlocks       = libraryBlocks;
+    constructor() {
+        this.rootBlockName       = undefined;
+        this.appName             = undefined;
+        this.libraryBlocks       = {};
         this.instanceBlocks      = {}; // Blocks referenced in the application tree by their deployed names
         this.bindings            = []; // List of north/south interface bindings
         this.unmatchedInterfaces = []; // List of (block-name; interface-name) for unconnected interfaces
         this.derivative          = {};
+
+    }
+
+    buildFromApi(rootBlockName, appName, libraryBlocks, buildLog) {
+        this.rootBlockName = rootBlockName;
+        this.appName       = appName;
+        this.libraryBlocks = libraryBlocks;
 
         //
         // Create Bindings for each pairing of BlockInterfaces
@@ -326,6 +356,55 @@ class Application {
         buildLog.log(`${this}`);
     }
 
+    async buildFromDatabase(client, appid) {
+        let   buildLog  = new BuildLog(true);   // Disabled build log
+        const appResult = await client.query("SELECT Applications.name as apname, LibraryBlocks.name as lbname, LibraryBlocks.revision FROM Applications " +
+                                             "JOIN LibraryBlocks ON LibraryBlocks.Id = RootBlock " +
+                                             "WHERE Applications.Id = $1", [appid]);
+        if (appResult.rowCount == 0) {
+            throw new Error(`Cannot find application with id ${appid}`);
+        }
+
+        //
+        // Populate the needed attributes of this Application record.
+        //
+        const row          = appResult.rows[0];
+        this.appName       = row.apname;
+        this.rootBlockName = `${row.lbname};${row.revision}`;
+        this.libraryBlocks = await loadLibrary(client, this.rootBlockName, buildLog);
+
+        //
+        // Build an index of library blocks by database-id.
+        //
+        let libraryBlocksById = {};
+        for (const [name, lb] of Object.entries(this.libraryBlocks)) {
+            libraryBlocksById[lb.databaseId()] = name;
+        }
+
+        //
+        // Populate the instance blocks from the database.  Set up the interfaces from the referenced library blocks.
+        //
+        const iblockResult = await client.query("SELECT * FROM InstanceBlocks WHERE Application = $1", [appid]);
+        for (const iblock of iblockResult.rows) {
+            let instanceBlock = new InstanceBlock();
+            instanceBlock.buildFromDatabase(iblock, this.libraryBlocks[libraryBlocksById[iblock.libraryblock]], buildLog);
+            this.instanceBlocks[instanceBlock.getName()] = instanceBlock;
+        }
+
+        //
+        // Populate the interface bindings from the database.
+        //
+        const bindingResult = await client.query("SELECT * FROM Bindings WHERE Application = $1", [appid]);
+        for (const b of bindingResult.rows) {
+            const northBlock = this.instanceBlocks[b.northblock];
+            const southBlock = this.instanceBlocks[b.southblock];
+            const northInterface = northBlock.findInterface(b.northinterface);
+            const southInterface = southBlock.findInterface(b.southinterface);
+            const binding = new InterfaceBinding(northInterface, southInterface, buildLog);
+            this.bindings.push(binding);
+        }
+    }
+ 
     toString() {
         return `Application ${this.name()}`;
     }
@@ -367,7 +446,8 @@ class Application {
         }
         const rootBlock = this.libraryBlocks[this.rootBlockName];
         const path      = '/' + this.name();
-        this.instanceBlocks[path] = new InstanceBlock(rootBlock, path, buildLog);
+        this.instanceBlocks[path] = new InstanceBlock();
+        this.instanceBlocks[path].buildFromApi(rootBlock, path, buildLog);
         this.instantiateSubComponents(path + '/', rootBlock, this.rootBlockName, buildLog);
 
         //
@@ -401,7 +481,8 @@ class Application {
                     buildLog.error(`Composite component ${instanceName} references a nonexistent library block ${child.block}`)
                 }
                 const subPath = path + child.name;
-                this.instanceBlocks[subPath] = new InstanceBlock(libraryChild, subPath, buildLog);
+                this.instanceBlocks[subPath] = new InstanceBlock();
+                this.instanceBlocks[subPath].buildFromApi(libraryChild, subPath, buildLog);
                 this.instantiateSubComponents(subPath + '/', libraryChild, child.name, buildLog);
             }
 
@@ -801,7 +882,10 @@ const preLoadApplication = async function(client, appid) {
         return storedApplications[appid];
     }
 
-    storedApplications[appid] = new Application()
+    let application = new Application();
+    await application.buildFromDatabase(client, appid);
+    storedApplications[appid] = application;
+    return application;
 }
 
 const deployApplication = async function(client, appid, vanid, depid) {
@@ -1017,7 +1101,8 @@ const buildApplication = async function(apid, req, res) {
             //
             // Construct the application, resolving all of the inter-block bindings.
             //
-            const application = new Application(rootBlockName, app.appname, null, library, buildLog);
+            const application = new Application();
+            application.buildFromApi(rootBlockName, app.appname, library, buildLog);
             storedApplications[apid] = application;
 
             //
@@ -1059,7 +1144,7 @@ const buildApplication = async function(apid, req, res) {
                 const southBlock     = southInterface.getOwner();
                 await client.query("INSERT INTO Bindings (Application, NorthBlock, NorthInterface, SouthBlock, SouthInterface) " +
                                    "VALUES ($1, $2, $3, $4, $5)",
-                                   [apid, northBlock.databaseId(), northInterface.getName(), southBlock.databaseId(), southInterface.getName()]);
+                                   [apid, northBlock.getName(), northInterface.getName(), southBlock.getName(), southInterface.getName()]);
             }
 
             //
@@ -1178,6 +1263,7 @@ const deleteApplication = async function(apid, req, res) {
             returnStatus = 404;
             res.status(returnStatus).send('Not Found');
         } else {
+            storedApplications.delete(apid);
             res.status(returnStatus).send('Deleted');
         }
         await client.query("COMMIT");
@@ -1204,10 +1290,17 @@ const postDeployment = async function(req, res) {
             'van' : {type: 'uuid', optional: false},
         });
 
+        const checkResult = await client.query("SELECT Lifecycle FROM Applications WHERE Id = $1", [norm.app]);
+        if (checkResult.rowCount == 0) {
+            throw new Error(`Application not found; ${norm.app}`);
+        } else if (checkResult.rows[0].lifecycle == 'deployed') {
+            throw new Error(`Attempting to deploy an application that is already deployed: ${norm.app}`);
+        }
         const result = await client.query("INSERT INTO DeployedApplications (Application, Van) VALUES ($1, $2) RETURNING Id",
                                           [norm.app, norm.van]);
         if (result.rowCount == 1) {
             await deployApplication(client, norm.app, norm.van, result.rows[0].id);
+            await client.query("UPDATE Applications SET Lifecycle = 'deployed' WHERE Id = $1", [norm.app]);
             res.status(returnStatus).json(result.rows[0]);
         } else {
             returnStatus = 400;
@@ -1217,7 +1310,7 @@ const postDeployment = async function(req, res) {
         await client.query("COMMIT");
     } catch (error) {
         returnStatus = 400;
-        res.status(returnStatus).send(error.message);
+        res.status(returnStatus).send(error.stack);
         await client.query("ROLLBACK");
     } finally {
         client.release();
@@ -1367,7 +1460,7 @@ exports.ApiInit = function(app) {
         await deleteApplication(req.params.apid, req, res);
     });
 
-    app.post(COMPOSE_PREFIX + 'deployment', async (req, res) => {
+    app.post(COMPOSE_PREFIX + 'deployments', async (req, res) => {
         await postDeployment(req, res);
     });
 

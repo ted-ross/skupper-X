@@ -360,9 +360,9 @@ CREATE TABLE InstanceBlocks (
 
 CREATE TABLE Bindings (
     Application    UUID REFERENCES Applications(Id),
-    NorthBlock     UUID REFERENCES InstanceBlocks(Id),
+    NorthBlock     text,
     NorthInterface text,
-    SouthBlock     UUID REFERENCES InstanceBlocks(Id),
+    SouthBlock     text,
     SouthInterface text
 );
 
