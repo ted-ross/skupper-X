@@ -68,19 +68,19 @@ spec:
       blocks:
       - name: database
         block: postgresql-external
-        labels:
-          site: hq
+        siteClasses:
+        - hq
         bindings:
         - interface: postgres
           super: dbAccess
       - name: worker
         block: nearestprime
-        labels:
-          site: worksite
+        siteClasses:
+        - worksite
       - name: dispatch
         block: country-dispatch
-        labels:
-          site: hq
+        siteClasses:
+        - hq
         bindings:
         - interface: input
           super: request
@@ -115,16 +115,16 @@ spec:
       blocks:
       - name: mainApp
         block: sovereigncloud/main
-        labels:
-          site: hq
+        siteClasses:
+        - hq
       - name: requestIngress
         block: tcpIngress
-        labels:
-          site: hq
+        siteClasses:
+        - hq
       - name: dbIngress
         block: tcpIngress
-        labels:
-          site: hq
+        siteClasses:
+        - hq
       - name: request-ingress-to-main
         block: skx.io/http-simple
         bindings:

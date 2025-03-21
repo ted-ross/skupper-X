@@ -372,7 +372,8 @@ CREATE TABLE Bindings (
 CREATE TABLE DeployedApplications (
     Id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     Application UUID REFERENCES Applications(Id),
-    Van         UUID REFERENCES ApplicationNetworks(Id)
+    Van         UUID REFERENCES ApplicationNetworks(Id),
+    Log         text
 );
 
 --

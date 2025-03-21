@@ -61,6 +61,24 @@ const deepAppend = function(base, overlay) {
     }
 }
 
+const expandString = function(text, metadata) {
+    console.log(`expandString: ${text}`);
+    let newText = new String(text);
+    for (const [key, value] of Object.entries(metadata)) {
+        newText = newText.replace(`\${${key}}`, value);
+        console.log(`    ${key} => ${newText}`);
+    }
+
+    //
+    // Don't return a string with remaining symbolic substrings.
+    //
+    if (newText.indexOf('${') < 0) {
+        return newText;
+    } else {
+        return undefined;
+    }
+}
+
 class BuildLog {
     constructor(disabled) {
         this.disabled = !!disabled;
@@ -120,6 +138,10 @@ class BlockInterface {
         return this.ownerRef;
     }
 
+    getRole() {
+        return this.role;
+    }
+
     addBinding(binding) {
         this.bindings.push(binding);
     }
@@ -135,13 +157,20 @@ class BlockInterface {
     hasBinding() {
         return this.bindings.length > 0 || this.boundThrough;
     }
+
+    getBindings() {
+        return this.bindings;
+    }
+
+    isNorth() {
+        return this.polarity;
+    }
 }
 
 class InstanceBlock {
     constructor() {
         this.libraryBlock = undefined;
         this.name         = undefined;
-        this.labels       = {};
         this.interfaces   = {};
         this.derivative   = {};
         this.dbid         = null;
@@ -204,6 +233,10 @@ class InstanceBlock {
         return this.libraryBlock.object();
     }
 
+    getInterfaces() {
+        return this.interfaces;
+    }
+
     findInterface(name) {
         return this.interfaces[name];
     }
@@ -214,6 +247,19 @@ class InstanceBlock {
 
     libraryBlockDatabaseId() {
         return this.libraryBlock.databaseId();
+    }
+
+    siteClassMatches(siteClasses) {
+        if (this.derivative.siteClasses) {
+            for (const left of this.derivative.siteClasses) {
+                for (const right of siteClasses) {
+                    if (left == right) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 }
 
@@ -481,8 +527,18 @@ class Application {
                     buildLog.error(`Composite component ${instanceName} references a nonexistent library block ${child.block}`)
                 }
                 const subPath = path + child.name;
-                this.instanceBlocks[subPath] = new InstanceBlock();
-                this.instanceBlocks[subPath].buildFromApi(libraryChild, subPath, buildLog);
+                let instanceBlock = new InstanceBlock();
+                this.instanceBlocks[subPath] = instanceBlock;
+                instanceBlock.buildFromApi(libraryChild, subPath, buildLog);
+
+                if (child.siteClasses && typeof(child.siteClasses) == "object") {
+                    let siteClasses = [];
+                    for (const sclass of child.siteClasses) {
+                        siteClasses.push(sclass);
+                    }
+                    instanceBlock.addDerivative('siteClasses', siteClasses);
+                }
+
                 this.instantiateSubComponents(subPath + '/', libraryChild, child.name, buildLog);
             }
 
@@ -837,7 +893,7 @@ const generateDerivativeData = function(application, buildLog, blockTypes) {
         if (typeof(body) == "object") {
             if (body.address) {
                 const rkey = `${body.address.keyPrefix || ''}${name}`;
-                block.addDerivative('routingKey', rkey);
+                block.addDerivative('routingKeys', [rkey]);
             } else if (body.addresses) {
                 let value = [];
                 for (const address of body.addresses) {
@@ -872,6 +928,116 @@ const generateDerivativeData = function(application, buildLog, blockTypes) {
 //   - Kubernetes network policies to restrict access to that specified
 //
 const addMemberSite = async function(client, app, site, depid) {
+    console.log(`addMemberSite: ${site.name}`);
+    const siteClasses  = site.siteclasses;
+    const siteMetadata = JSON.parse(site.metadata);
+    const instanceBlocks = app.getInstanceBlocks();
+
+    //
+    // Start accumulating site configuration.
+    //
+    let siteConfiguration = [];
+
+    for (const [path, instanceBlock] of Object.entries(instanceBlocks)) {
+        const derivative = instanceBlock.getDerivative();
+
+        //
+        // Check to see if this is an allocate-to-site block
+        //
+        if (derivative.allocateToSite) {
+            //
+            // Now check to see if the block should be allocated to _this_ site.
+            //
+            if (instanceBlock.siteClassMatches(siteClasses)) {
+                console.log(`    Allocating block: ${instanceBlock}`);
+
+                //
+                // Configure the allocation of the block to this site
+                //
+                const libraryBlock = instanceBlock.getLibraryBlock();
+                const body         = libraryBlock.body();
+                if (body.template) {
+                    for (const element of body.template) {
+                        siteConfiguration.push(element);
+                    }
+                }
+
+                //
+                // For each interface of this block, follow the binding to the bound peer block.
+                // The peer block may contain configuration that is needed for this site.
+                //
+                const interfaces = instanceBlock.getInterfaces();
+                for (const [iname, iface] of Object.entries(interfaces)) {
+                    console.log(`        Processing interface: ${iname}`);
+                    //
+                    // Process each peer block bound through this interface.
+                    //
+                    const bindings = iface.getBindings();
+                    for (const binding of bindings) {
+                        const peerInterface = iface.isNorth() ? binding.getSouthInterface() : binding.getNorthInterface();
+                        const peer          = peerInterface.getOwner();
+                        console.log(`            Peer: ${peer} Role: ${iface.getRole()}`);
+
+                        //
+                        // Generate configuration data based on the content of the peer.
+                        //
+                        const peerDerivative = peer.getDerivative();
+                        if (peerDerivative.routingKeys) {
+                            for (const key of peerDerivative.routingKeys) {
+                                const actualKey = expandString(key, siteMetadata);
+                                if (actualKey) {
+                                    if (iface.getRole() == 'connect') {
+                                        console.log('                => Listener');
+                                        //
+                                        // Generate a Skupper Listener
+                                        //
+                                        siteConfiguration.push({
+                                            apiVersion: 'skupper.io/v2alpha1',
+                                            kind: 'Listener',
+                                            metadata: {
+                                                name: 'listener-' + actualKey,
+                                            },
+                                            spec: {
+                                                host: 'host',
+                                                port: 1234,
+                                                routingKey: actualKey,
+                                            },
+                                        });
+                                    } else if (iface.getRole() == 'accept') {
+                                        console.log('                => Connector');
+                                        //
+                                        // Generate a Skupper Connector
+                                        //
+                                        siteConfiguration.push({
+                                            apiVersion: 'skupper.io/v2alpha1',
+                                            kind: 'Connector',
+                                            metadata: {
+                                                name: 'connector-' + actualKey,
+                                            },
+                                            spec: {
+                                                selector: 'selector',
+                                                port: 1234,
+                                                routingKey: actualKey,
+                                            },
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (siteConfiguration.length > 0) {
+        let configtext = "";
+        for (const item of siteConfiguration) {
+            configtext += "---\n" + yaml.dump(item);
+        }
+        await client.query("INSERT INTO SiteData (DeployedApplication, MemberSite, Format, Configuration) " +
+                           "VALUES ($1, $2, 'application/yaml', $3)", [depid, site.id, configtext]);
+    }
 }
 
 const deleteMemberSite = async function(client, app, site, depid) {
@@ -890,7 +1056,7 @@ const preLoadApplication = async function(client, appid) {
 
 const deployApplication = async function(client, appid, vanid, depid) {
     const app    = await preLoadApplication(client, appid);
-    const result = await client.query("SELECT Id, Metadata, SiteClasses FROM MemberSites WHERE MemberOf = $1", [vanid]);
+    const result = await client.query("SELECT Id, Name, Metadata, SiteClasses FROM MemberSites WHERE MemberOf = $1", [vanid]);
     for (const site of result.rows) {
         await addMemberSite(client, app, site, depid);
     }
