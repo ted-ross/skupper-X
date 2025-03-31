@@ -20,34 +20,35 @@ type: skupperx.io/component
 spec:
   interfaces:
   - name: output
-    blockType: skx.io/http-simple
+    blockType: library/http-simple
     role: connect
   - name: input
-    blockType: skx.io/http-simple
+    blockType: library/http-simple
     role: accept
   body:
-    template:
-    - apiVersion: v1
-      kind: Pod
-      metadata:
-        name: country-dispatch
-      spec:
-        containers:
-        - name: country-dispatch
-          image: quay.io/tedlross/country-dispatch:latest
-          imagePullPolicy: Always
-          livenessProbe:
-            failureThreshold: 3
-            httpGet:
-              path: /healthz
-              port: 8000
-              scheme: HTTP
-            initialDelaySeconds: 60
-            periodSeconds: 10
-            successThreshold: 1
-            timeoutSeconds: 5
-          ports:
-          - containerPort: 8000
+    kubeTemplates:
+    - template:
+      - apiVersion: v1
+        kind: Pod
+        metadata:
+          name: country-dispatch
+        spec:
+          containers:
+          - name: country-dispatch
+            image: quay.io/tedlross/country-dispatch:latest
+            imagePullPolicy: Always
+            livenessProbe:
+              failureThreshold: 3
+              httpGet:
+                path: /healthz
+                port: 8000
+                scheme: HTTP
+              initialDelaySeconds: 60
+              periodSeconds: 10
+              successThreshold: 1
+              timeoutSeconds: 5
+            ports:
+            - containerPort: 8000
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
@@ -58,10 +59,10 @@ type: skupperx.io/component
 spec:
   interfaces:
   - name: request
-    blockType: skx.io/http-simple
+    blockType: library/http-simple
     role: accept
   - name: dbAccess
-    blockType: skx.io/postgres-balanced
+    blockType: library/postgres-balanced
     role: accept
   body:
     composite:
@@ -85,21 +86,21 @@ spec:
         - interface: input
           super: request
       - name: worker-to-database
-        block: skx.io/postgres-balanced
+        block: library/postgres-balanced
         bindings:
-        - interface: connect
+        - interface: connector
           block: worker
           blockInterface: postgres
-        - interface: accept
+        - interface: acceptor
           block: database
           blockInterface: postgres
       - name: dispatch-to-worker
-        block: skx.io/tcp-multichannel-country
+        block: library/tcp-balanced
         bindings:
-        - interface: accept
+        - interface: acceptor
           block: worker
           blockInterface: control
-        - interface: connect
+        - interface: connector
           block: dispatch
           blockInterface: output
 
@@ -126,22 +127,22 @@ spec:
         siteClasses:
         - hq
       - name: request-ingress-to-main
-        block: skx.io/http-simple
+        block: library/http-simple
         bindings:
-        - interface: accept
+        - interface: acceptor
           block: mainApp
           blockInterface: request
-        - interface: connect
+        - interface: connector
           block: requestIngress
-          blockInterface: connect
+          blockInterface: connector
       - name: db-ingress-to-main
-        block: skx.io/postgres-balanced
+        block: library/postgres-balanced
         bindings:
-        - interface: accept
+        - interface: acceptor
           block: mainApp
           blockInterface: dbAccess
-        - interface: connect
+        - interface: connector
           block: dbIngress
-          blockInterface: connect
+          blockInterface: connector
 
 

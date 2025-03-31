@@ -18,62 +18,83 @@
 ##   This is a library of generic inter-component interactions.
 ##
 
----
 apiVersion: skupperx.io/compose/v1alpha1
 kind: Block
-metadata:
-  name: skx.io/tcp-simple
 type: skupperx.io/connector
+metadata:
+  name: library/tcp-balanced
+  annotations:
+    platform: skupper-v2
 spec:
   interfaces:
-  - name: accept
+  - name: acceptor
     role: accept
-  - name: connect
+  - name: connector
     role: connect
   body:
-    address:
+    config:
       keyPrefix: tcp
       distribution: balanced
       priority: default
-    transport: tcp
-    protocol: tcp
+      transport: tcp
+      protocol: tcp
+    kubeTemplates:
+    - affinity: acceptor
+      template:
+      - apiVersion: skupper.io/v2alpha1
+        kind: Connector
+        metadata:
+          name: connector-${annotations:ident}
+        spec:
+          selector:
+            ${peer.selectorKey} : ${peer.selectorValue}
+          port: ${peer:port}
+          routingKey: ${config:keyPrefix}-${annotations:ident}
+    - affinity: connector
+      template:
+      - apiVersion: skupper.io/v2alpha1
+        kind: Listener
+        metadata:
+          name: listener-${annotations:ident}
+        spec:
+          host: ${peer.host}
+          port: ${peer.port}
+          routingKey: ${config:keyPrefix}-${annotations:ident}
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
 kind: Block
 metadata:
-  name: skx.io/http-simple
+  name: library/http-simple
 type: skupperx.io/connector
 spec:
   interfaces:
-  - name: accept
+  - name: acceptor
     role: accept
-  - name: connect
+  - name: connector
     role: connect
   body:
-    base: skx.io/tcp-simple
+    base: library/tcp-balanced
     transformOverwrite:
-      address:
-        keyPrefix: http
+      keyPrefix: http
       protocol: http
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
 kind: Block
 metadata:
-  name: skx.io/http-safe
+  name: library/http-safe
 type: skupperx.io/connector
 spec:
   interfaces:
-  - name: accept
+  - name: acceptor
     role: accept
-  - name: connect
+  - name: connector
     role: connect
   body:
     base: skx.io/tcp-simple
     transformOverwrite:
-      address:
-        keyPrefix: http-safe
+      keyPrefix: http-safe
       protocol: http
       allow:
       - segment: /
@@ -83,66 +104,19 @@ spec:
 apiVersion: skupperx.io/compose/v1alpha1
 kind: Block
 metadata:
-  name: skx.io/postgres-balanced
+  name: library/postgres-balanced
 type: skupperx.io/connector
 spec:
   interfaces:
-  - name: accept
+  - name: acceptor
     role: accept
-  - name: connect
+  - name: connector
     role: connect
   body:
-    base: skx.io/tcp-simple
+    base: library/tcp-balanced
     transformOverwrite:
-      address:
-        keyPrefix: postgres
+      keyPrefix: postgres
       protocol: postgres
-
----
-apiVersion: skupperx.io/compose/v1alpha1
-kind: Block
-metadata:
-  name: skx.io/tcp-multichannel-site
-type: skupperx.io/connector
-spec:
-  interfaces:
-  - name: accept
-    role: accept
-  - name: connect
-    role: connect
-  body:
-    addresses:
-    - keyPrefix: site-${site}
-      distribution: balanced
-      priority: default
-    - keyPrefix: allsites
-      distribution: balanced
-      priority: default
-    transport: tcp
-    protocol: tcp
-
----
-apiVersion: skupperx.io/compose/v1alpha1
-kind: Block
-metadata:
-  name: skx.io/tcp-multichannel-country
-type: skupperx.io/connector
-spec:
-  interfaces:
-  - name: accept
-    role: accept
-  - name: connect
-    role: connect
-  body:
-    addresses:
-    - keyPrefix: country-${country}
-      distribution: balanced
-      priority: default
-    - keyPrefix: allcountries
-      distribution: balanced
-      priority: default
-    transport: tcp
-    protocol: tcp
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
@@ -152,8 +126,9 @@ metadata:
 type: skupperx.io/ingress
 spec:
   interfaces:
-  - name: connect
+  - name: connector
     role: connect
   body:
+    config: {}
     ingress: route
 

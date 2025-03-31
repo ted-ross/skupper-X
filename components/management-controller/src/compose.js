@@ -114,14 +114,18 @@ class BuildLog {
 
 class BlockInterface {
     constructor(ownerRef, ifaceSpec, blockType, buildLog) {
-        this.ownerRef     = ownerRef;
-        this.name         = ifaceSpec.name;
-        this.role         = ifaceSpec.role;
-        this.polarity     = ifaceSpec.polarity == 'north';
-        this.blockType    = blockType;
-        this.maxBindings  = ifaceSpec.maxBindings ? ifaceSpec.maxBindings == 'unlimited' ? 0 : parseInt(ifaceSpec.maxBindings) : 1;
-        this.bindings     = [];
-        this.boundThrough = false;
+        this.ownerRef      = ownerRef;
+        this.name          = ifaceSpec.name;
+        this.role          = ifaceSpec.role;
+        this.polarity      = ifaceSpec.polarity == 'north';
+        this.selectorKey   = ifaceSpec.selectorKey;
+        this.selectorValue = ifaceSpec.selectorValue;
+        this.host          = ifaceSpec.host;
+        this.port          = ifaceSpec.port;
+        this.blockType     = blockType;
+        this.maxBindings   = ifaceSpec.maxBindings ? ifaceSpec.maxBindings == 'unlimited' ? 0 : parseInt(ifaceSpec.maxBindings) : 1;
+        this.bindings      = [];
+        this.boundThrough  = false;
 
         buildLog.log(`    ${this}`);
     }
@@ -140,6 +144,17 @@ class BlockInterface {
 
     getRole() {
         return this.role;
+    }
+
+    getData(key) {
+        switch (key) {
+            case 'selectorKey'   : return this.selectorKey;
+            case 'selectorValue' : return this.selectorValue;
+            case 'host'          : return this.host;
+            case 'port'          : return this.port;
+        }
+
+        return undefined;
     }
 
     addBinding(binding) {
@@ -885,23 +900,9 @@ const loadLibrary = async function(client, rootBlockName, buildLog) {
 
 const generateDerivativeData = function(application, buildLog, blockTypes) {
     const instanceBlocks = application.getInstanceBlocks();
-    for (const [name, block] of Object.entries(instanceBlocks)) {
+    for (const block of Object.values(instanceBlocks)) {
         const libraryBlock  = block.getLibraryBlock();
         const libraryRecord = libraryBlock.object();
-        const body          = libraryRecord.spec.body;
-
-        if (typeof(body) == "object") {
-            if (body.address) {
-                const rkey = `${body.address.keyPrefix || ''}${name}`;
-                block.addDerivative('routingKeys', [rkey]);
-            } else if (body.addresses) {
-                let value = [];
-                for (const address of body.addresses) {
-                    value.push(`${address.keyPrefix || ''}${name}`);
-                }
-                block.addDerivative('routingKeys', value);
-            }
-        }
 
         //
         // Generate an allocateToSite flag for appropriate blocks.
@@ -1429,12 +1430,12 @@ const deleteApplication = async function(apid, req, res) {
             returnStatus = 404;
             res.status(returnStatus).send('Not Found');
         } else {
-            storedApplications.delete(apid);
+            delete storedApplications[apid];
             res.status(returnStatus).send('Deleted');
         }
         await client.query("COMMIT");
     } catch (error) {
-        Log(`Exception in deleteApplication: ${error.message}`);
+        Log(`Exception in deleteApplication: ${error.stack}`);
         await client.query("ROLLBACK");
         returnStatus = 500;
         res.status(returnStatus).send(error.message);

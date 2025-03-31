@@ -45,29 +45,54 @@ spec:
   - name: postgres
     blockType: skx.io/postgres-balanced
     role: connect
+    host: database
+    port: 5432
   - name: control
     blockType: skx.io/http-simple
     role: accept
+    selectorKey: application
+    selectorValue: nearestprime
+    port: 8000
   body:
-    template:
-    - apiVersion: v1
-      kind: Pod
-      metadata:
-        name: nearestprime
-      spec:
-        containers:
-        - name: nearestprime
-          image: quay.io/tedlross/nearestprime:latest
-          imagePullPolicy: Always
-          ports:
-          - containerPort: 8000
-          env:
-          - name: DDW_PASSWORD
-            value: password
-          - name: DDW_HOST
-            value: db
-          - name: DDW_SITENAME
-            value: AKS
+    kubeTemplates:
+    - template:
+      - apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: nearestprime-${this.ident}
+        spec:
+          replicas: 2
+          selector:
+            matchLabels:
+              ${this.control.selectorKey}: ${this.control.selectorValue}
+          template:
+            metadata:
+              labels:
+                ${this.control.selectorKey}: ${this.control.selectorValue}
+            spec:
+              containers:
+              - name: nearestprime
+                image: quay.io/tedlross/nearestprime:latest
+                imagePullPolicy: Always
+                livenessProbe:
+                  failureThreshold: 3
+                  httpGet:
+                    path: /healthz
+                    port: ${this.control.port}
+                    scheme: HTTP
+                  initialDelaySeconds: 60
+                  periodSeconds: 10
+                  successThreshold: 1
+                  timeoutSeconds: 5
+                ports:
+                - containerPort: ${this.control.port}
+                env:
+                - name: DDW_PASSWORD
+                  value: demopass
+                - name: DDW_HOST
+                  value: ${this.postgres.host}
+                - name: DDW_SITENAME
+                  value: ${this.site.name}
 
 ##
 ## Controllable load generator
