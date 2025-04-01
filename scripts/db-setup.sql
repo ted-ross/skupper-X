@@ -336,6 +336,8 @@ CREATE TABLE LibraryBlocks (
     Revision   integer     DEFAULT 1,
     Created    timestamptz DEFAULT CURRENT_TIMESTAMP,
     Format     text,
+    Inherit    text,
+    Config     text,
     Interfaces text,
     SpecBody   text
 );

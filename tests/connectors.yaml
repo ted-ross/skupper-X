@@ -25,41 +25,42 @@ metadata:
   name: library/tcp-balanced
   annotations:
     platform: skupper-v2
+    target: selector
 spec:
+  config:
+    keyPrefix: tcp
+    distribution: balanced
+    priority: default
+    transport: tcp
+    protocol: tcp
   interfaces:
   - name: acceptor
     role: accept
   - name: connector
     role: connect
   body:
-    config:
-      keyPrefix: tcp
-      distribution: balanced
-      priority: default
-      transport: tcp
-      protocol: tcp
     kubeTemplates:
     - affinity: acceptor
       template:
       - apiVersion: skupper.io/v2alpha1
         kind: Connector
         metadata:
-          name: connector-${annotations:ident}
+          name: connector-${ident}
         spec:
           selector:
-            ${peer.selectorKey} : ${peer.selectorValue}
+            ${peer:selectorKey} : ${peer:selectorValue}
           port: ${peer:port}
-          routingKey: ${config:keyPrefix}-${annotations:ident}
+          routingKey: ${keyPrefix}-${ident}
     - affinity: connector
       template:
       - apiVersion: skupper.io/v2alpha1
         kind: Listener
         metadata:
-          name: listener-${annotations:ident}
+          name: listener-${ident}
         spec:
-          host: ${peer.host}
-          port: ${peer.port}
-          routingKey: ${config:keyPrefix}-${annotations:ident}
+          host: ${peer:host}
+          port: ${peer:port}
+          routingKey: ${keyPrefix}-${ident}
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
@@ -68,12 +69,7 @@ metadata:
   name: library/http-simple
 type: skupperx.io/connector
 spec:
-  interfaces:
-  - name: acceptor
-    role: accept
-  - name: connector
-    role: connect
-  body:
+  inherit:
     base: library/tcp-balanced
     transformOverwrite:
       keyPrefix: http
@@ -86,12 +82,7 @@ metadata:
   name: library/http-safe
 type: skupperx.io/connector
 spec:
-  interfaces:
-  - name: acceptor
-    role: accept
-  - name: connector
-    role: connect
-  body:
+  inherit:
     base: skx.io/tcp-simple
     transformOverwrite:
       keyPrefix: http-safe
@@ -107,12 +98,7 @@ metadata:
   name: library/postgres-balanced
 type: skupperx.io/connector
 spec:
-  interfaces:
-  - name: acceptor
-    role: accept
-  - name: connector
-    role: connect
-  body:
+  inherit:
     base: library/tcp-balanced
     transformOverwrite:
       keyPrefix: postgres

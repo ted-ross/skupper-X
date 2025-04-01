@@ -41,6 +41,8 @@ metadata:
   name: nearestprime
 type: skupperx.io/component
 spec:
+  config:
+    replicas: 2
   interfaces:
   - name: postgres
     blockType: skx.io/postgres-balanced
@@ -59,16 +61,16 @@ spec:
       - apiVersion: apps/v1
         kind: Deployment
         metadata:
-          name: nearestprime-${this.ident}
+          name: nearestprime-${ident}
         spec:
-          replicas: 2
+          replicas: ${replicas}
           selector:
             matchLabels:
-              ${this.control.selectorKey}: ${this.control.selectorValue}
+              ${local.control:selectorKey}: ${local.control:selectorValue}
           template:
             metadata:
               labels:
-                ${this.control.selectorKey}: ${this.control.selectorValue}
+                ${local.control:selectorKey}: ${local.control:selectorValue}
             spec:
               containers:
               - name: nearestprime
@@ -78,21 +80,21 @@ spec:
                   failureThreshold: 3
                   httpGet:
                     path: /healthz
-                    port: ${this.control.port}
+                    port: ${local.control:port}
                     scheme: HTTP
                   initialDelaySeconds: 60
                   periodSeconds: 10
                   successThreshold: 1
                   timeoutSeconds: 5
                 ports:
-                - containerPort: ${this.control.port}
+                - containerPort: ${local.control:port}
                 env:
                 - name: DDW_PASSWORD
                   value: demopass
                 - name: DDW_HOST
-                  value: ${this.postgres.host}
+                  value: ${local.postgres:host}
                 - name: DDW_SITENAME
-                  value: ${this.site.name}
+                  value: ${site:name}
 
 ##
 ## Controllable load generator

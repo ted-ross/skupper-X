@@ -131,7 +131,7 @@ class BlockInterface {
     }
 
     toString() {
-        return `BlockInterface ${this.ownerRef.name}.${this.name} (${this.blockType}.${this.role}) ${this.polarity ? 'north' : 'south'} max:${this.maxBindings}`;
+        return `BlockInterface ${this.ownerRef.name}.${this.name} (${this.blockType}.${this.role}) ${this.polarity ? 'north' : 'south'} max:${this.maxBindings ? this.maxBindings : 'unl'}`;
     }
 
     getName() {
@@ -189,6 +189,7 @@ class InstanceBlock {
         this.interfaces   = {};
         this.derivative   = {};
         this.dbid         = null;
+        this.metadata     = {};
     }
 
     _buildInterfaces(buildLog) {
@@ -289,6 +290,8 @@ class LibraryBlock {
                 revision : dbRecord.revision,
             },
             spec : {
+                inherit    : yaml.load(dbRecord.inherit),
+                config     : yaml.load(dbRecord.config),
                 interfaces : yaml.load(dbRecord.interfaces),
                 body       : yaml.load(dbRecord.specbody),
             }
@@ -327,12 +330,16 @@ class LibraryBlock {
         return !!this.item.spec.body.composite;
     }
 
-    overWriteObject(updated) {
-        this.item = updated;
+    overWriteSpec(updated) {
+        this.item.spec = updated;
     }
 
     expandFrom() {
-        return this.item.spec.body.base;
+        return this.item.spec.inherit ? this.item.spec.inherit.base : undefined;
+    }
+
+    config() {
+        return this.item.spec.config;
     }
 
     interfaces() {
@@ -727,16 +734,14 @@ const validateBlock = async function(block, validTypes, validRoles, blockRevisio
         }
     }
 
-    if (!block.spec.body) {
-        return `Record (${name}) does not have a spec.body`;
-    }
-
     return undefined;
 }
 
 const importBlock = async function(client, block, blockRevisions) {
     const name        = block.metadata.name;
     const newRevision = blockRevisions[name] ? blockRevisions[name].revision + 1 : 1;
+    const inherit     = yaml.dump(block.spec.inherit);
+    const config      = yaml.dump(block.spec.config);
     const ifObject    = yaml.dump(block.spec.interfaces);
     const bodyObject  = yaml.dump(block.spec.body);
 
@@ -745,16 +750,18 @@ const importBlock = async function(client, block, blockRevisions) {
     // Only insert a new revision into the database if it is different from the current revision.
     //
     if (newRevision > 1) {
-        const mostRecent = await client.query("SELECT Interfaces, SpecBody FROM LibraryBlocks WHERE Name = $1 AND Revision = $2", [name, newRevision - 1]);
+        const mostRecent = await client.query("SELECT Inherit, Config, Interfaces, SpecBody FROM LibraryBlocks WHERE Name = $1 AND Revision = $2", [name, newRevision - 1]);
         if (mostRecent.rowCount == 1
+            && inherit    == mostRecent.rows[0].inherit
+            && config     == mostRecent.rows[0].config
             && ifObject   == mostRecent.rows[0].interfaces
             && bodyObject == mostRecent.rows[0].specbody) {
             return 0;
         }
     }
 
-    await client.query("INSERT INTO LibraryBlocks (Type, Name, Revision, Format, Interfaces, SpecBody) VALUES ($1, $2, $3, 'application/yaml', $4, $5)",
-                       [block.type, name, newRevision, ifObject, bodyObject]);
+    await client.query("INSERT INTO LibraryBlocks (Type, Name, Revision, Format, Inherit, Config, Interfaces, SpecBody) VALUES ($1, $2, $3, 'application/yaml', $4, $5, $6, $7)",
+                       [block.type, name, newRevision, inherit, config, ifObject, bodyObject]);
     return 1;
 }
 
@@ -775,7 +782,6 @@ const loadLibraryBlock = async function(client, library, blockName, buildLog) {
     // Fetch all revisions of this block from the database.
     //
     const result = await client.query("SELECT * FROM LibraryBlocks WHERE Name = $1 ORDER BY Revision DESC", [elements[0]]);
-
     if (result.rowCount == 0) {
         buildLog.error(`Library block ${elements[0]} not found`)
     }
@@ -815,12 +821,15 @@ const loadLibraryBlock = async function(client, library, blockName, buildLog) {
     // If the body of the desired block references other blocks (it's composite or derived), load those into the map as well.
     //
     const body = yaml.load(revisionBlock.specbody);
-    if (typeof(body.composite) == "object") {
+    if (body && typeof(body.composite) == "object") {
         for (const subblock of body.composite.blocks) {
             await loadLibraryBlock(client, library, subblock.block, buildLog)
         }
-    } else if (body.base) {
-        await loadLibraryBlock(client, library, body.base, buildLog);
+    }
+
+    const inherit = yaml.load(revisionBlock.inherit);
+    if (inherit && inherit.base) {
+        await loadLibraryBlock(client, library, inherit.base, buildLog);
     }
 }
 
@@ -832,7 +841,7 @@ const expandBlock = function(library, blockName, buildLog) {
     const baseBlockName = block.expandFrom();
     if (!!baseBlockName) {
         if (block.isFlagSet()) {
-            buildLog.error(`Circular dependencies detected in hierarchy for block ${blockName}`)
+            buildLog.error(`Circular dependencies detected in inheritance hierarchy for block ${blockName}`);
         }
         block.setFlag(true);
 
@@ -844,27 +853,30 @@ const expandBlock = function(library, blockName, buildLog) {
             expandBlock(library, baseBlock.name(), buildLog);
         }
 
+        // TODO - Inherit the entire spec, but expand only the config
+
         //
         // Do the expansion from the base.
         //
-        let   expanded = block.object();
-        const specbody = deepCopy(expanded.spec.body);
-        if (specbody.base) {
-            const parent = baseBlock.object();
-            expanded.spec.body = deepCopy(parent.spec.body);
-            if (specbody.transformOverwrite) {
-                expanded.spec.body = deepAppend(expanded.spec.body, specbody.transformOverwrite);
+        let   expanded   = block.object();
+        const transform  = deepCopy(expanded.spec.inherit);
+        const parentspec = baseBlock.object().spec;
+
+        expanded.spec = deepCopy(parentspec);
+        if (expanded.spec.config) {
+            if (transform.transformOverwrite) {
+                expanded.spec.config = deepAppend(expanded.spec.config, transform.transformOverwrite);
             }
-            if (specbody.transformDelete) {
+            if (transform.transformDelete) {
                 // TODO - array of paths to be removed from the base
                 buildLog.error(`transformDelete not implemented in ${block}`);
             }
-            if (specbody.transformListItem) {
+            if (transform.transformListItem) {
                 // TODO - array of path/index/transform[Overwrite|Delete|ListItem]
                 buildLog.error(`ERROR: transformListItem not implemented in ${block}`);
             }
         }
-        block.overWriteObject(expanded);
+        block.overWriteSpec(expanded.spec);
         block.setFlag(false);
 
         buildLog.log(`Expanded block ${block.name()} from base ${baseBlock.name()}`);
@@ -1595,19 +1607,19 @@ exports.ApiInit = function(app) {
         await listLibraryBlocks(req, res);
     });
 
-    app.get(COMPOSE_PREFIX + 'library/block/:blockid', async (req, res) => {
+    app.get(COMPOSE_PREFIX + 'library/blocks/:blockid', async (req, res) => {
         await getLibraryBlock(req.params.blockid, req, res);
     });
 
-    app.delete(COMPOSE_PREFIX + 'library/block/:blockid', async (req, res) => {
+    app.delete(COMPOSE_PREFIX + 'library/blocks/:blockid', async (req, res) => {
         await deleteLibraryBlock(req.params.blockid, req, res);
     });
 
-    app.post(COMPOSE_PREFIX + 'application', async (req, res) => {
+    app.post(COMPOSE_PREFIX + 'applications', async (req, res) => {
         await postApplication(req, res);
     });
 
-    app.put(COMPOSE_PREFIX + 'application/:apid/build', async (req, res) => {
+    app.put(COMPOSE_PREFIX + 'applications/:apid/build', async (req, res) => {
         await buildApplication(req.params.apid, req, res);
     });
 
@@ -1615,15 +1627,15 @@ exports.ApiInit = function(app) {
         await listApplications(req, res);
     });
 
-    app.get(COMPOSE_PREFIX + 'application/:apid', async (req, res) => {
+    app.get(COMPOSE_PREFIX + 'applications/:apid', async (req, res) => {
         await getApplication(req.params.apid, req, res);
     });
 
-    app.get(COMPOSE_PREFIX + 'application/:apid/log', async (req, res) => {
+    app.get(COMPOSE_PREFIX + 'applications/:apid/log', async (req, res) => {
         await getApplicationBuildLog(req.params.apid, req, res);
     });
 
-    app.delete(COMPOSE_PREFIX + 'application/:apid', async (req, res) => {
+    app.delete(COMPOSE_PREFIX + 'applications/:apid', async (req, res) => {
         await deleteApplication(req.params.apid, req, res);
     });
 
@@ -1635,15 +1647,15 @@ exports.ApiInit = function(app) {
         await listDeployments(req, res);
     });
 
-    app.get(COMPOSE_PREFIX + 'deployment/:depid', async (req, res) => {
+    app.get(COMPOSE_PREFIX + 'deployments/:depid', async (req, res) => {
         await getDeployment(req.params.depid, req, res);
     });
 
-    app.delete(COMPOSE_PREFIX + 'deployment/:depid', async (req, res) => {
+    app.delete(COMPOSE_PREFIX + 'deployments/:depid', async (req, res) => {
         await deleteDeployment(req.params.depid, req, res);
     });
 
-    app.get(COMPOSE_PREFIX + 'deployment/:depid/sitedata/:siteid', async (req, res) => {
+    app.get(COMPOSE_PREFIX + 'deployments/:depid/sitedata/:siteid', async (req, res) => {
         await getSiteData(req.params.depid, req.params.siteid, req, res);
     });
 }
