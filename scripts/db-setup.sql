@@ -357,6 +357,7 @@ CREATE TABLE InstanceBlocks (
     Application  UUID REFERENCES Applications(Id),
     LibraryBlock UUID REFERENCES LibraryBlocks(Id),
     InstanceName text,
+    Metadata     text,
     Derivative   text
 );
 

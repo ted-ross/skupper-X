@@ -24,6 +24,7 @@ const Log        = require('./common/log.js').Log;
 const db         = require('./db.js');
 const formidable = require('formidable');
 const util       = require('./common/util.js');
+const ident      = require('./ident.js');
 
 const COMPOSE_PREFIX = '/compose/v1alpha1/';
 const API_VERSION    = 'skupperx.io/compose/v1alpha1';
@@ -205,6 +206,13 @@ class InstanceBlock {
         this.libraryBlock = libraryBlock;
         this.name         = name;
 
+        const config = libraryBlock.config();
+        if (!!config) {
+            this.metadata = deepCopy(config);
+        }
+
+        this.metadata.ident = ident.NewIdentity();
+
         buildLog.log(`${this}`);
         this._buildInterfaces(buildLog);
     }
@@ -213,12 +221,13 @@ class InstanceBlock {
         this.libraryBlock = libraryBlock;
         this.name         = row.instancename;
         this.dbid         = row.id;
+        this.metadata     = JSON.parse(row.metadata);
         this.derivative   = JSON.parse(row.derivative);
         this._buildInterfaces(buildLog);
     }
 
     toString() {
-        return `InstanceBlock ${this.name} [${this.libraryBlock}]`;
+        return `InstanceBlock(${this.metadata.ident}) ${this.name} [${this.libraryBlock}]`;
     }
 
     getName() {
@@ -235,6 +244,10 @@ class InstanceBlock {
 
     setLabel(key, value) {
         this.labels[key] = value;
+    }
+
+    getMetadata() {
+        return this.metadata;
     }
 
     addDerivative(key, value) {
@@ -1305,8 +1318,8 @@ const buildApplication = async function(apid, req, res) {
             await client.query("DELETE FROM InstanceBlocks WHERE Application = $1", [apid]);
             const instanceBlocks = application.getInstanceBlocks();
             for (const [name, block] of Object.entries(instanceBlocks)) {
-                const result = await client.query("INSERT INTO InstanceBlocks (Application, LibraryBlock, InstanceName, Derivative) VALUES ($1, $2, $3, $4) RETURNING Id",
-                                                  [apid, block.libraryBlockDatabaseId(), name, JSON.stringify(block.getDerivative())]);
+                const result = await client.query("INSERT INTO InstanceBlocks (Application, LibraryBlock, InstanceName, Metadata, Derivative) VALUES ($1, $2, $3, $4, $5) RETURNING Id",
+                                                  [apid, block.libraryBlockDatabaseId(), name, JSON.stringify(block.getMetadata()), JSON.stringify(block.getDerivative())]);
                 if (result.rowCount == 1) {
                     block.setDatabaseId(result.rows[0].id);
                 }
