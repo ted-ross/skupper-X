@@ -63,11 +63,9 @@ const deepAppend = function(base, overlay) {
 }
 
 const expandString = function(text, metadata) {
-    console.log(`expandString: ${text}`);
     let newText = new String(text);
     for (const [key, value] of Object.entries(metadata)) {
         newText = newText.replace(`\${${key}}`, value);
-        console.log(`    ${key} => ${newText}`);
     }
 
     //
@@ -119,14 +117,13 @@ class BlockInterface {
         this.name          = ifaceSpec.name;
         this.role          = ifaceSpec.role;
         this.polarity      = ifaceSpec.polarity == 'north';
-        this.selectorKey   = ifaceSpec.selectorKey;
-        this.selectorValue = ifaceSpec.selectorValue;
-        this.host          = ifaceSpec.host;
-        this.port          = ifaceSpec.port;
         this.blockType     = blockType;
         this.maxBindings   = ifaceSpec.maxBindings ? ifaceSpec.maxBindings == 'unlimited' ? 0 : parseInt(ifaceSpec.maxBindings) : 1;
         this.bindings      = [];
         this.boundThrough  = false;
+        this.metadata      = {};
+
+        this.metadata = deepCopy(ifaceSpec);
 
         buildLog.log(`    ${this}`);
     }
@@ -148,14 +145,7 @@ class BlockInterface {
     }
 
     getData(key) {
-        switch (key) {
-            case 'selectorKey'   : return this.selectorKey;
-            case 'selectorValue' : return this.selectorValue;
-            case 'host'          : return this.host;
-            case 'port'          : return this.port;
-        }
-
-        return undefined;
+        return this.metadata[key];
     }
 
     addBinding(binding) {
@@ -256,6 +246,41 @@ class InstanceBlock {
 
     getDerivative() {
         return this.derivative;
+    }
+
+    getBlockData(key) {
+        switch (key) {
+            case 'name' : return this.name;
+            default     : return this.metadata[key];
+        }
+    }
+
+    getLocalInterfaceData(localIfName, key) {
+        if (!this.interfaces[localIfName]) {
+            throw new Error(`Unknown interface '${localIfName}' for instance block ${this.name}`);
+        }
+
+        return this.interfaces[localIfName].getData(key);
+    }
+
+    getPeerInterfaceData(localIfName, key) {
+        if (!this.interfaces[localIfName]) {
+            throw new Error(`Unknown interface '${localIfName}' for instance block ${this.name}`);
+        }
+
+        const localInterface = this.interfaces[localIfName];
+        const bindings       = localInterface.getBindings();
+
+        if (bindings.length == 0) {
+            throw new Error(`Attempting to access peer interface key '${key}' on interface ${this.name}/${localIfName} which has no bound peer`);
+        }
+
+        if (bindings.length > 1) {
+            throw new Error(`Attempting to access peer interface key '${key}' on interface ${this.name}/${localIfName} which has more than one bound peer - not permitted`);
+        }
+
+        const peerInterface = localInterface.isNorth() ? bindings[0].getSouthInterface() : bindings[0].getNorthInterface();
+        return peerInterface.getData(key);
     }
 
     object() {
@@ -944,6 +969,122 @@ const generateDerivativeData = function(application, buildLog, blockTypes) {
 }
 
 //
+// Input variables are of one of the following forms:
+//
+//   <variable>
+//   local.<local-if-name>:<variable>
+//   peer.<local-if-name>:<variable>
+//   peer:<variable>
+//   site:<variable>
+//
+const evaluateVariable = function(key, block, affinityInterface, site) {
+    const colon = key.indexOf(':');
+
+    if (colon < 0) {
+        return block.getBlockData(key);
+    }
+
+    const section = key.split(':');
+    if (section.length != 2) {
+        throw new Error(`Malformed variable '${key}' (block ${block.name()})`);
+    }
+
+    const scope = section[0].split('.');
+    switch (scope[0]) {
+        case 'local':
+            if (scope.length != 2) {
+                throw new Error(`Malformed variable '${key}' - 'local' requires a local interface name qualifier`);
+            }
+            return block.getLocalInterfaceData(scope[1], section[1]);
+
+        case 'peer':
+            if (scope.length == 1) {
+                if (!affinityInterface) {
+                    throw new Error(`Malformed variables '${key}' - 'peer' has no qualifiers but there is no interface with affinity`);
+                }
+                return block.getPeerInterfaceData(affinityInterface, section[1]);
+            } else if (scope.length == 2) {
+                return block.getPeerInterfaceData(scope[1], section[1]);
+            } else {
+                throw new Error(`Malformed variable '${key}' - 'peer' may have zero or one qualifiers, not more`);
+            }
+
+        case 'site':
+            if (scope.length == 2) {
+                throw new Error(`Malformed variable '${key}' - 'site' does not permit qualifiers`);
+            }
+            return site[section[1]];
+    }
+
+    throw new Error(`Malformed variable '${key}' - Unrecognized qualifier`);
+}
+
+//
+// Identify all variables in the string and expand each of them
+//
+const substituteString = function(text, block, affinityInterface, site) {
+    const varStart = text.indexOf('${');
+    if (varStart < 0) {
+        //
+        // No variables in this text
+        //
+        return text;
+    }
+
+    const before = text.slice(0, varStart);
+    const after  = text.slice(varStart + 2);
+    const varEnd = after.indexOf('}');
+    if (varEnd < 0) {
+        //
+        // No well-formed variable expression, don't substitute
+        //
+        return text;
+    }
+
+    const variable = after.slice(0, varEnd);
+    const theRest  = after.slice(varEnd + 1)
+    var   evalData = evaluateVariable(variable, block, affinityInterface, site);
+    if (!evalData) {
+        //throw new Error(`Variable '${variable}' cannot be evaluated (block ${block.getName()})`);
+        evalData = "UNDEFINED";
+    }
+
+    var result;
+    if (before.length == 0 && theRest.length == 0) {
+        result = evalData;
+    } else {
+        result = before + evalData + substituteString(theRest, block, affinityInterface, site);
+    }
+
+    return result;
+}
+
+//
+// Substitute variables in the contents of an object.  Note that variables can be in map keys as
+// well as map values.
+//
+const substituteObject = function(obj, block, affinityInterface, site) {
+    var result;
+    if (Array.isArray(obj)) {
+        result = [];
+        for (const subobj of obj) {
+            result.push(substituteObject(subobj, block, affinityInterface, site));
+        }
+    } else if (typeof(obj) == 'object') {
+        result = {};
+        for (const [key, value] of Object.entries(obj)) {
+            const subkey = substituteString(key, block, affinityInterface, site);
+            result[subkey] = substituteObject(value, block, affinityInterface, site);
+        }
+    } else if (typeof(obj) == 'string') {
+        result = substituteString(obj, block, affinityInterface, site);
+    } else {
+        result = obj;
+    }
+    return result;
+}
+
+//
 // For every instance block in the application, check for the allocateToSite flag.  If true,
 // generate the configuration to allocate the block to this site.
 //
@@ -954,7 +1095,6 @@ const generateDerivativeData = function(application, buildLog, blockTypes) {
 //   - Kubernetes network policies to restrict access to that specified
 //
 const addMemberSite = async function(client, app, site, depid) {
-    console.log(`addMemberSite: ${site.name}`);
     const siteClasses  = site.siteclasses;
     const siteMetadata = JSON.parse(site.metadata);
     const instanceBlocks = app.getInstanceBlocks();
@@ -975,16 +1115,17 @@ const addMemberSite = async function(client, app, site, depid) {
             // Now check to see if the block should be allocated to _this_ site.
             //
             if (instanceBlock.siteClassMatches(siteClasses)) {
-                console.log(`    Allocating block: ${instanceBlock}`);
 
                 //
                 // Configure the allocation of the block to this site
                 //
                 const libraryBlock = instanceBlock.getLibraryBlock();
-                const body         = libraryBlock.body();
-                if (body.template) {
-                    for (const element of body.template) {
-                        siteConfiguration.push(element);
+                const body         = substituteObject(libraryBlock.body(), instanceBlock, undefined, siteMetadata);
+                if (body.kubeTemplates) {
+                    for (const element of body.kubeTemplates) {
+                        for (const template of element.template) {
+                            siteConfiguration.push(template);
+                        }
                     }
                 }
 
@@ -994,7 +1135,6 @@ const addMemberSite = async function(client, app, site, depid) {
                 //
                 const interfaces = instanceBlock.getInterfaces();
                 for (const [iname, iface] of Object.entries(interfaces)) {
-                    console.log(`        Processing interface: ${iname}`);
                     //
                     // Process each peer block bound through this interface.
                     //
@@ -1002,50 +1142,16 @@ const addMemberSite = async function(client, app, site, depid) {
                     for (const binding of bindings) {
                         const peerInterface = iface.isNorth() ? binding.getSouthInterface() : binding.getNorthInterface();
                         const peer          = peerInterface.getOwner();
-                        console.log(`            Peer: ${peer} Role: ${iface.getRole()}`);
+                        const peerBody      = deepCopy(peer.getLibraryBlock().body());
 
                         //
                         // Generate configuration data based on the content of the peer.
                         //
-                        const peerDerivative = peer.getDerivative();
-                        if (peerDerivative.routingKeys) {
-                            for (const key of peerDerivative.routingKeys) {
-                                const actualKey = expandString(key, siteMetadata);
-                                if (actualKey) {
-                                    if (iface.getRole() == 'connect') {
-                                        console.log('                => Listener');
-                                        //
-                                        // Generate a Skupper Listener
-                                        //
-                                        siteConfiguration.push({
-                                            apiVersion: 'skupper.io/v2alpha1',
-                                            kind: 'Listener',
-                                            metadata: {
-                                                name: 'listener-' + actualKey,
-                                            },
-                                            spec: {
-                                                host: 'host',
-                                                port: 1234,
-                                                routingKey: actualKey,
-                                            },
-                                        });
-                                    } else if (iface.getRole() == 'accept') {
-                                        console.log('                => Connector');
-                                        //
-                                        // Generate a Skupper Connector
-                                        //
-                                        siteConfiguration.push({
-                                            apiVersion: 'skupper.io/v2alpha1',
-                                            kind: 'Connector',
-                                            metadata: {
-                                                name: 'connector-' + actualKey,
-                                            },
-                                            spec: {
-                                                selector: 'selector',
-                                                port: 1234,
-                                                routingKey: actualKey,
-                                            },
-                                        });
+                        if (peerBody.kubeTemplates) {
+                            for (const kt of peerBody.kubeTemplates) {
+                                if (!kt.affinity || kt.affinity == peerInterface.getName()) {
+                                    for (var templateItem of kt.template) {
+                                        siteConfiguration.push(substituteObject(templateItem, peer, kt.affinity, siteMetadata));
                                     }
                                 }
                             }
@@ -1668,7 +1774,7 @@ exports.ApiInit = function(app) {
         await deleteDeployment(req.params.depid, req, res);
     });
 
-    app.get(COMPOSE_PREFIX + 'deployments/:depid/sitedata/:siteid', async (req, res) => {
+    app.get(COMPOSE_PREFIX + 'deployments/:depid/site/:siteid/sitedata', async (req, res) => {
         await getSiteData(req.params.depid, req.params.siteid, req, res);
     });
 }

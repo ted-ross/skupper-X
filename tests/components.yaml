@@ -28,6 +28,8 @@ spec:
     blockType: skx.io/postgres-balanced
     role: accept
     maxBindings: unlimited
+    host: localhost
+    port: 5432
   body: external
 
 ##

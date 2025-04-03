@@ -95,7 +95,7 @@ spec:
           block: database
           blockInterface: postgres
       - name: dispatch-to-worker
-        block: library/tcp-balanced
+        block: library/tcp-selector
         bindings:
         - interface: acceptor
           block: worker

@@ -22,7 +22,7 @@ apiVersion: skupperx.io/compose/v1alpha1
 kind: Block
 type: skupperx.io/connector
 metadata:
-  name: library/tcp-balanced
+  name: library/tcp-selector
   annotations:
     platform: skupper-v2
     target: selector
@@ -65,12 +65,56 @@ spec:
 ---
 apiVersion: skupperx.io/compose/v1alpha1
 kind: Block
+type: skupperx.io/connector
+metadata:
+  name: library/tcp-host
+  annotations:
+    platform: skupper-v2
+    target: host
+spec:
+  config:
+    keyPrefix: tcp
+    distribution: balanced
+    priority: default
+    transport: tcp
+    protocol: tcp
+  interfaces:
+  - name: acceptor
+    role: accept
+  - name: connector
+    role: connect
+  body:
+    kubeTemplates:
+    - affinity: acceptor
+      template:
+      - apiVersion: skupper.io/v2alpha1
+        kind: Connector
+        metadata:
+          name: connector-${ident}
+        spec:
+          host: ${peer:host}
+          port: ${peer:port}
+          routingKey: ${keyPrefix}-${ident}
+    - affinity: connector
+      template:
+      - apiVersion: skupper.io/v2alpha1
+        kind: Listener
+        metadata:
+          name: listener-${ident}
+        spec:
+          host: ${peer:host}
+          port: ${peer:port}
+          routingKey: ${keyPrefix}-${ident}
+
+---
+apiVersion: skupperx.io/compose/v1alpha1
+kind: Block
 metadata:
   name: library/http-simple
 type: skupperx.io/connector
 spec:
   inherit:
-    base: library/tcp-balanced
+    base: library/tcp-selector
     transformOverwrite:
       keyPrefix: http
       protocol: http
@@ -83,7 +127,7 @@ metadata:
 type: skupperx.io/connector
 spec:
   inherit:
-    base: skx.io/tcp-simple
+    base: library/http-simple
     transformOverwrite:
       keyPrefix: http-safe
       protocol: http
@@ -99,7 +143,7 @@ metadata:
 type: skupperx.io/connector
 spec:
   inherit:
-    base: library/tcp-balanced
+    base: library/tcp-host
     transformOverwrite:
       keyPrefix: postgres
       protocol: postgres
@@ -115,6 +159,5 @@ spec:
   - name: connector
     role: connect
   body:
-    config: {}
     ingress: route
 
