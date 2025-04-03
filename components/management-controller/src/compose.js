@@ -1115,7 +1115,6 @@ const addMemberSite = async function(client, app, site, depid) {
             // Now check to see if the block should be allocated to _this_ site.
             //
             if (instanceBlock.siteClassMatches(siteClasses)) {
-
                 //
                 // Configure the allocation of the block to this site
                 //
@@ -1134,7 +1133,7 @@ const addMemberSite = async function(client, app, site, depid) {
                 // The peer block may contain configuration that is needed for this site.
                 //
                 const interfaces = instanceBlock.getInterfaces();
-                for (const [iname, iface] of Object.entries(interfaces)) {
+                for (const iface of Object.values(interfaces)) {
                     //
                     // Process each peer block bound through this interface.
                     //
@@ -1738,16 +1737,16 @@ exports.ApiInit = function(app) {
         await postApplication(req, res);
     });
 
-    app.put(COMPOSE_PREFIX + 'applications/:apid/build', async (req, res) => {
-        await buildApplication(req.params.apid, req, res);
-    });
-
     app.get(COMPOSE_PREFIX + 'applications', async (req, res) => {
         await listApplications(req, res);
     });
 
     app.get(COMPOSE_PREFIX + 'applications/:apid', async (req, res) => {
         await getApplication(req.params.apid, req, res);
+    });
+
+    app.put(COMPOSE_PREFIX + 'applications/:apid/build', async (req, res) => {
+        await buildApplication(req.params.apid, req, res);
     });
 
     app.get(COMPOSE_PREFIX + 'applications/:apid/log', async (req, res) => {

@@ -109,7 +109,7 @@ apiVersion: skupperx.io/compose/v1alpha1
 kind: Block
 metadata:
   name: sovereigncloud/container
-type: skupperx.io/component
+type: skupperx.io/container
 spec:
   body:
     composite:

@@ -398,6 +398,7 @@ INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 
 INSERT INTO WebSessions (Id, UserId) VALUES (gen_random_uuid(), 1);
 
 INSERT INTO BlockTypes (Name, AllowNorth, AllowSouth, AllocateToSite) VALUES
+    ('skupperx.io/container', false, false, false),
     ('skupperx.io/component', true,  false, true),
     ('skupperx.io/connector', false, true,  false),
     ('skupperx.io/mixed',     true,  true,  false),

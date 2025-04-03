@@ -31,7 +31,6 @@ spec:
     keyPrefix: tcp
     distribution: balanced
     priority: default
-    transport: tcp
     protocol: tcp
   interfaces:
   - name: acceptor
@@ -47,10 +46,11 @@ spec:
         metadata:
           name: connector-${ident}
         spec:
+          type: tcp
           selector:
             ${peer:selectorKey} : ${peer:selectorValue}
           port: ${peer:port}
-          routingKey: ${keyPrefix}-${ident}
+          routingKey: ${keyPrefix}${name}
     - affinity: connector
       template:
       - apiVersion: skupper.io/v2alpha1
@@ -58,9 +58,10 @@ spec:
         metadata:
           name: listener-${ident}
         spec:
+          type: tcp
           host: ${peer:host}
           port: ${peer:port}
-          routingKey: ${keyPrefix}-${ident}
+          routingKey: ${keyPrefix}${name}
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
@@ -94,7 +95,7 @@ spec:
         spec:
           host: ${peer:host}
           port: ${peer:port}
-          routingKey: ${keyPrefix}-${ident}
+          routingKey: ${keyPrefix}${name}
     - affinity: connector
       template:
       - apiVersion: skupper.io/v2alpha1
@@ -104,7 +105,7 @@ spec:
         spec:
           host: ${peer:host}
           port: ${peer:port}
-          routingKey: ${keyPrefix}-${ident}
+          routingKey: ${keyPrefix}${name}
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
