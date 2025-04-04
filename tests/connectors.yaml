@@ -98,15 +98,15 @@ spec:
       - apiVersion: networking.k8s.io/v1
         kind: NetworkPolicy
         metadata:
-          name: egress-policy-${ident}
+          name: ingress-policy-${ident}
         spec:
           podSelector:
             matchLabels:
               ${peerblock:selectorKey} : ${peerblock:selectorValue}
           policyTypes:
-          - Egress
-          egress:
-          - to:
+          - Ingress
+          ingress:
+          - from:
             - podSelector:
                 matchLabels:
                   skupper.io/component: router
@@ -127,15 +127,15 @@ spec:
       - apiVersion: networking.k8s.io/v1
         kind: NetworkPolicy
         metadata:
-          name: ingress-policy-${ident}
+          name: egress-policy-${ident}
         spec:
           podSelector:
             matchLabels:
               ${peerblock:selectorKey} : ${peerblock:selectorValue}
           policyTypes:
-          - Ingress
-          ingress:
-          - from:
+          - Egress
+          egress:
+          - to:
             - podSelector:
                 matchLabels:
                   skupper.io/component: router
@@ -223,15 +223,15 @@ spec:
       - apiVersion: networking.k8s.io/v1
         kind: NetworkPolicy
         metadata:
-          name: egress-policy-${ident}
+          name: inress-policy-${ident}
         spec:
           podSelector:
             matchLabels:
               ${peerblock:selectorKey} : ${peerblock:selectorValue}
           policyTypes:
-          - Egress
-          egress:
-          - to:
+          - Ingress
+          ingress:
+          - from:
             - podSelector:
                 matchLabels:
                   skupper.io/component: router
@@ -251,15 +251,15 @@ spec:
       - apiVersion: networking.k8s.io/v1
         kind: NetworkPolicy
         metadata:
-          name: ingress-policy-${ident}
+          name: egress-policy-${ident}
         spec:
           podSelector:
             matchLabels:
               ${peerblock:selectorKey} : ${peerblock:selectorValue}
           policyTypes:
-          - Ingress
-          ingress:
-          - from:
+          - Egress
+          egress:
+          - to:
             - podSelector:
                 matchLabels:
                   skupper.io/component: router
