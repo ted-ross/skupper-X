@@ -62,22 +62,6 @@ const deepAppend = function(base, overlay) {
     }
 }
 
-const expandString = function(text, metadata) {
-    let newText = new String(text);
-    for (const [key, value] of Object.entries(metadata)) {
-        newText = newText.replace(`\${${key}}`, value);
-    }
-
-    //
-    // Don't return a string with remaining symbolic substrings.
-    //
-    if (newText.indexOf('${') < 0) {
-        return newText;
-    } else {
-        return undefined;
-    }
-}
-
 class BuildLog {
     constructor(disabled) {
         this.disabled = !!disabled;
