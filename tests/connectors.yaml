@@ -47,8 +47,7 @@ spec:
           name: connector-${ident}
         spec:
           type: tcp
-          selector:
-            ${peerblock:selectorKey} : ${peerblock:selectorValue}
+          selector: ${peerblock:selectorKey}=${peerblock:selectorValue}
           port: ${peer:port}
           routingKey: ${keyPrefix}${name}
     - affinity: connector
@@ -62,6 +61,87 @@ spec:
           host: ${peer:host}
           port: ${peer:port}
           routingKey: ${keyPrefix}${name}
+
+---
+apiVersion: skupperx.io/compose/v1alpha1
+kind: Block
+type: skupperx.io/connector
+metadata:
+  name: library/tcp-selector-with-policy
+  annotations:
+    platform: skupper-v2
+    target: selector
+spec:
+  config:
+    keyPrefix: tcp
+    distribution: balanced
+    priority: default
+    protocol: none
+  interfaces:
+  - name: acceptor
+    role: accept
+  - name: connector
+    role: connect
+  body:
+    kubeTemplates:
+    - affinity: acceptor
+      template:
+      - apiVersion: skupper.io/v2alpha1
+        kind: Connector
+        metadata:
+          name: connector-${ident}
+        spec:
+          type: tcp
+          selector: ${peerblock:selectorKey}=${peerblock:selectorValue}
+          port: ${peer:port}
+          routingKey: ${keyPrefix}${name}
+      - apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        metadata:
+          name: egress-policy-${ident}
+        spec:
+          podSelector:
+            matchLabels:
+              ${peerblock:selectorKey} : ${peerblock:selectorValue}
+          policyTypes:
+          - Egress
+          egress:
+          - to:
+            - podSelector:
+                matchLabels:
+                  skupper.io/component: router
+            ports:
+            - protocol: TCP
+              port: ${peer:port}
+    - affinity: connector
+      template:
+      - apiVersion: skupper.io/v2alpha1
+        kind: Listener
+        metadata:
+          name: listener-${ident}
+        spec:
+          type: tcp
+          host: ${peer:host}
+          port: ${peer:port}
+          routingKey: ${keyPrefix}${name}
+      - apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        metadata:
+          name: ingress-policy-${ident}
+        spec:
+          podSelector:
+            matchLabels:
+              ${peerblock:selectorKey} : ${peerblock:selectorValue}
+          policyTypes:
+          - Ingress
+          ingress:
+          - from:
+            - podSelector:
+                matchLabels:
+                  skupper.io/component: router
+            ports:
+            - protocol: TCP
+              port: ${peer:port}
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
@@ -110,6 +190,86 @@ spec:
 ---
 apiVersion: skupperx.io/compose/v1alpha1
 kind: Block
+type: skupperx.io/connector
+metadata:
+  name: library/tcp-host-with-policy
+  annotations:
+    platform: skupper-v2
+    target: host
+spec:
+  config:
+    keyPrefix: tcp
+    distribution: balanced
+    priority: default
+    transport: tcp
+    protocol: none
+  interfaces:
+  - name: acceptor
+    role: accept
+  - name: connector
+    role: connect
+  body:
+    kubeTemplates:
+    - affinity: acceptor
+      template:
+      - apiVersion: skupper.io/v2alpha1
+        kind: Connector
+        metadata:
+          name: connector-${ident}
+        spec:
+          host: ${peer:host}
+          port: ${peer:port}
+          routingKey: ${keyPrefix}${name}
+      - apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        metadata:
+          name: egress-policy-${ident}
+        spec:
+          podSelector:
+            matchLabels:
+              ${peerblock:selectorKey} : ${peerblock:selectorValue}
+          policyTypes:
+          - Egress
+          egress:
+          - to:
+            - podSelector:
+                matchLabels:
+                  skupper.io/component: router
+            ports:
+            - protocol: TCP
+              port: ${peer:port}
+    - affinity: connector
+      template:
+      - apiVersion: skupper.io/v2alpha1
+        kind: Listener
+        metadata:
+          name: listener-${ident}
+        spec:
+          host: ${peer:host}
+          port: ${peer:port}
+          routingKey: ${keyPrefix}${name}
+      - apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        metadata:
+          name: ingress-policy-${ident}
+        spec:
+          podSelector:
+            matchLabels:
+              ${peerblock:selectorKey} : ${peerblock:selectorValue}
+          policyTypes:
+          - Ingress
+          ingress:
+          - from:
+            - podSelector:
+                matchLabels:
+                  skupper.io/component: router
+            ports:
+            - protocol: TCP
+              port: ${peer:port}
+
+---
+apiVersion: skupperx.io/compose/v1alpha1
+kind: Block
 metadata:
   name: library/http-simple
 type: skupperx.io/connector
@@ -144,7 +304,7 @@ metadata:
 type: skupperx.io/connector
 spec:
   inherit:
-    base: library/tcp-host
+    base: library/tcp-host-with-policy
     transformOverwrite:
       keyPrefix: postgres
       protocol: postgres
