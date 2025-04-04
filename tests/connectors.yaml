@@ -31,7 +31,7 @@ spec:
     keyPrefix: tcp
     distribution: balanced
     priority: default
-    protocol: tcp
+    protocol: none
   interfaces:
   - name: acceptor
     role: accept
@@ -48,7 +48,7 @@ spec:
         spec:
           type: tcp
           selector:
-            ${peer:selectorKey} : ${peer:selectorValue}
+            ${peerblock:selectorKey} : ${peerblock:selectorValue}
           port: ${peer:port}
           routingKey: ${keyPrefix}${name}
     - affinity: connector
@@ -78,7 +78,7 @@ spec:
     distribution: balanced
     priority: default
     transport: tcp
-    protocol: tcp
+    protocol: none
   interfaces:
   - name: acceptor
     role: accept

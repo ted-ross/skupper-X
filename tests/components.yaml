@@ -45,6 +45,8 @@ type: skupperx.io/component
 spec:
   config:
     replicas: 2
+    selectorKey: application
+    selectorValue: nearestprime
   interfaces:
   - name: postgres
     blockType: skx.io/postgres-balanced
@@ -54,8 +56,6 @@ spec:
   - name: control
     blockType: skx.io/http-simple
     role: accept
-    selectorKey: application
-    selectorValue: nearestprime
     port: 8000
   body:
     kubeTemplates:
@@ -68,11 +68,11 @@ spec:
           replicas: ${replicas}
           selector:
             matchLabels:
-              ${local.control:selectorKey}: ${local.control:selectorValue}
+              ${selectorKey}: ${selectorValue}
           template:
             metadata:
               labels:
-                ${local.control:selectorKey}: ${local.control:selectorValue}
+                ${selectorKey}: ${selectorValue}
             spec:
               containers:
               - name: nearestprime

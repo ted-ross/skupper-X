@@ -267,6 +267,27 @@ class InstanceBlock {
         return peerInterface.getData(key);
     }
 
+    getPeerBlockData(localIfName, key) {
+        if (!this.interfaces[localIfName]) {
+            throw new Error(`Unknown interface '${localIfName}' for instance block ${this.name}`);
+        }
+
+        const localInterface = this.interfaces[localIfName];
+        const bindings       = localInterface.getBindings();
+
+        if (bindings.length == 0) {
+            throw new Error(`Attempting to access peer block key '${key}' on interface ${this.name}/${localIfName} which has no bound peer`);
+        }
+
+        if (bindings.length > 1) {
+            throw new Error(`Attempting to access peer block key '${key}' on interface ${this.name}/${localIfName} which has more than one bound peer - not permitted`);
+        }
+
+        const peerInterface = localInterface.isNorth() ? bindings[0].getSouthInterface() : bindings[0].getNorthInterface();
+        const peerBlock     = peerInterface.getOwner();
+        return peerBlock.getBlockData(key);
+    }
+
     object() {
         return this.libraryBlock.object();
     }
@@ -991,6 +1012,18 @@ const evaluateVariable = function(key, block, affinityInterface, site) {
                 return block.getPeerInterfaceData(scope[1], section[1]);
             } else {
                 throw new Error(`Malformed variable '${key}' - 'peer' may have zero or one qualifiers, not more`);
+            }
+
+        case 'peerblock':
+            if (scope.length == 1) {
+                if (!affinityInterface) {
+                    throw new Error(`Malformed variables '${key}' - 'peerblock' has no qualifiers but there is no interface with affinity`);
+                }
+                return block.getPeerBlockData(affinityInterface, section[1]);
+            } else if (scope.length == 2) {
+                return block.getPeerBlockData(scope[1], section[1]);
+            } else {
+                throw new Error(`Malformed variable '${key}' - 'peerblock' may have zero or one qualifiers, not more`);
             }
 
         case 'site':
