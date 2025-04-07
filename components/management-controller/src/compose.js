@@ -752,7 +752,7 @@ const validateBlock = async function(block, validTypes, validRoles, blockRevisio
             }
 
             if (!iface.role || !(validRoles.indexOf(iface.role) >= 0)) {
-                return `Invalid role in block ${name}, interface ${iface.name}`;
+                return `Invalid role '${iface.role}' in block ${name}, interface ${iface.name}`;
             }
 
             if (iface.polarity === undefined) {
@@ -977,9 +977,11 @@ const generateDerivativeData = function(application, buildLog, blockTypes) {
 // Input variables are of one of the following forms:
 //
 //   <variable>
-//   local.<local-if-name>:<variable>
-//   peer.<local-if-name>:<variable>
-//   peer:<variable>
+//   localif.<local-if-name>:<variable>
+//   peerif.<local-if-name>:<variable>
+//   peerif:<variable>
+//   peerblock.<local-if-name>:<variable>
+//   peerblock:<variable>
 //   site:<variable>
 //
 const evaluateVariable = function(key, block, affinityInterface, site) {
@@ -996,22 +998,22 @@ const evaluateVariable = function(key, block, affinityInterface, site) {
 
     const scope = section[0].split('.');
     switch (scope[0]) {
-        case 'local':
+        case 'localif':
             if (scope.length != 2) {
-                throw new Error(`Malformed variable '${key}' - 'local' requires a local interface name qualifier`);
+                throw new Error(`Malformed variable '${key}' - 'localif' requires a local interface name qualifier`);
             }
             return block.getLocalInterfaceData(scope[1], section[1]);
 
-        case 'peer':
+        case 'peerif':
             if (scope.length == 1) {
                 if (!affinityInterface) {
-                    throw new Error(`Malformed variables '${key}' - 'peer' has no qualifiers but there is no interface with affinity`);
+                    throw new Error(`Malformed variables '${key}' - 'peerifhas no qualifiers but there is no interface with affinity`);
                 }
                 return block.getPeerInterfaceData(affinityInterface, section[1]);
             } else if (scope.length == 2) {
                 return block.getPeerInterfaceData(scope[1], section[1]);
             } else {
-                throw new Error(`Malformed variable '${key}' - 'peer' may have zero or one qualifiers, not more`);
+                throw new Error(`Malformed variable '${key}' - 'peerifmay have zero or one qualifiers, not more`);
             }
 
         case 'peerblock':
@@ -1403,7 +1405,7 @@ const buildApplication = async function(apid, req, res) {
             // Prevent against re-building applications that are deployed.  This needs to be well thought-through.
             //
             if (app.lifecycle == 'deployed') {
-                buildLog.error('Cannot build an application that is deployed');
+                throw new Error('Cannot build an application that is deployed');
             }
 
             //
@@ -1489,7 +1491,7 @@ const buildApplication = async function(apid, req, res) {
         } else {
             await client.query("ROLLBACK");
             returnStatus = 400;
-            res.status(returnStatus).send(error.stack);
+            res.status(returnStatus).send(error.message);
         }
     } finally {
         client.release();

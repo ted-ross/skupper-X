@@ -48,7 +48,7 @@ spec:
         spec:
           type: tcp
           selector: ${peerblock:selectorKey}=${peerblock:selectorValue}
-          port: ${peer:port}
+          port: ${peerif:port}
           routingKey: ${keyPrefix}${name}
     - affinity: connector
       template:
@@ -58,8 +58,8 @@ spec:
           name: listener-${ident}
         spec:
           type: tcp
-          host: ${peer:host}
-          port: ${peer:port}
+          host: ${peerif:host}
+          port: ${peerif:port}
           routingKey: ${keyPrefix}${name}
 
 ---
@@ -93,7 +93,7 @@ spec:
         spec:
           type: tcp
           selector: ${peerblock:selectorKey}=${peerblock:selectorValue}
-          port: ${peer:port}
+          port: ${peerif:port}
           routingKey: ${keyPrefix}${name}
       - apiVersion: networking.k8s.io/v1
         kind: NetworkPolicy
@@ -112,7 +112,7 @@ spec:
                   skupper.io/component: router
             ports:
             - protocol: TCP
-              port: ${peer:port}
+              port: ${peerif:port}
     - affinity: connector
       template:
       - apiVersion: skupper.io/v2alpha1
@@ -121,8 +121,8 @@ spec:
           name: listener-${ident}
         spec:
           type: tcp
-          host: ${peer:host}
-          port: ${peer:port}
+          host: ${peerif:host}
+          port: ${peerif:port}
           routingKey: ${keyPrefix}${name}
       - apiVersion: networking.k8s.io/v1
         kind: NetworkPolicy
@@ -141,7 +141,7 @@ spec:
                   skupper.io/component: router
             ports:
             - protocol: TCP
-              port: ${peer:port}
+              port: ${peerif:port}
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
@@ -173,8 +173,8 @@ spec:
         metadata:
           name: connector-${ident}
         spec:
-          host: ${peer:host}
-          port: ${peer:port}
+          host: ${peerif:host}
+          port: ${peerif:port}
           routingKey: ${keyPrefix}${name}
     - affinity: connector
       template:
@@ -183,8 +183,8 @@ spec:
         metadata:
           name: listener-${ident}
         spec:
-          host: ${peer:host}
-          port: ${peer:port}
+          host: ${peerif:host}
+          port: ${peerif:port}
           routingKey: ${keyPrefix}${name}
 
 ---
@@ -217,8 +217,8 @@ spec:
         metadata:
           name: connector-${ident}
         spec:
-          host: ${peer:host}
-          port: ${peer:port}
+          host: ${peerif:host}
+          port: ${peerif:port}
           routingKey: ${keyPrefix}${name}
       - apiVersion: networking.k8s.io/v1
         kind: NetworkPolicy
@@ -237,7 +237,7 @@ spec:
                   skupper.io/component: router
             ports:
             - protocol: TCP
-              port: ${peer:port}
+              port: ${peerif:port}
     - affinity: connector
       template:
       - apiVersion: skupper.io/v2alpha1
@@ -245,8 +245,8 @@ spec:
         metadata:
           name: listener-${ident}
         spec:
-          host: ${peer:host}
-          port: ${peer:port}
+          host: ${peerif:host}
+          port: ${peerif:port}
           routingKey: ${keyPrefix}${name}
       - apiVersion: networking.k8s.io/v1
         kind: NetworkPolicy
@@ -265,7 +265,7 @@ spec:
                   skupper.io/component: router
             ports:
             - protocol: TCP
-              port: ${peer:port}
+              port: ${peerif:port}
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
@@ -295,19 +295,6 @@ spec:
       allow:
       - segment: /
         methods: [GET, HEAD, OPTIONS, TRACE]
-
----
-apiVersion: skupperx.io/compose/v1alpha1
-kind: Block
-metadata:
-  name: library/postgres-balanced
-type: skupperx.io/connector
-spec:
-  inherit:
-    base: library/tcp-host-with-policy
-    transformOverwrite:
-      keyPrefix: postgres
-      protocol: postgres
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1

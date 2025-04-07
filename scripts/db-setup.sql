@@ -409,7 +409,8 @@ INSERT INTO InterfaceRoles (Name) VALUES
     ('accept'),  ('connect'),
     ('send'),    ('receive'),
     ('produce'), ('consume'),
-    ('request'), ('respond');
+    ('request'), ('respond'),
+    ('mount');
 
 
 /*

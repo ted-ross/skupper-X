@@ -13,26 +13,6 @@
 #
 
 ##
-## PostgresSql Database
-##
-
----
-apiVersion: skupperx.io/compose/v1alpha1
-kind: Block
-metadata:
-  name: postgresql-external
-type: skupperx.io/component
-spec:
-  interfaces:
-  - name: postgres
-    blockType: skx.io/postgres-balanced
-    role: accept
-    maxBindings: unlimited
-    host: localhost
-    port: 5432
-  body: external
-
-##
 ## NearestPrime transaction processor
 ##
 
@@ -82,19 +62,19 @@ spec:
                   failureThreshold: 3
                   httpGet:
                     path: /healthz
-                    port: ${local.control:port}
+                    port: ${localif.control:port}
                     scheme: HTTP
                   initialDelaySeconds: 60
                   periodSeconds: 10
                   successThreshold: 1
                   timeoutSeconds: 5
                 ports:
-                - containerPort: ${local.control:port}
+                - containerPort: ${localif.control:port}
                 env:
                 - name: DDW_PASSWORD
                   value: demopass
                 - name: DDW_HOST
-                  value: ${local.postgres:host}
+                  value: ${localif.postgres:host}
                 - name: DDW_SITENAME
                   value: ${site:name}
 
