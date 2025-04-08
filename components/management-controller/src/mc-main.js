@@ -37,19 +37,21 @@ const compose     = require('./compose.js');
 const Log         = require('./common/log.js').Log;
 const Flush       = require('./common/log.js').Flush;
 
-const VERSION     = '0.1.2';
-const STANDALONE  = (process.env.SKX_STANDALONE || 'NO') == 'YES';
-const CONTROLLER  = process.env.SKX_CONTROLLER_NAME || process.env.HOSTNAME || 'main-controller';
+const VERSION        = '0.1.2';
+const STANDALONE_NS  = process.env.SKX_STANDALONE_NAMESPACE;
+const CONTROLLER     = process.env.SKX_CONTROLLER_NAME || process.env.HOSTNAME || 'main-controller';
 
 Log(`Skupper-X Management controller version ${VERSION}`);
-Log(`Standalone : ${STANDALONE}`);
+if (STANDALONE_NS) {
+    Log('Running in Standalone mode (outside a kubernetes cluster)');
+}
 
 //
 // This is the main program startup sequence.
 //
 exports.Main = async function() {
     try {
-        await kube.Start(k8s, fs, yaml, !STANDALONE);
+        await kube.Start(k8s, fs, yaml, STANDALONE_NS);
         await db.Start();
         await config.Start();
         await prune.Start();

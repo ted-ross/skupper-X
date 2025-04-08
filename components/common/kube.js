@@ -57,13 +57,13 @@ exports.Namespace = function() {
     return namespace;
 }
 
-exports.Start = async function (k8s_mod, fs_mod, yaml_mod, in_cluster) {
+exports.Start = async function (k8s_mod, fs_mod, yaml_mod, standalone_namespace) {
     k8s  = k8s_mod;
     fs   = fs_mod;
     YAML = yaml_mod;
 
     kc = new k8s.KubeConfig();
-    if (in_cluster) {
+    if (!standalone_namespace) {
         kc.loadFromCluster();
     } else {
         kc.loadFromDefault();
@@ -82,14 +82,10 @@ exports.Start = async function (k8s_mod, fs_mod, yaml_mod, in_cluster) {
     podWatch         = new k8s.Watch(kc);
 
     try {
-        if (in_cluster) {
-            namespace = fs.readFileSync('/var/run/secrets/kubernetes.io/serviceaccount/namespace', 'utf8');
+        if (standalone_namespace) {
+            namespace = standalone_namespace;
         } else {
-            kc.contexts.forEach(context => {
-                if (context.name == kc.currentContext) {
-                    namespace = context.namespace;
-                }
-            });
+            namespace = fs.readFileSync('/var/run/secrets/kubernetes.io/serviceaccount/namespace', 'utf8');
         }
         Log(`Running in namespace: ${namespace}`);
     } catch (err) {
