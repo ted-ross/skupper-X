@@ -223,7 +223,7 @@ spec:
       - apiVersion: networking.k8s.io/v1
         kind: NetworkPolicy
         metadata:
-          name: inress-policy-${ident}
+          name: ingress-policy-${ident}
         spec:
           podSelector:
             matchLabels:
@@ -300,7 +300,7 @@ spec:
 apiVersion: skupperx.io/compose/v1alpha1
 kind: Block
 metadata:
-  name: tcpIngress
+  name: library/tcpIngress
 type: skupperx.io/ingress
 spec:
   interfaces:

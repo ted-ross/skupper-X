@@ -62,11 +62,13 @@ const deepAppend = function(base, overlay) {
     }
 }
 
-class BuildLog {
-    constructor(disabled) {
-        this.disabled = !!disabled;
-        this.text     = `Build log started ${new Date().toISOString()}\n`;
-        this.result   = 'build-complete';
+class ProcessLog {
+    constructor(enabled, kind) {
+        this.kind     = kind;
+        this.kindCap  = kind.charAt(0).toUpperCase() + kind.slice(1);
+        this.disabled = !enabled;
+        this.text     = `${this.kindCap} log started ${new Date().toISOString()}\n`;
+        this.result   = `${this.kind}-complete`;
     }
 
     log(line) {
@@ -74,12 +76,12 @@ class BuildLog {
     }
 
     warning(line) {
-        this.result = 'build-warnings';
+        this.result = `${this.kind}-warnings`;
         this.text += 'WARNING: ' + line + '\n';
     }
 
     error(line) {
-        this.result = 'build-errors';
+        this.result = `${this.kind}-errors`;
         this.text += 'ERROR: ' + line + '\n';
         if (!this.disabled) {
             throw new Error(BUILD_ERROR);
@@ -468,7 +470,7 @@ class Application {
     }
 
     async buildFromDatabase(client, appid) {
-        let   buildLog  = new BuildLog(true);   // Disabled build log
+        let   buildLog  = new ProcessLog(false);   // Disabled build log
         const appResult = await client.query("SELECT Applications.name as apname, LibraryBlocks.name as lbname, LibraryBlocks.revision FROM Applications " +
                                              "JOIN LibraryBlocks ON LibraryBlocks.Id = RootBlock " +
                                              "WHERE Applications.Id = $1", [appid]);
@@ -1392,7 +1394,7 @@ const postApplication = async function(req, res) {
 const buildApplication = async function(apid, req, res) {
     var returnStatus = 200;
     const client   = await db.ClientFromPool();
-    let   buildLog = new BuildLog();
+    let   buildLog = new ProcessLog(true, 'build');
     try {
         await client.query("BEGIN");
         const result = await client.query("SELECT LibraryBlocks.Name as lbname, LibraryBlocks.Revision, Applications.Name as appname, Lifecycle FROM Applications " +
@@ -1466,10 +1468,13 @@ const buildApplication = async function(apid, req, res) {
             //
             // Add final success log
             //
+            var response;
             if (buildLog.getResult() == 'build-warnings') {
                 buildLog.log("WARNING: Build completed with warnings");
+                response = 'Warnings - See build log for details';
             } else {
                 buildLog.log("SUCCESS: Build completed successfully");
+                response = 'Success - See build log for details';
             }
 
             //
@@ -1478,7 +1483,7 @@ const buildApplication = async function(apid, req, res) {
             await client.query("UPDATE Applications SET Lifecycle = $3, BuildLog = $2 WHERE Id = $1", [apid, buildLog.getText(), buildLog.getResult()]);
         }
         await client.query("COMMIT");
-        res.status(returnStatus).send('Ok - See build log for details');
+        res.status(returnStatus).send(response);
     } catch (error) {
         if (error.message == BUILD_ERROR) {
             //
@@ -1487,7 +1492,7 @@ const buildApplication = async function(apid, req, res) {
             await client.query("UPDATE Applications SET Lifecycle = $3, BuildLog = $2 WHERE Id = $1", [apid, buildLog.getText(), buildLog.getResult()]);
             await client.query("COMMIT");
             returnStatus = 200;
-            res.status(returnStatus).send("Ok - See build log for build errors");
+            res.status(returnStatus).send("Build Failed - See build log for details");
         } else {
             await client.query("ROLLBACK");
             returnStatus = 400;

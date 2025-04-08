@@ -29,7 +29,7 @@ spec:
     selectorValue: nearestprime
   interfaces:
   - name: postgres
-    blockType: skx.io/postgres-balanced
+    blockType: postgres-balanced
     role: connect
     host: database
     port: 5432

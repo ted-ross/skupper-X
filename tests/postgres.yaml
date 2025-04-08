@@ -23,7 +23,7 @@ metadata:
 type: skupperx.io/connector
 spec:
   inherit:
-    base: library/tcp-host-with-policy
+    base: library/tcp-selector-with-policy
     transformOverwrite:
       keyPrefix: postgres
       protocol: postgres
@@ -40,8 +40,7 @@ spec:
     selectorValue: postgresql
     POSTGRES_DB: database
     POSTGRES_USER: access
-    POSTGRES_PASSWORD: password
-    volumeSize: 5Gi
+    POSTGRES_PASSWORD: demopass
     imageVersion: 15
   interfaces:
   - name: postgres
@@ -52,6 +51,7 @@ spec:
   - name: files
     blockType: postgres-volume
     role: mount
+    volumeSize: 5Gi
   body:
     kubeTemplates:
     - template:
@@ -88,7 +88,7 @@ spec:
               volumes:
               - name: postgresdb
                 emptyDir:
-                  sizeLimit: ${volumeSize}
+                  sizeLimit: ${localif.files:volumeSize}
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
@@ -130,3 +130,31 @@ spec:
           resources:
             requests:
               storage: ${peerif:volumeSize}
+
+---
+apiVersion: skupperx.io/compose/v1alpha1
+kind: Block
+metadata:
+  name: postgres-subsystem
+type: skupperx.io/component
+spec:
+  interfaces:
+  - name: postgres
+    blockType: postgres-balanced
+    role: accept
+  body:
+    composite:
+      blocks:
+      - name: database
+        block: postgresql
+        siteClasses:
+        - hq
+        bindings:
+        - interface: postgres
+          super: postgres
+      - name: store
+        block: postgres-volume
+        bindings:
+        - interface: mountpoint
+          block: database
+          blockInterface: files

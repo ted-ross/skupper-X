@@ -62,13 +62,13 @@ spec:
     blockType: library/http-simple
     role: accept
   - name: dbAccess
-    blockType: library/postgres-balanced
+    blockType: postgres-balanced
     role: accept
   body:
     composite:
       blocks:
       - name: database
-        block: postgresql-external
+        block: postgres-subsystem
         siteClasses:
         - hq
         bindings:
@@ -86,7 +86,7 @@ spec:
         - interface: input
           super: request
       - name: worker-to-database
-        block: library/postgres-balanced
+        block: postgres-balanced
         bindings:
         - interface: connector
           block: worker
@@ -119,11 +119,11 @@ spec:
         siteClasses:
         - hq
       - name: requestIngress
-        block: tcpIngress
+        block: library/tcpIngress
         siteClasses:
         - hq
       - name: dbIngress
-        block: tcpIngress
+        block: library/tcpIngress
         siteClasses:
         - hq
       - name: request-ingress-to-main
@@ -136,7 +136,7 @@ spec:
           block: requestIngress
           blockInterface: connector
       - name: db-ingress-to-main
-        block: library/postgres-balanced
+        block: postgres-balanced
         bindings:
         - interface: acceptor
           block: mainApp
