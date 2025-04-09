@@ -18,20 +18,26 @@ metadata:
   name: country-dispatch
 type: skupperx.io/component
 spec:
+  config:
+    selectorKey: block
+    selectorValue: country-dispatch
   interfaces:
   - name: output
     blockType: library/http-simple
     role: connect
+    host: nearprime
+    port: 8000
   - name: input
     blockType: library/http-simple
     role: accept
+    port: 8000
   body:
     kubeTemplates:
     - template:
       - apiVersion: v1
         kind: Pod
         metadata:
-          name: country-dispatch
+          ${selectorKey}: ${selectorValue}
         spec:
           containers:
           - name: country-dispatch
@@ -41,14 +47,14 @@ spec:
               failureThreshold: 3
               httpGet:
                 path: /healthz
-                port: 8000
+                port: ${localif.input:port}
                 scheme: HTTP
               initialDelaySeconds: 60
               periodSeconds: 10
               successThreshold: 1
               timeoutSeconds: 5
             ports:
-            - containerPort: 8000
+            - containerPort: ${localif.input:port}
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
