@@ -60,44 +60,10 @@ All of the sites in an application network are able to host components of a dist
 
 "Application Topology" is concerned with the logical layout of distributed software systems.  The various software components involved and the exact way in which these components interact with one another is the business of Application Topology.  This dimension is orthogonal to Network Topology.  The only tie between the two dimensions is the allocation of software components in the Application Topology to sites in the Network Topology.
 
-### Interfaces with Roles
+The following section is being re-written to reflect the latest truth from the working code.
 
-An Interface is a site-specific way that a software component interacts with other components.  A Role describes the way that the attached software component interacts.  From a model persective, this concept is quite general in order to be able to describe a wide variety of possible interactions.
 
-Roles are extensible to support future interaction patterns.  The initial set of roles is as follows:
-
- * **Accept** - An interface for this role is a listening socket to be used by components that _connect_ to other components using a stream socket (i.e. TCP).
- * **Connect** - The counterpart for _Accept_.  A connecting socket that establishes connections to components that _accept_ incoming connections via a stream socket.
- ---
- * **Send** - An interface used by components that _send_ data messages or streams to other components.  This could be a datagram socket or a messaging endpoint.
- * **Receive** - The counterpart for _Send_.
- ---
- * **AsyncRequest** - An interface for components that issue asynchronous requests to peers.
- * **AsyncReply** - The counterpart for _AsyncRequest_.
- ---
- * **Peer** - An interface for shared access to a channel.  This could be an IP subnet where each interface is assigned a unicast and broadcast IP address within the subnet.
-
-### Bindings
-
-A Binding is a collection of related interfaces within an application network.  The Binding connects all of the associated interfaces according to their individual roles.
-
-Note that this is very different from a model in which connectivity is achieved using addresses, where an offered "service" using an address can be accessed by others that know the address and thereby use the service.  The binding concept is a more tightly defined set of participants for a particular interaction.  This allows better security and tighter control on who can talk to what.
-
-The binding controls data distribution, whether it is anycast or multicast.  It also controls the scope of addressing for the underlying communication.  VAN-scope means that all bound service providers share the data load, either as multicast or by load balancing anycast.  Site scope allows service providers in different sites to be individually addressed.
-
-### Components
-
-A Component is an entity that uses interfaces to interact with other components.  An obvious instance of a component is a running software process, or container, that either offers services or requires the services of others.  Components can also be ingresses or egresses on the application network.  Since the application network is isolated from the outside, an ingress is used to allow outside consumers to access the services od the application network.  Likewise, an egress is used to allow the application network to access resources outside of itself.
-
-Note that this model considers components to be optional elements of an application.  An application network can be built solely of interfaces and bindings, leaving the deployment of attaching software as an external concern.  The model contains the concept of _component_ (and _component type_) so it can also be used to deploy and manage the whole distributed software system.
-
-### Component and Interface Types
-
-Both components and interfaces can be typed.  A component type is typically a container image or a software package.  An interface type is a formally specified API (in a broad sense) that identifies roles and a contract between participants.  A component type may be annotated with interface type and roles (i.e. this software package offers or requires a particular API).
-
-Component types and interface types may be contained within a library that is searchable to support component re-use in the composition of distributed software systems.
-
-## Architecture
+## Architecture of Skupper-X
 
 ### Management and Control Plane
 
