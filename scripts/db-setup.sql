@@ -312,6 +312,8 @@ CREATE TYPE InterfacePolarity AS ENUM ('north', 'south');
 
 CREATE TYPE ApplicationLifecycle AS ENUM ('created', 'build-warnings', 'build-errors', 'build-complete', 'deployed');
 
+CREATE TYPE DeploymentLifecycle AS ENUM ('created', 'deploy-warnings', 'deploy-errors', 'deployed');
+
 --
 -- Block Types
 --
@@ -376,6 +378,7 @@ CREATE TABLE DeployedApplications (
     Id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     Application UUID REFERENCES Applications(Id),
     Van         UUID REFERENCES ApplicationNetworks(Id),
+    Lifecycle   DeploymentLifecycle DEFAULT 'created',
     DeployLog   text
 );
 

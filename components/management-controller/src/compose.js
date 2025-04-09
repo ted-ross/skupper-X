@@ -28,7 +28,7 @@ const ident      = require('./ident.js');
 
 const COMPOSE_PREFIX = '/compose/v1alpha1/';
 const API_VERSION    = 'skupperx.io/compose/v1alpha1';
-const BUILD_ERROR    = 'build-error';
+const PROCESS_ERROR  = 'process-error';
 
 var storedApplications = {};
 
@@ -64,8 +64,8 @@ const deepAppend = function(base, overlay) {
 
 class ProcessLog {
     constructor(enabled, kind) {
-        this.kind     = kind;
-        this.kindCap  = kind.charAt(0).toUpperCase() + kind.slice(1);
+        this.kind     = kind || 'unused';
+        this.kindCap  = this.kind.charAt(0).toUpperCase() + this.kind.slice(1);
         this.disabled = !enabled;
         this.text     = `${this.kindCap} log started ${new Date().toISOString()}\n`;
         this.result   = `${this.kind}-complete`;
@@ -84,7 +84,7 @@ class ProcessLog {
         this.result = `${this.kind}-errors`;
         this.text += 'ERROR: ' + line + '\n';
         if (!this.disabled) {
-            throw new Error(BUILD_ERROR);
+            throw new Error(PROCESS_ERROR);
         }
     }
 
@@ -167,6 +167,7 @@ class InstanceBlock {
         this.derivative   = {};
         this.dbid         = null;
         this.metadata     = {};
+        this.flag         = false;
     }
 
     _buildInterfaces(buildLog) {
@@ -232,6 +233,14 @@ class InstanceBlock {
 
     getDerivative() {
         return this.derivative;
+    }
+
+    setFlag(value) {
+        this.flag = !!value;
+    }
+
+    isFlagSet() {
+        return this.flag;
     }
 
     getBlockData(key) {
@@ -1009,13 +1018,13 @@ const evaluateVariable = function(key, block, affinityInterface, site) {
         case 'peerif':
             if (scope.length == 1) {
                 if (!affinityInterface) {
-                    throw new Error(`Malformed variables '${key}' - 'peerifhas no qualifiers but there is no interface with affinity`);
+                    throw new Error(`Malformed variables '${key}' - 'peerif' has no qualifiers but there is no interface with affinity`);
                 }
                 return block.getPeerInterfaceData(affinityInterface, section[1]);
             } else if (scope.length == 2) {
                 return block.getPeerInterfaceData(scope[1], section[1]);
             } else {
-                throw new Error(`Malformed variable '${key}' - 'peerifmay have zero or one qualifiers, not more`);
+                throw new Error(`Malformed variable '${key}' - 'peerif' may have zero or one qualifiers, not more`);
             }
 
         case 'peerblock':
@@ -1043,7 +1052,7 @@ const evaluateVariable = function(key, block, affinityInterface, site) {
 //
 // Identify all variables in the string and expand each of them
 //
-const substituteString = function(text, block, affinityInterface, site) {
+const substituteString = function(text, block, affinityInterface, site, deployLog) {
     const varStart = text.indexOf('${');
     if (varStart < 0) {
         //
@@ -1066,15 +1075,15 @@ const substituteString = function(text, block, affinityInterface, site) {
     const theRest  = after.slice(varEnd + 1)
     var   evalData = evaluateVariable(variable, block, affinityInterface, site);
     if (!evalData) {
-        //throw new Error(`Variable '${variable}' cannot be evaluated (block ${block.getName()})`);
         evalData = "UNDEFINED";
+        deployLog.warning(`Unresolvable variable '${variable}' in block ${block.getName()}`);
     }
 
     var result;
     if (before.length == 0 && theRest.length == 0) {
         result = evalData;
     } else {
-        result = before + evalData + substituteString(theRest, block, affinityInterface, site);
+        result = before + evalData + substituteString(theRest, block, affinityInterface, site, deployLog);
     }
 
     return result;
@@ -1084,21 +1093,21 @@ const substituteString = function(text, block, affinityInterface, site) {
 // Substitute variables in the contents of an object.  Note that variables can be in map keys as
 // well as map values.
 //
-const substituteObject = function(obj, block, affinityInterface, site) {
+const substituteObject = function(obj, block, affinityInterface, site, deployLog) {
     var result;
     if (Array.isArray(obj)) {
         result = [];
         for (const subobj of obj) {
-            result.push(substituteObject(subobj, block, affinityInterface, site));
+            result.push(substituteObject(subobj, block, affinityInterface, site, deployLog));
         }
     } else if (typeof(obj) == 'object') {
         result = {};
         for (const [key, value] of Object.entries(obj)) {
-            const subkey = substituteString(key, block, affinityInterface, site);
-            result[subkey] = substituteObject(value, block, affinityInterface, site);
+            const subkey = substituteString(key, block, affinityInterface, site, deployLog);
+            result[subkey] = substituteObject(value, block, affinityInterface, site, deployLog);
         }
     } else if (typeof(obj) == 'string') {
-        result = substituteString(obj, block, affinityInterface, site);
+        result = substituteString(obj, block, affinityInterface, site, deployLog);
     } else {
         result = obj;
     }
@@ -1110,15 +1119,14 @@ const substituteObject = function(obj, block, affinityInterface, site) {
 // generate the configuration to allocate the block to this site.
 //
 // For every block that is allocated to this site, run through the interfaces and find the bound
-// blocks for each interface.  Use the content of the bound blocks to generate interconnect configuration:
-//   - Skupper listeners and connectors
-//   - Deployed agents to handle active interconnect
-//   - Kubernetes network policies to restrict access to that specified
+// blocks for each interface.  Use the content of the bound blocks to generate interconnect configuration.
 //
-const addMemberSite = async function(client, app, site, depid) {
+const addMemberSite = async function(client, app, site, depid, deployLog) {
     const siteClasses  = site.siteclasses;
     const siteMetadata = JSON.parse(site.metadata);
     const instanceBlocks = app.getInstanceBlocks();
+
+    deployLog.log(`Adding member site: ${site.name}`)
 
     //
     // Start accumulating site configuration.
@@ -1136,11 +1144,14 @@ const addMemberSite = async function(client, app, site, depid) {
             // Now check to see if the block should be allocated to _this_ site.
             //
             if (instanceBlock.siteClassMatches(siteClasses)) {
+                deployLog.log(`    Allocating block ${instanceBlock.getName()}`);
+                instanceBlock.setFlag(true);
+
                 //
                 // Configure the allocation of the block to this site
                 //
                 const libraryBlock = instanceBlock.getLibraryBlock();
-                const body         = substituteObject(libraryBlock.body(), instanceBlock, undefined, siteMetadata);
+                const body         = substituteObject(libraryBlock.body(), instanceBlock, undefined, siteMetadata, deployLog);
                 if (body.kubeTemplates) {
                     for (const element of body.kubeTemplates) {
                         for (const template of element.template) {
@@ -1171,7 +1182,7 @@ const addMemberSite = async function(client, app, site, depid) {
                             for (const kt of peerBody.kubeTemplates) {
                                 if (!kt.affinity || kt.affinity == peerInterface.getName()) {
                                     for (var templateItem of kt.template) {
-                                        siteConfiguration.push(substituteObject(templateItem, peer, kt.affinity, siteMetadata));
+                                        siteConfiguration.push(substituteObject(templateItem, peer, kt.affinity, siteMetadata, deployLog));
                                     }
                                 }
                             }
@@ -1206,11 +1217,33 @@ const preLoadApplication = async function(client, appid) {
     return application;
 }
 
-const deployApplication = async function(client, appid, vanid, depid) {
-    const app    = await preLoadApplication(client, appid);
+const deployApplication = async function(client, appid, vanid, depid, deployLog) {
+    const app = await preLoadApplication(client, appid);
+
+    //
+    // Mark all of the instance blocks so we can check for unallocated blocks later.
+    //
+    const instanceBlocks = app.getInstanceBlocks();
+    for (const iblock of Object.values(instanceBlocks)) {
+        iblock.setFlag(false);
+    }
+
+    //
+    // Find all of the member sites for the VAN and add them to the deployment.
+    //
     const result = await client.query("SELECT Id, Name, Metadata, SiteClasses FROM MemberSites WHERE MemberOf = $1", [vanid]);
     for (const site of result.rows) {
-        await addMemberSite(client, app, site, depid);
+        await addMemberSite(client, app, site, depid, deployLog);
+    }
+
+    //
+    // Find and flag any unallocated components from the application.
+    //
+    for (const [name, iblock] of Object.entries(instanceBlocks)) {
+        const derivative = iblock.getDerivative();
+        if (derivative.allocateToSite && !iblock.isFlagSet()) {
+            deployLog.warning(`Unallocated block: ${name}`);
+        }
     }
 }
 
@@ -1485,16 +1518,17 @@ const buildApplication = async function(apid, req, res) {
         await client.query("COMMIT");
         res.status(returnStatus).send(response);
     } catch (error) {
-        if (error.message == BUILD_ERROR) {
+        await client.query("ROLLBACK");
+        if (error.message == PROCESS_ERROR) {
             //
-            // If we got a build error, update the build log for user visibility.
+            // If we got a build error, update the build log for user visibility after rolling back the current transaction.
             //
+            await client.query("BEGIN");
             await client.query("UPDATE Applications SET Lifecycle = $3, BuildLog = $2 WHERE Id = $1", [apid, buildLog.getText(), buildLog.getResult()]);
             await client.query("COMMIT");
             returnStatus = 200;
             res.status(returnStatus).send("Build Failed - See build log for details");
         } else {
-            await client.query("ROLLBACK");
             returnStatus = 400;
             res.status(returnStatus).send(error.message);
         }
@@ -1620,7 +1654,6 @@ const postDeployment = async function(req, res) {
         const result = await client.query("INSERT INTO DeployedApplications (Application, Van) VALUES ($1, $2) RETURNING Id",
                                           [norm.app, norm.van]);
         if (result.rowCount == 1) {
-            await deployApplication(client, norm.app, norm.van, result.rows[0].id);
             await client.query("UPDATE Applications SET Lifecycle = 'deployed' WHERE Id = $1", [norm.app]);
             res.status(returnStatus).json(result.rows[0]);
         } else {
@@ -1630,13 +1663,94 @@ const postDeployment = async function(req, res) {
 
         await client.query("COMMIT");
     } catch (error) {
+        await client.query("ROLLBACK");
         returnStatus = 400;
         res.status(returnStatus).send(error.stack);
-        await client.query("ROLLBACK");
     } finally {
         client.release();
     }
 
+    return returnStatus;
+}
+
+const deployDeployment = async function(depid, req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    let   deployLog = new ProcessLog(true, 'deploy');
+    try {
+        await client.query("BEGIN");
+        const checkResult = await client.query("SELECT Id, Lifecycle, Application, Van FROM DeployedApplications WHERE Id = $1", [depid]);
+        if (checkResult.rowCount == 0) {
+            throw new Error(`Deployment not found; ${depid}`);
+        } else if (checkResult.rows[0].lifecycle == 'deployed') {
+            throw new Error(`Deployment is already deployed: ${depid}`);
+        }
+
+        const deployment = checkResult.rows[0];
+        await deployApplication(client, deployment.application, deployment.van, deployment.id, deployLog);
+
+        //
+        // Add final success log
+        //
+        var response;
+        if (deployLog.getResult() == 'deploy-warnings') {
+            deployLog.log("WARNING: Initial deployment completed with warnings");
+            response = 'Warnings - See deploy log for details';
+        } else {
+            deployLog.log("SUCCESS: Initial deployment completed successfully");
+            response = 'Success - See deploy log for details';
+        }
+
+        //
+        // Update the lifecycle of the deployment and add the build log.
+        //
+        await client.query("UPDATE DeployedApplications SET Lifecycle = $3, DeployLog = $2 WHERE Id = $1", [depid, deployLog.getText(), 'deployed']);
+        await client.query("COMMIT");
+        res.status(returnStatus).send(response);
+    } catch (error) {
+        await client.query("ROLLBACK");
+        if (error.message == PROCESS_ERROR) {
+            //
+            // If we got a process error, update the deploy log for user visibility after rolling back the current transaction.
+            //
+            await client.query("BEGIN");
+            await client.query("UPDATE DeployedApplications SET Lifecycle = $3, DeployLog = $2 WHERE Id = $1", [depid, deployLog.getText(), deployLog.getResult()]);
+            await client.query("COMMIT");
+            returnStatus = 200;
+            res.status(returnStatus).send("Deploy Failed - See deployment log for details");
+        } else {
+            returnStatus = 400;
+            res.status(returnStatus).send(error.message);
+        }
+    } finally {
+        client.release();
+    }
+
+    return returnStatus;
+}
+
+const getDeploymentLog = async function(depid, req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT DeployLog FROM DeployedApplications WHERE Id = $1", [depid]);
+        if (result.rowCount == 1) {
+            const reply = result.rows[0].deploylog || 'Deployment has not yet been deployed';
+            res.status(returnStatus).send(reply);
+        } else {
+            returnStatus = 404;
+            res.status(returnStatus).send('Not Found');
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in getDeploymentLog: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
     return returnStatus;
 }
 
@@ -1783,6 +1897,14 @@ exports.ApiInit = function(app) {
 
     app.post(COMPOSE_PREFIX + 'deployments', async (req, res) => {
         await postDeployment(req, res);
+    });
+
+    app.put(COMPOSE_PREFIX + 'deployments/:depid/deploy', async (req, res) => {
+        await deployDeployment(req.params.depid, req, res)
+    });
+
+    app.get(COMPOSE_PREFIX + 'deployments/:depid/log', async (req, res) => {
+        await getDeploymentLog(req.params.depid, req, res);
     });
 
     app.get(COMPOSE_PREFIX + 'deployments', async (req, res) => {
