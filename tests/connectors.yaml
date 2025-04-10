@@ -24,6 +24,8 @@ type: skupperx.io/connector
 metadata:
   name: library/tcp-selector
   annotations:
+    provider: skupper.io
+    description: "TCP connector with selector-based target tracking"
     platform: skupper-v2
     target: selector
 spec:

@@ -19,6 +19,7 @@
 
 "use strict";
 
+const express    = require('express');
 const yaml       = require('js-yaml');
 const Log        = require('./common/log.js').Log;
 const db         = require('./db.js');
@@ -30,7 +31,7 @@ const COMPOSE_PREFIX = '/compose/v1alpha1/';
 const API_VERSION    = 'skupperx.io/compose/v1alpha1';
 const PROCESS_ERROR  = 'process-error';
 
-var storedApplications = {};
+var cachedApplications = {};
 
 const deepCopy = function(from) {
     var to;
@@ -1207,13 +1208,13 @@ const deleteMemberSite = async function(client, app, site, depid) {
 }
 
 const preLoadApplication = async function(client, appid) {
-    if (storedApplications[appid]) {
-        return storedApplications[appid];
+    if (cachedApplications[appid]) {
+        return cachedApplications[appid];
     }
 
     let application = new Application();
     await application.buildFromDatabase(client, appid);
-    storedApplications[appid] = application;
+    cachedApplications[appid] = application;
     return application;
 }
 
@@ -1399,8 +1400,8 @@ const postApplication = async function(req, res) {
         await client.query("BEGIN");
         const [fields, files] = await form.parse(req);
         const norm = util.ValidateAndNormalizeFields(fields, {
-            'name'      : {type: 'string', optional: false},
-            'rootblock' : {type: 'uuid',   optional: false},
+            'name'      : {type: 'dnsname', optional: false},
+            'rootblock' : {type: 'uuid',    optional: false},
         });
 
         const result = await client.query("INSERT INTO Applications (Name, RootBlock) VALUES ($1, $2) RETURNING Id",
@@ -1454,7 +1455,7 @@ const buildApplication = async function(apid, req, res) {
             //
             const application = new Application();
             application.buildFromApi(rootBlockName, app.appname, library, buildLog);
-            storedApplications[apid] = application;
+            cachedApplications[apid] = application;
 
             //
             // Get the block types to feed into the derivative generator.
@@ -1618,7 +1619,7 @@ const deleteApplication = async function(apid, req, res) {
             returnStatus = 404;
             res.status(returnStatus).send('Not Found');
         } else {
-            delete storedApplications[apid];
+            delete cachedApplications[apid];
             res.status(returnStatus).send('Deleted');
         }
         await client.query("COMMIT");
@@ -1855,6 +1856,8 @@ const getSiteData = async function(depid, siteid, req, res) {
 }
 
 exports.ApiInit = function(app) {
+    app.use(express.static('../compose-web-app'));
+
     app.post(COMPOSE_PREFIX + 'library/blocks', async (req, res) => {
         await postLibraryBlocks(req, res);
     });

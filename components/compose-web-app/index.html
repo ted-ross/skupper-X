@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skupper-X Compose</title>
+    <style>
+        body {
+            font: 14px Arial,sans-serif; 
+            margin: 0px;
+        }
+        .header {
+            padding: 10px 20px;
+            background: #acb3b9; 
+        }
+        .header h1 {
+            font-size: 24px;
+        }
+        .container {
+            width: 100%;
+            background: #f2f2f2; 
+        }
+        .nav, .section {
+            float: left; 
+            padding: 20px;
+            min-height: 170px;
+            box-sizing: border-box;
+            overflow-y: scroll;
+        }
+        .nav {            
+            width: 10%;             
+            background: #d4d7dc;
+        }
+        .section {
+            width: 80%;
+        }
+        .nav ul {
+            list-style: none; 
+            line-height: 24px;
+            padding: 0px; 
+        }
+        .nav ul li a {
+            color: #333;
+        }    
+        .clearfix:after {
+            content: ".";
+            display: block;
+            height: 0;
+            clear: both;
+            visibility: hidden;
+        }
+        .footer {
+            background: #acb3b9;            
+            text-align: center;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body onload="start()" onresize="setHeight()">
+    <div class="container">
+        <div class="header">
+            <h1>Skupper-X/Compose</h1>
+        </div>
+        <div id="wrapperdiv" class="wrapper clearfix">
+            <div id="navdiv" class="nav">
+                <ul>
+                    <li><a id="tab-home" href="#">Home</a></li>
+                    <li><a id="tab-lib" href="#" onclick="toLibraryTab()">Library</a></li>
+                    <li><a id="tab-app" href="#" onClick="toApplicationTab()">Applications</a></li>
+                    <li><a id="tab-dep" href="#">Deployments</a></li>
+                </ul>
+            </div>
+            <div id="sectiondiv" class="section">
+            </div>
+        </div>
+        <div class="footer">
+            <p>copyright &copy; Skupper-X</p>
+        </div>
+    </div>
+
+    <script>
+function start() {
+    setHeight()
+}
+
+function setHeight() {
+    const newHeight = `${window.innerHeight - 134}px`;
+    document.getElementById("wrapperdiv").style.height = newHeight;
+    document.getElementById("navdiv").style.height = newHeight;
+    document.getElementById("sectiondiv").style.height = newHeight;
+}
+
+function toLibraryTab() {
+    document.getElementById("tab-home").style.fontWeight = 'normal';
+    document.getElementById("tab-lib").style.fontWeight  = 'bold';
+    document.getElementById("tab-app").style.fontWeight  = 'normal';
+    document.getElementById("tab-dep").style.fontWeight  = 'normal';
+    document.getElementById("sectiondiv").innerHTML = `<h2>Block Library</h2>`;
+    BuildLibraryTable();
+}
+
+function toApplicationTab() {
+    document.getElementById("tab-home").style.fontWeight = 'normal';
+    document.getElementById("tab-lib").style.fontWeight  = 'normal';
+    document.getElementById("tab-app").style.fontWeight  = 'bold';
+    document.getElementById("tab-dep").style.fontWeight  = 'normal';
+    document.getElementById("sectiondiv").innerHTML = `<h2>Applications</h2>`;
+    BuildApplicationTable();
+}
+
+async function BuildLibraryTable() {
+    const response = await fetch('compose/v1alpha1/library/blocks');
+    const rawdata  = await response.json();
+    let data = {};
+    for (d of rawdata) {
+        if (!data[d.name] || d.revision > data[d.name].revision) {
+            data[d.name] = d;
+        }
+    }
+
+    let table = document.createElement('table');
+    table.setAttribute('border', '1');
+    table.setAttribute('cellpadding', '5');
+    table.setAttribute('cellspacing', '0');
+    table.setAttribute('bordercolor', 'lightgrey');
+
+    const headerRow  = table.insertRow();
+    const namehead   = document.createElement('th');
+    const typehead   = document.createElement('th');
+    const revhead    = document.createElement('th');
+    const createhead = document.createElement('th');
+
+    namehead.textContent = 'Name';
+    typehead.textContent = 'Type';
+    revhead.textContent  = 'Rev';
+    createhead.textContent = 'Created';
+
+    headerRow.appendChild(namehead);
+    headerRow.appendChild(typehead);
+    headerRow.appendChild(revhead);
+    headerRow.appendChild(createhead);
+    
+    for (item of Object.values(data)) {
+        let row = table.insertRow();
+        let button = document.createElement('a');
+        button.setAttribute('href', '#');
+        button.setAttribute('onclick', `LibDetail('${item.id}')`);
+        button.textContent = item.name;
+        row.insertCell().appendChild(button);
+        row.insertCell().textContent = item.type;
+        row.insertCell().textContent = item.revision;
+        row.insertCell().textContent = item.created;
+    }
+
+    document.getElementById("sectiondiv").appendChild(table);
+}
+
+function countLines(str) {
+    return (str.match(/\r\n|\r|\n/g) || []).length + 1;
+}
+
+function TextArea(item, title, section, cols=60) {
+    let hdr = document.createElement('h3');
+    hdr.textContent = title;
+    section.appendChild(hdr);
+    let textarea = document.createElement('textarea');
+    textarea.setAttribute('cols', `${cols}`);
+    textarea.setAttribute('rows', `${countLines(item)}`);
+    textarea.setAttribute('readonly', 't');
+    textarea.textContent = item;
+    section.appendChild(textarea);
+}
+
+async function LibDetail(lbid) {
+    const response = await fetch(`compose/v1alpha1/library/blocks/${lbid}`);
+    const data = await response.json();
+    console.log('response', response);
+    console.log('data', data);
+    let section = document.getElementById("sectiondiv");
+    section.innerHTML = `<h2>${data.name};${data.revision}</h2>`;
+    if (data.inherit != '') {
+        TextArea(data.inherit, 'Inherit', section);
+    }
+    if (data.config != '') {
+        TextArea(data.config, 'Config', section);
+    }
+    if (data.interfaces != '') {
+        TextArea(data.interfaces, 'Interfaces', section);
+    }
+    if (data.specbody != '') {
+        TextArea(data.specbody, 'Body', section, 100);
+    }
+}
+
+async function BuildApplicationTable() {
+    const response = await fetch('compose/v1alpha1/applications');
+    const rawdata  = await response.json();
+    let data = {};
+    for (d of rawdata) {
+        if (!data[d.name] || d.revision > data[d.name].revision) {
+            data[d.name] = d;
+        }
+    }
+
+    let table = document.createElement('table');
+    table.setAttribute('border', '1');
+    table.setAttribute('cellpadding', '5');
+    table.setAttribute('cellspacing', '0');
+    table.setAttribute('bordercolor', 'lightgrey');
+
+    const headerRow  = table.insertRow();
+    const namehead   = document.createElement('th');
+    const typehead   = document.createElement('th');
+    const revhead    = document.createElement('th');
+    const createhead = document.createElement('th');
+
+    namehead.textContent = 'Name';
+    typehead.textContent = 'Type';
+    revhead.textContent  = 'Rev';
+    createhead.textContent = 'Created';
+
+    headerRow.appendChild(namehead);
+    headerRow.appendChild(typehead);
+    headerRow.appendChild(revhead);
+    headerRow.appendChild(createhead);
+    
+    for (item of Object.values(data)) {
+        let row = table.insertRow();
+        let button = document.createElement('a');
+        button.setAttribute('href', '#');
+        button.setAttribute('onclick', `LibDetail('${item.id}')`);
+        button.textContent = item.name;
+        row.insertCell().appendChild(button);
+        row.insertCell().textContent = item.type;
+        row.insertCell().textContent = item.revision;
+        row.insertCell().textContent = item.created;
+    }
+
+    document.getElementById("sectiondiv").appendChild(table);
+}
+</script>
+
+</body>
+</html>

@@ -332,16 +332,18 @@ CREATE TABLE InterfaceRoles (
 -- Library Blocks
 --
 CREATE TABLE LibraryBlocks (
-    Id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    Type       text REFERENCES BlockTypes (Name),
-    Name       text,
-    Revision   integer     DEFAULT 1,
-    Created    timestamptz DEFAULT CURRENT_TIMESTAMP,
-    Format     text,
-    Inherit    text,
-    Config     text,
-    Interfaces text,
-    SpecBody   text
+    Id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    Type        text REFERENCES BlockTypes (Name),
+    Name        text,
+    Provider    text,
+    Description text,
+    Revision    integer     DEFAULT 1,
+    Created     timestamptz DEFAULT CURRENT_TIMESTAMP,
+    Format      text,
+    Inherit     text,
+    Config      text,
+    Interfaces  text,
+    SpecBody    text
 );
 
 CREATE TABLE Applications (

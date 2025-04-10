@@ -100,6 +100,7 @@ spec:
   config:
     storageClass: ibmc-vpc-block-10iops-tier
     accessModes: ReadWriteMany
+    capacity: 5Gi
   interfaces:
   - name: mountpoint
     role: mount
@@ -114,7 +115,7 @@ spec:
         spec:
           storageClassName: ${storageClass}
           capacity:
-            storage: ${peerif:volumeSize}
+            storage: ${capacity}
           accessModes:
           - ${accessModes}
           hostPath:
