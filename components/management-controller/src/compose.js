@@ -1943,6 +1943,10 @@ exports.ApiInit = function(app) {
     app.get(COMPOSE_PREFIX + 'deployments/:depid/site/:siteid/sitedata', async (req, res) => {
         await getSiteData(req.params.depid, req.params.siteid, req, res);
     });
+
+    app.get(COMPOSE_PREFIX + 'deployments/:depid/site/:siteid/sitedata/:filename', async (req, res) => {
+        await getSiteData(req.params.depid, req.params.siteid, req, res);
+    });
 }
 
 exports.Start = async function() {

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Skupper-X Compose</title>
+    <title>Skupper-X Network and Compose</title>
     <style>
         body {
             font: 14px Arial,sans-serif; 
@@ -41,7 +41,13 @@
         }
         .nav ul li a {
             color: #333;
-        }    
+        }
+        ul {
+            margin-left: 0px;
+        }
+        ul ul{
+            margin-left: 20px;
+        }
         .clearfix:after {
             content: ".";
             display: block;
@@ -59,15 +65,27 @@
 <body onload="start()" onresize="setHeight()">
     <div class="container">
         <div class="header">
-            <h1>Skupper-X/Compose</h1>
+            <h1>Skupper-X Network and Compose</h1>
         </div>
         <div id="wrapperdiv" class="wrapper clearfix">
             <div id="navdiv" class="nav">
                 <ul>
                     <li><a id="tab-home" href="#">Home</a></li>
-                    <li><a id="tab-lib" href="#" onclick="toLibraryTab()">Library</a></li>
-                    <li><a id="tab-app" href="#" onClick="toApplicationTab()">Applications</a></li>
-                    <li><a id="tab-dep" href="#" onClick="toDeploymentTab()">Deployments</a></li>
+                    <li>Network:</li>
+                    <li>
+                        <ul>
+                            <li><a id="tab-bone" href="#" onclick="toBackboneTab()">Backbones</a></li>
+                            <li><a id="tab-van"  href="#" onclick="toVanTab()">VANs</a></li>
+                        </ul>
+                    </li>
+                    <li>Compose:</li>
+                    <li>
+                        <ul>
+                            <li><a id="tab-lib" href="#" onclick="toLibraryTab()">Library</a></li>
+                            <li><a id="tab-app" href="#" onclick="toApplicationTab()">Applications</a></li>
+                            <li><a id="tab-dep" href="#" onclick="toDeploymentTab()">Deployments</a></li>
+                        </ul>
+                    </li>
                 </ul>
             </div>
             <div id="sectiondiv" class="section">
@@ -90,8 +108,32 @@ function setHeight() {
     document.getElementById("sectiondiv").style.height = newHeight;
 }
 
+async function toBackboneTab() {
+    document.getElementById("tab-home").style.fontWeight = 'normal';
+    document.getElementById("tab-bone").style.fontWeight = 'bold';
+    document.getElementById("tab-van").style.fontWeight  = 'normal';
+    document.getElementById("tab-lib").style.fontWeight  = 'normal';
+    document.getElementById("tab-app").style.fontWeight  = 'normal';
+    document.getElementById("tab-dep").style.fontWeight  = 'normal';
+    document.getElementById("sectiondiv").innerHTML = `<h2>Backbones</h2>`;
+    await BuildBackboneTable();
+}
+
+async function toVanTab() {
+    document.getElementById("tab-home").style.fontWeight = 'normal';
+    document.getElementById("tab-bone").style.fontWeight = 'normal';
+    document.getElementById("tab-van").style.fontWeight  = 'bold';
+    document.getElementById("tab-lib").style.fontWeight  = 'normal';
+    document.getElementById("tab-app").style.fontWeight  = 'normal';
+    document.getElementById("tab-dep").style.fontWeight  = 'normal';
+    document.getElementById("sectiondiv").innerHTML = `<h2>Virtual Application Networks</h2>`;
+    await BuildVanTable();
+}
+
 async function toLibraryTab() {
     document.getElementById("tab-home").style.fontWeight = 'normal';
+    document.getElementById("tab-bone").style.fontWeight = 'normal';
+    document.getElementById("tab-van").style.fontWeight  = 'normal';
     document.getElementById("tab-lib").style.fontWeight  = 'bold';
     document.getElementById("tab-app").style.fontWeight  = 'normal';
     document.getElementById("tab-dep").style.fontWeight  = 'normal';
@@ -101,6 +143,8 @@ async function toLibraryTab() {
 
 async function toApplicationTab(action_result) {
     document.getElementById("tab-home").style.fontWeight = 'normal';
+    document.getElementById("tab-bone").style.fontWeight = 'normal';
+    document.getElementById("tab-van").style.fontWeight  = 'normal';
     document.getElementById("tab-lib").style.fontWeight  = 'normal';
     document.getElementById("tab-app").style.fontWeight  = 'bold';
     document.getElementById("tab-dep").style.fontWeight  = 'normal';
@@ -110,6 +154,8 @@ async function toApplicationTab(action_result) {
 
 async function toDeploymentTab(action_result) {
     document.getElementById("tab-home").style.fontWeight = 'normal';
+    document.getElementById("tab-bone").style.fontWeight = 'normal';
+    document.getElementById("tab-van").style.fontWeight  = 'normal';
     document.getElementById("tab-lib").style.fontWeight  = 'normal';
     document.getElementById("tab-app").style.fontWeight  = 'normal';
     document.getElementById("tab-dep").style.fontWeight  = 'bold';
@@ -203,58 +249,59 @@ async function LibDetail(lbid) {
 
 async function BuildApplicationTable() {
     const response = await fetch('compose/v1alpha1/applications');
-    const rawdata  = await response.json();
-    let data = {};
-    for (d of rawdata) {
-        if (!data[d.name] || d.revision > data[d.name].revision) {
-            data[d.name] = d;
+    const data     = await response.json();
+    let   section  = document.getElementById("sectiondiv");
+
+    if (data.length > 0) {
+        let table = document.createElement('table');
+        table.setAttribute('border', '1');
+        table.setAttribute('cellpadding', '5');
+        table.setAttribute('cellspacing', '0');
+        table.setAttribute('bordercolor', 'lightgrey');
+
+        const headerRow  = table.insertRow();
+        const h1         = document.createElement('th');
+        const h2         = document.createElement('th');
+        const h3         = document.createElement('th');
+
+        h1.textContent = 'Name';
+        h2.textContent = 'Root Block';
+        h3.textContent = 'LifeCycle';
+
+        headerRow.appendChild(h1);
+        headerRow.appendChild(h2);
+        headerRow.appendChild(h3);
+
+        for (item of Object.values(data)) {
+            let row = table.insertRow();
+
+            let anchor = document.createElement('a');
+            anchor.setAttribute('href', '#');
+            anchor.setAttribute('onclick', `AppDetail('${item.id}')`);
+            anchor.textContent = item.name;
+            row.insertCell().appendChild(anchor);
+
+            anchor = document.createElement('a');
+            anchor.setAttribute('href', '#');
+            anchor.setAttribute('onclick', `LibDetail('${item.rootblock}')`);
+            anchor.textContent = item.rootname;
+            row.insertCell().appendChild(anchor);
+
+            row.insertCell().textContent = item.lifecycle;
         }
+
+        section.appendChild(table);
+    } else {
+        let empty = document.createElement('i');
+        empty.textContent = 'No Applications Found';
+        section.appendChild(empty);
     }
-
-    let table = document.createElement('table');
-    table.setAttribute('border', '1');
-    table.setAttribute('cellpadding', '5');
-    table.setAttribute('cellspacing', '0');
-    table.setAttribute('bordercolor', 'lightgrey');
-
-    const headerRow  = table.insertRow();
-    const h1         = document.createElement('th');
-    const h2         = document.createElement('th');
-    const h3         = document.createElement('th');
-
-    h1.textContent = 'Name';
-    h2.textContent = 'Root Block';
-    h3.textContent = 'LifeCycle';
-
-    headerRow.appendChild(h1);
-    headerRow.appendChild(h2);
-    headerRow.appendChild(h3);
-    
-    for (item of Object.values(data)) {
-        let row = table.insertRow();
-
-        let anchor = document.createElement('a');
-        anchor.setAttribute('href', '#');
-        anchor.setAttribute('onclick', `AppDetail('${item.id}')`);
-        anchor.textContent = item.name;
-        row.insertCell().appendChild(anchor);
-
-        anchor = document.createElement('a');
-        anchor.setAttribute('href', '#');
-        anchor.setAttribute('onclick', `LibDetail('${item.rootblock}')`);
-        anchor.textContent = item.rootname;
-        row.insertCell().appendChild(anchor);
-
-        row.insertCell().textContent = item.lifecycle;
-    }
-
-    document.getElementById("sectiondiv").appendChild(table);
 
     let button = document.createElement('button');
     button.setAttribute('onclick', `AppForm()`);
     button.textContent = 'Create Application...';
-    document.getElementById("sectiondiv").appendChild(document.createElement('p'));
-    document.getElementById("sectiondiv").appendChild(button);
+    section.appendChild(document.createElement('p'));
+    section.appendChild(button);
 }
 
 async function AppDetail(apid, action) {
@@ -345,55 +392,62 @@ async function AppSubmit(name, rootblock) {
 async function BuildDeploymentTable() {
     const response = await fetch('compose/v1alpha1/deployments');
     const data     = await response.json();
+    let   section  = document.getElementById("sectiondiv");
 
-    let table = document.createElement('table');
-    table.setAttribute('border', '1');
-    table.setAttribute('cellpadding', '5');
-    table.setAttribute('cellspacing', '0');
-    table.setAttribute('bordercolor', 'lightgrey');
+    if (data.length > 0) {
+        let table = document.createElement('table');
+        table.setAttribute('border', '1');
+        table.setAttribute('cellpadding', '5');
+        table.setAttribute('cellspacing', '0');
+        table.setAttribute('bordercolor', 'lightgrey');
 
-    const headerRow  = table.insertRow();
-    const h1         = document.createElement('th');
-    const h2         = document.createElement('th');
-    const h3         = document.createElement('th');
-    const h4         = document.createElement('th');
+        const headerRow  = table.insertRow();
+        const h1         = document.createElement('th');
+        const h2         = document.createElement('th');
+        const h3         = document.createElement('th');
+        const h4         = document.createElement('th');
 
-    h1.textContent = 'Detail';
-    h2.textContent = 'Application';
-    h3.textContent = 'VAN';
-    h4.textContent = 'Lifecycle';
+        h1.textContent = 'Detail';
+        h2.textContent = 'Application';
+        h3.textContent = 'VAN';
+        h4.textContent = 'Lifecycle';
 
-    headerRow.appendChild(h1);
-    headerRow.appendChild(h2);
-    headerRow.appendChild(h3);
-    headerRow.appendChild(h4);
-    
-    for (item of Object.values(data)) {
-        let row = table.insertRow();
+        headerRow.appendChild(h1);
+        headerRow.appendChild(h2);
+        headerRow.appendChild(h3);
+        headerRow.appendChild(h4);
 
-        let anchor = document.createElement('a');
-        anchor.setAttribute('href', '#');
-        anchor.setAttribute('onclick', `DepDetail('${item.id}', '${item.van}')`);
-        anchor.textContent = 'Detail';
-        row.insertCell().appendChild(anchor);
+        for (item of Object.values(data)) {
+            let row = table.insertRow();
 
-        anchor = document.createElement('a');
-        anchor.setAttribute('href', '#');
-        anchor.setAttribute('onclick', `AppDetail('${item.application}')`);
-        anchor.textContent = item.appname;
-        row.insertCell().appendChild(anchor);
+            let anchor = document.createElement('a');
+            anchor.setAttribute('href', '#');
+            anchor.setAttribute('onclick', `DepDetail('${item.id}', '${item.van}')`);
+            anchor.textContent = 'Detail';
+            row.insertCell().appendChild(anchor);
 
-        row.insertCell().textContent = item.vanname;
-        row.insertCell().textContent = item.lifecycle;
+            anchor = document.createElement('a');
+            anchor.setAttribute('href', '#');
+            anchor.setAttribute('onclick', `AppDetail('${item.application}')`);
+            anchor.textContent = item.appname;
+            row.insertCell().appendChild(anchor);
+
+            row.insertCell().textContent = item.vanname;
+            row.insertCell().textContent = item.lifecycle;
+        }
+
+        section.appendChild(table);
+    } else {
+        let empty = document.createElement('i');
+        empty.textContent = 'No Deployments Found';
+        section.appendChild(empty);
     }
-
-    document.getElementById("sectiondiv").appendChild(table);
 
     let button = document.createElement('button');
     button.setAttribute('onclick', `DepForm()`);
     button.textContent = 'Create Deployment...';
-    document.getElementById("sectiondiv").appendChild(document.createElement('p'));
-    document.getElementById("sectiondiv").appendChild(button);
+    section.appendChild(document.createElement('p'));
+    section.appendChild(button);
 }
 
 async function DepDetail(depid, vanid, action) {
@@ -457,10 +511,11 @@ async function DepDetail(depid, vanid, action) {
 }
 
 async function DepMemberChange(depid) {
-    let anchor = document.getElementById("vananchor");
-    let select = document.getElementById("vanmember");
-    anchor.setAttribute('href', `compose/v1alpha1/deployments/${depid}/site/${select.value}/sitedata`);
-    anchor.textContent = `Download site data for ${select.selectedOptions[0].textContent}`;
+    let anchor   = document.getElementById("vananchor");
+    let select   = document.getElementById("vanmember");
+    let sitename = select.selectedOptions[0].textContent;
+    anchor.setAttribute('href', `compose/v1alpha1/deployments/${depid}/site/${select.value}/sitedata/${sitename}.yaml`);
+    anchor.textContent = `Download site data for ${sitename}`;
 }
 
 async function DepForm() {
