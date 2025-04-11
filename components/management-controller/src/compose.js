@@ -1545,7 +1545,10 @@ const listApplications = async function(req, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT Id, Name, RootBlock, Lifecycle FROM Applications");
+        const result = await client.query(
+            "SELECT Applications.Id, Applications.Name, RootBlock, Lifecycle, LibraryBlocks.Name as rootname FROM Applications " +
+            "JOIN LibraryBlocks ON LibraryBlocks.Id = RootBlock"
+        );
         res.status(returnStatus).json(result.rows);
         await client.query("COMMIT");
     } catch (error) {
@@ -1564,7 +1567,11 @@ const getApplication = async function(apid, req, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT * FROM Applications WHERE Id = $1", [apid]);
+        const result = await client.query(
+            "SELECT Applications.*, LibraryBlocks.Name as rootname FROM Applications " +
+            "JOIN LibraryBlocks ON LibraryBlocks.Id = RootBlock " +
+            "WHERE Applications.Id = $1", [apid]
+        );
         if (result.rowCount == 1) {
             res.status(returnStatus).json(result.rows[0]);
         } else {
@@ -1760,7 +1767,11 @@ const listDeployments = async function(req, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT Id, Application, Van FROM DeployedApplications");
+        const result = await client.query(
+            "SELECT DeployedApplications.Id, DeployedApplications.Lifecycle, Application, Van, Applications.Name as appname, ApplicationNetworks.Name as vanname FROM DeployedApplications " +
+            "JOIN Applications ON Applications.Id = Application " +
+            "JOIN ApplicationNetworks ON ApplicationNetworks.Id = Van"
+        );
         res.status(returnStatus).json(result.rows);
         await client.query("COMMIT");
     } catch (error) {
@@ -1779,7 +1790,13 @@ const getDeployment = async function(depid, req, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT * FROM DeployedApplications WHERE Id = $1", [depid]);
+        const result = await client.query(
+            "SELECT DeployedApplications.*, Applications.Name as appname, ApplicationNetworks.Name as vanname FROM DeployedApplications " +
+            "JOIN Applications ON Applications.Id = Application " +
+            "JOIN ApplicationNetworks ON ApplicationNetworks.Id = Van " +
+            "WHERE DeployedApplications.Id = $1",
+            [depid]
+        );
         if (result.rowCount == 1) {
             res.status(returnStatus).json(result.rows[0]);
         } else {
@@ -1838,6 +1855,7 @@ const getSiteData = async function(depid, siteid, req, res) {
         await client.query("BEGIN");
         const result = await client.query("SELECT Configuration FROM SiteData WHERE DeployedApplication = $1 AND MemberSite = $2", [depid, siteid]);
         if (result.rowCount == 1) {
+            res.setHeader('content-type', 'application/yaml');
             res.status(returnStatus).send(result.rows[0].configuration);
         } else {
             returnStatus = 404;

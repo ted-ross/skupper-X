@@ -32,7 +32,7 @@
             background: #d4d7dc;
         }
         .section {
-            width: 80%;
+            width: 90%;
         }
         .nav ul {
             list-style: none; 
@@ -67,7 +67,7 @@
                     <li><a id="tab-home" href="#">Home</a></li>
                     <li><a id="tab-lib" href="#" onclick="toLibraryTab()">Library</a></li>
                     <li><a id="tab-app" href="#" onClick="toApplicationTab()">Applications</a></li>
-                    <li><a id="tab-dep" href="#">Deployments</a></li>
+                    <li><a id="tab-dep" href="#" onClick="toDeploymentTab()">Deployments</a></li>
                 </ul>
             </div>
             <div id="sectiondiv" class="section">
@@ -90,22 +90,31 @@ function setHeight() {
     document.getElementById("sectiondiv").style.height = newHeight;
 }
 
-function toLibraryTab() {
+async function toLibraryTab() {
     document.getElementById("tab-home").style.fontWeight = 'normal';
     document.getElementById("tab-lib").style.fontWeight  = 'bold';
     document.getElementById("tab-app").style.fontWeight  = 'normal';
     document.getElementById("tab-dep").style.fontWeight  = 'normal';
     document.getElementById("sectiondiv").innerHTML = `<h2>Block Library</h2>`;
-    BuildLibraryTable();
+    await BuildLibraryTable();
 }
 
-function toApplicationTab() {
+async function toApplicationTab(action_result) {
     document.getElementById("tab-home").style.fontWeight = 'normal';
     document.getElementById("tab-lib").style.fontWeight  = 'normal';
     document.getElementById("tab-app").style.fontWeight  = 'bold';
     document.getElementById("tab-dep").style.fontWeight  = 'normal';
     document.getElementById("sectiondiv").innerHTML = `<h2>Applications</h2>`;
-    BuildApplicationTable();
+    await BuildApplicationTable();
+}
+
+async function toDeploymentTab(action_result) {
+    document.getElementById("tab-home").style.fontWeight = 'normal';
+    document.getElementById("tab-lib").style.fontWeight  = 'normal';
+    document.getElementById("tab-app").style.fontWeight  = 'normal';
+    document.getElementById("tab-dep").style.fontWeight  = 'bold';
+    document.getElementById("sectiondiv").innerHTML = `<h2>Deployments</h2>`;
+    await BuildDeploymentTable();
 }
 
 async function BuildLibraryTable() {
@@ -124,30 +133,30 @@ async function BuildLibraryTable() {
     table.setAttribute('cellspacing', '0');
     table.setAttribute('bordercolor', 'lightgrey');
 
-    const headerRow  = table.insertRow();
-    const namehead   = document.createElement('th');
-    const typehead   = document.createElement('th');
-    const revhead    = document.createElement('th');
-    const createhead = document.createElement('th');
+    const headerRow = table.insertRow();
+    const h1 = document.createElement('th');
+    const h2 = document.createElement('th');
+    const h3 = document.createElement('th');
+    const h4 = document.createElement('th');
 
-    namehead.textContent = 'Name';
-    typehead.textContent = 'Type';
-    revhead.textContent  = 'Rev';
-    createhead.textContent = 'Created';
+    h1.textContent = 'Name';
+    h2.textContent = 'Type';
+    h3.textContent = 'Rev';
+    h4.textContent = 'Created';
 
-    headerRow.appendChild(namehead);
-    headerRow.appendChild(typehead);
-    headerRow.appendChild(revhead);
-    headerRow.appendChild(createhead);
+    headerRow.appendChild(h1);
+    headerRow.appendChild(h2);
+    headerRow.appendChild(h3);
+    headerRow.appendChild(h4);
     
     for (item of Object.values(data)) {
         let row = table.insertRow();
-        let button = document.createElement('a');
-        button.setAttribute('href', '#');
-        button.setAttribute('onclick', `LibDetail('${item.id}')`);
-        button.textContent = item.name;
-        row.insertCell().appendChild(button);
-        row.insertCell().textContent = item.type;
+        let anchor = document.createElement('a');
+        anchor.setAttribute('href', '#');
+        anchor.setAttribute('onclick', `LibDetail('${item.id}')`);
+        anchor.textContent = item.name;
+        row.insertCell().appendChild(anchor);
+        row.insertCell().textContent = item.type.replace('skupperx.io/', '');
         row.insertCell().textContent = item.revision;
         row.insertCell().textContent = item.created;
     }
@@ -156,7 +165,7 @@ async function BuildLibraryTable() {
 }
 
 function countLines(str) {
-    return (str.match(/\r\n|\r|\n/g) || []).length + 1;
+    return !!str ? (str.match(/\r\n|\r|\n/g) || []).length + 1 : 1;
 }
 
 function TextArea(item, title, section, cols=60) {
@@ -209,34 +218,304 @@ async function BuildApplicationTable() {
     table.setAttribute('bordercolor', 'lightgrey');
 
     const headerRow  = table.insertRow();
-    const namehead   = document.createElement('th');
-    const typehead   = document.createElement('th');
-    const revhead    = document.createElement('th');
-    const createhead = document.createElement('th');
+    const h1         = document.createElement('th');
+    const h2         = document.createElement('th');
+    const h3         = document.createElement('th');
 
-    namehead.textContent = 'Name';
-    typehead.textContent = 'Type';
-    revhead.textContent  = 'Rev';
-    createhead.textContent = 'Created';
+    h1.textContent = 'Name';
+    h2.textContent = 'Root Block';
+    h3.textContent = 'LifeCycle';
 
-    headerRow.appendChild(namehead);
-    headerRow.appendChild(typehead);
-    headerRow.appendChild(revhead);
-    headerRow.appendChild(createhead);
+    headerRow.appendChild(h1);
+    headerRow.appendChild(h2);
+    headerRow.appendChild(h3);
     
     for (item of Object.values(data)) {
         let row = table.insertRow();
-        let button = document.createElement('a');
-        button.setAttribute('href', '#');
-        button.setAttribute('onclick', `LibDetail('${item.id}')`);
-        button.textContent = item.name;
-        row.insertCell().appendChild(button);
-        row.insertCell().textContent = item.type;
-        row.insertCell().textContent = item.revision;
-        row.insertCell().textContent = item.created;
+
+        let anchor = document.createElement('a');
+        anchor.setAttribute('href', '#');
+        anchor.setAttribute('onclick', `AppDetail('${item.id}')`);
+        anchor.textContent = item.name;
+        row.insertCell().appendChild(anchor);
+
+        anchor = document.createElement('a');
+        anchor.setAttribute('href', '#');
+        anchor.setAttribute('onclick', `LibDetail('${item.rootblock}')`);
+        anchor.textContent = item.rootname;
+        row.insertCell().appendChild(anchor);
+
+        row.insertCell().textContent = item.lifecycle;
     }
 
     document.getElementById("sectiondiv").appendChild(table);
+
+    let button = document.createElement('button');
+    button.setAttribute('onclick', `AppForm()`);
+    button.textContent = 'Create Application...';
+    document.getElementById("sectiondiv").appendChild(document.createElement('p'));
+    document.getElementById("sectiondiv").appendChild(button);
+}
+
+async function AppDetail(apid, action) {
+    let buildtext  = undefined;
+    let deletetext = undefined;
+    if (action == 'build') {
+        const buildresponse = await fetch(`compose/v1alpha1/applications/${apid}/build`, {method: 'PUT'});
+        buildtext = buildresponse.ok ? await buildresponse.text() : `${buildresponse.status} - ${await buildresponse.text()}`;
+    } else if (action == 'delete') {
+        const deleteresponse = await fetch(`compose/v1alpha1/applications/${apid}`, {method: 'DELETE'});
+        deletetext = deleteresponse.ok ? await deleteresponse.text() : `${deleteresponse.status} - ${await deleteresponse.text()}`;
+        if (deleteresponse.ok) {
+            let   section  = document.getElementById("sectiondiv");
+            section.innerHTML = '<h2>Application Deleted</h2>';
+            return;
+        }
+    }
+
+    const response = await fetch(`compose/v1alpha1/applications/${apid}`);
+    const data     = await response.json();
+    let   section  = document.getElementById("sectiondiv");
+    section.innerHTML = `
+      <h2>${data.name}</h2>
+      <table cellPadding="4">
+        <tr><td style="text-align:right">Created:</td><td>${data.created}</td></tr>
+        <tr><td style="text-align:right">Root Block:</td><td>${data.rootname}</td></tr>
+        <tr><td style="text-align:right">Lifecycle:</td><td>${data.lifecycle}</td></tr>
+        <tr><td><button onClick="AppDetail('${apid}', 'build')">Build</button></td><td id="buildtextcell"></td></tr>
+        <tr><td><button onClick="AppDetail('${apid}', 'delete')">Delete</button></td><td id="deletetextcell"></td></tr>
+      </table>
+    `;
+
+    TextArea(data.buildlog, 'Build Log', section, 250);
+
+    if (buildtext) {
+        document.getElementById("buildtextcell").innerText = buildtext;
+    }
+    if (deletetext) {
+        document.getElementById("deletetextcell").innerText = deletetext;
+    }
+}
+
+async function AppForm() {
+    const libresponse = await fetch('compose/v1alpha1/library/blocks');
+    const libdata     = await libresponse.json();
+
+    let   section  = document.getElementById("sectiondiv");
+    section.innerHTML = `
+    <h2>Create an Application</h2>
+    <table cellPadding="4">
+      <tr><td style="text-align:right">Application Name:</td><td><input id="appname" type="text" name="name"></input></td></tr>
+      <tr><td style="text-align:right">Root Block:</td><td><select id="rootselect" name="rootblock"></select></td></tr>
+      <tr><td style="text-align:right"></td><td><button onclick="AppSubmit(document.getElementById('appname').value, document.getElementById('rootselect').value)">Submit</button></td></tr>
+    </table>
+    `;
+
+    //
+    // Populate the root-block selector
+    //
+    for (const block of libdata) {
+        if (block.type == 'skupperx.io/container') {
+            let option = document.createElement('option');
+            option.setAttribute('value', `${block.id}`);
+            option.textContent = block.name;
+            document.getElementById('rootselect').appendChild(option);
+        }
+    }
+}
+
+async function AppSubmit(name, rootblock) {
+    console.log(`AppSubmit: name=${name} rootblock=${rootblock}`);
+    const response = await fetch('compose/v1alpha1/applications', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            name      : name,
+            rootblock : rootblock,
+        }),
+    });
+
+    let notice = response.ok ? 'Application Create Successful' : `Application Create Failed: ${await response.text()}`;
+    console.log('Notice', notice);
+    await toApplicationTab(notice);
+}
+
+async function BuildDeploymentTable() {
+    const response = await fetch('compose/v1alpha1/deployments');
+    const data     = await response.json();
+
+    let table = document.createElement('table');
+    table.setAttribute('border', '1');
+    table.setAttribute('cellpadding', '5');
+    table.setAttribute('cellspacing', '0');
+    table.setAttribute('bordercolor', 'lightgrey');
+
+    const headerRow  = table.insertRow();
+    const h1         = document.createElement('th');
+    const h2         = document.createElement('th');
+    const h3         = document.createElement('th');
+    const h4         = document.createElement('th');
+
+    h1.textContent = 'Detail';
+    h2.textContent = 'Application';
+    h3.textContent = 'VAN';
+    h4.textContent = 'Lifecycle';
+
+    headerRow.appendChild(h1);
+    headerRow.appendChild(h2);
+    headerRow.appendChild(h3);
+    headerRow.appendChild(h4);
+    
+    for (item of Object.values(data)) {
+        let row = table.insertRow();
+
+        let anchor = document.createElement('a');
+        anchor.setAttribute('href', '#');
+        anchor.setAttribute('onclick', `DepDetail('${item.id}', '${item.van}')`);
+        anchor.textContent = 'Detail';
+        row.insertCell().appendChild(anchor);
+
+        anchor = document.createElement('a');
+        anchor.setAttribute('href', '#');
+        anchor.setAttribute('onclick', `AppDetail('${item.application}')`);
+        anchor.textContent = item.appname;
+        row.insertCell().appendChild(anchor);
+
+        row.insertCell().textContent = item.vanname;
+        row.insertCell().textContent = item.lifecycle;
+    }
+
+    document.getElementById("sectiondiv").appendChild(table);
+
+    let button = document.createElement('button');
+    button.setAttribute('onclick', `DepForm()`);
+    button.textContent = 'Create Deployment...';
+    document.getElementById("sectiondiv").appendChild(document.createElement('p'));
+    document.getElementById("sectiondiv").appendChild(button);
+}
+
+async function DepDetail(depid, vanid, action) {
+    let deploytext  = undefined;
+    let deletetext = undefined;
+    if (action == 'deploy') {
+        const deployresponse = await fetch(`compose/v1alpha1/deployments/${depid}/deploy`, {method: 'PUT'});
+        deploytext = deployresponse.ok ? await deployresponse.text() : `${deployresponse.status} - ${await deployresponse.text()}`;
+    } else if (action == 'delete') {
+        const deleteresponse = await fetch(`compose/v1alpha1/deployments/${depid}`, {method: 'DELETE'});
+        deletetext = deleteresponse.ok ? await deleteresponse.text() : `${deleteresponse.status} - ${await deleteresponse.text()}`;
+        if (deleteresponse.ok) {
+            let   section  = document.getElementById("sectiondiv");
+            section.innerHTML = '<h2>Deployment Deleted</h2>';
+            return;
+        }
+    }
+
+    const response = await fetch(`compose/v1alpha1/deployments/${depid}`);
+    const data     = await response.json();
+    let   section  = document.getElementById("sectiondiv");
+    section.innerHTML = `
+      <h2>Deployment</h2>
+      <table cellPadding="4">
+        <tr><td style="text-align:right">Application:</td><td>${data.appname}</td></tr>
+        <tr><td style="text-align:right">VAN:</td><td>${data.vanname}</td></tr>
+        <tr><td style="text-align:right">Lifecycle:</td><td>${data.lifecycle}</td></tr>
+        <tr><td><button onClick="DepDetail('${depid}', '${vanid}', 'deploy')">Deploy</button></td><td id="deploytextcell"></td></tr>
+        <tr><td><button onClick="DepDetail('${depid}', '${vanid}', 'delete')">Delete</button></td><td id="deletetextcell"></td></tr>
+      </table>
+      <h2>Site-Specific Configuration for members of this VAN</h2>
+      <table cellPadding="4">
+        <tr><td><select id="vanmember" onchange="DepMemberChange('${depid}')"></select></td><td><a id="vananchor" download></a></td></tr>
+      </table>
+    `;
+
+    TextArea(data.deploylog, 'Deploy Log', section, 150);
+
+    //
+    // Populate the VAN member selector
+    //
+    vanresponse = await fetch(`api/v1alpha1/van/${vanid}/members`);
+    console.log(vanresponse);
+    vandata     = await vanresponse.json();
+    for (const member of vandata) {
+        console.log('Member', member);
+        let option = document.createElement('option');
+        option.setAttribute('value', `${member.id}`);
+        option.textContent = member.name;
+        document.getElementById('vanmember').appendChild(option);
+    }
+
+    await DepMemberChange(depid);
+
+    if (deploytext) {
+        document.getElementById("deploytextcell").innerText = deploytext;
+    }
+    if (deletetext) {
+        document.getElementById("deletetextcell").innerText = deletetext;
+    }
+}
+
+async function DepMemberChange(depid) {
+    let anchor = document.getElementById("vananchor");
+    let select = document.getElementById("vanmember");
+    anchor.setAttribute('href', `compose/v1alpha1/deployments/${depid}/site/${select.value}/sitedata`);
+    anchor.textContent = `Download site data for ${select.selectedOptions[0].textContent}`;
+}
+
+async function DepForm() {
+    const appresponse = await fetch('compose/v1alpha1/applications');
+    const appdata     = await appresponse.json();
+    const vanresponse = await fetch('api/v1alpha1/vans');
+    const vandata     = await vanresponse.json();
+
+    let   section  = document.getElementById("sectiondiv");
+    section.innerHTML = `
+    <h2>Create a Deployment</h2>
+    <table cellPadding="4">
+      <tr><td style="text-align:right">Application:</td><td><select id="appselect"></select></td></tr>
+      <tr><td style="text-align:right">VAN:</td><td><select id="vanselect"></select></td></tr>
+      <tr><td style="text-align:right"></td><td><button onclick="DepSubmit(document.getElementById('appselect').value, document.getElementById('vanselect').value)">Submit</button></td></tr>
+    </table>
+    `;
+
+    //
+    // Populate the application selector
+    //
+    for (const app of appdata) {
+        let option = document.createElement('option');
+        option.setAttribute('value', `${app.id}`);
+        option.textContent = app.name;
+        document.getElementById('appselect').appendChild(option);
+    }
+
+    //
+    // Populate the van selector
+    //
+    for (const van of vandata) {
+        let option = document.createElement('option');
+        option.setAttribute('value', `${van.id}`);
+        option.textContent = van.name;
+        document.getElementById('vanselect').appendChild(option);
+    }
+}
+
+async function DepSubmit(app, van) {
+    console.log(`DepSubmit: app=${app} van=${van}`);
+    const response = await fetch('compose/v1alpha1/deployments', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            app : app,
+            van : van,
+        }),
+    });
+
+    let notice = response.ok ? 'Deployment Create Successful' : `Deployment Create Failed: ${await response.text()}`;
+    console.log('Notice', notice);
+    await toDeploymentTab(notice);
 }
 </script>
 
