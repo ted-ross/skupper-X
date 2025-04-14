@@ -19,19 +19,6 @@
 apiVersion: skupperx.io/compose/v1alpha1
 kind: Block
 metadata:
-  name: postgres-balanced
-type: skupperx.io/connector
-spec:
-  inherit:
-    base: library/tcp-selector-with-policy
-    transformOverwrite:
-      keyPrefix: postgres
-      protocol: postgres
-
----
-apiVersion: skupperx.io/compose/v1alpha1
-kind: Block
-metadata:
   name: postgresql
 type: skupperx.io/component
 spec:

@@ -37,7 +37,10 @@ spec:
         - interface: control
           super: request
       - name: worker-to-database
-        block: postgres-balanced
+        block: library/tcp-selector-with-policy
+        config:
+          keyPrefix: pg
+          protocol: postgres
         bindings:
         - interface: connector
           block: worker
@@ -65,7 +68,10 @@ spec:
         siteClasses:
         - hq
       - name: request-ingress-to-main
-        block: library/http-simple
+        block: library/tcp-selector-with-policy
+        config:
+          keyPrefix: http
+          protocol: http
         bindings:
         - interface: acceptor
           block: mainApp

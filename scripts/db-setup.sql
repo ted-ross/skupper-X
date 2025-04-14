@@ -361,6 +361,7 @@ CREATE TABLE InstanceBlocks (
     Application  UUID REFERENCES Applications(Id),
     LibraryBlock UUID REFERENCES LibraryBlocks(Id),
     InstanceName text,
+    Config       text,  -- Modifies the library config on instantiation
     Metadata     text,
     Derivative   text
 );

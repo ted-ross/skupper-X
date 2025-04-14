@@ -52,7 +52,7 @@ const deepCopy = function(from) {
 }
 
 const deepAppend = function(base, overlay) {
-    let modified = base;
+    let modified = deepCopy(base);
     if (typeof(overlay) === 'object') {
         for (const [key, value] of Object.entries(overlay)) {
             modified[key] = deepAppend(modified[key], value);
@@ -161,9 +161,10 @@ class BlockInterface {
 }
 
 class InstanceBlock {
-    constructor() {
+    constructor(instanceConfig) {
         this.libraryBlock = undefined;
         this.name         = undefined;
+        this.config       = instanceConfig;
         this.interfaces   = {};
         this.derivative   = {};
         this.dbid         = null;
@@ -184,9 +185,9 @@ class InstanceBlock {
         this.libraryBlock = libraryBlock;
         this.name         = name;
 
-        const config = libraryBlock.config();
-        if (!!config) {
-            this.metadata = deepCopy(config);
+        const libConfig = libraryBlock.config();
+        if (!!libConfig) {
+            this.metadata = deepAppend(libConfig, this.config);
         }
 
         this.metadata.ident = ident.NewIdentity();
@@ -199,6 +200,7 @@ class InstanceBlock {
         this.libraryBlock = libraryBlock;
         this.name         = row.instancename;
         this.dbid         = row.id;
+        this.config       = JSON.parse(row.config);
         this.metadata     = JSON.parse(row.metadata);
         this.derivative   = JSON.parse(row.derivative);
         this._buildInterfaces(buildLog);
@@ -222,6 +224,10 @@ class InstanceBlock {
 
     setLabel(key, value) {
         this.labels[key] = value;
+    }
+
+    getConfig() {
+        return this.config;
     }
 
     getMetadata() {
@@ -509,7 +515,7 @@ class Application {
         //
         const iblockResult = await client.query("SELECT * FROM InstanceBlocks WHERE Application = $1", [appid]);
         for (const iblock of iblockResult.rows) {
-            let instanceBlock = new InstanceBlock();
+            let instanceBlock = new InstanceBlock({});
             instanceBlock.buildFromDatabase(iblock, this.libraryBlocks[libraryBlocksById[iblock.libraryblock]], buildLog);
             this.instanceBlocks[instanceBlock.getName()] = instanceBlock;
         }
@@ -569,7 +575,7 @@ class Application {
         }
         const rootBlock = this.libraryBlocks[this.rootBlockName];
         const path      = '/' + this.name();
-        this.instanceBlocks[path] = new InstanceBlock();
+        this.instanceBlocks[path] = new InstanceBlock({});
         this.instanceBlocks[path].buildFromApi(rootBlock, path, buildLog);
         this.instantiateSubComponents(path + '/', rootBlock, this.rootBlockName, buildLog);
 
@@ -603,8 +609,9 @@ class Application {
                 if (!libraryChild) {
                     buildLog.error(`Composite component ${instanceName} references a nonexistent library block ${child.block}`)
                 }
+                const subConfig = child.config || {};
                 const subPath = path + child.name;
-                let instanceBlock = new InstanceBlock();
+                let instanceBlock = new InstanceBlock(subConfig);
                 this.instanceBlocks[subPath] = instanceBlock;
                 instanceBlock.buildFromApi(libraryChild, subPath, buildLog);
 
@@ -1477,8 +1484,8 @@ const buildApplication = async function(apid, req, res) {
             await client.query("DELETE FROM InstanceBlocks WHERE Application = $1", [apid]);
             const instanceBlocks = application.getInstanceBlocks();
             for (const [name, block] of Object.entries(instanceBlocks)) {
-                const result = await client.query("INSERT INTO InstanceBlocks (Application, LibraryBlock, InstanceName, Metadata, Derivative) VALUES ($1, $2, $3, $4, $5) RETURNING Id",
-                                                  [apid, block.libraryBlockDatabaseId(), name, JSON.stringify(block.getMetadata()), JSON.stringify(block.getDerivative())]);
+                const result = await client.query("INSERT INTO InstanceBlocks (Application, LibraryBlock, InstanceName, Config, Metadata, Derivative) VALUES ($1, $2, $3, $4, $5, $6) RETURNING Id",
+                                                  [apid, block.libraryBlockDatabaseId(), name, JSON.stringify(block.getConfig()), JSON.stringify(block.getMetadata()), JSON.stringify(block.getDerivative())]);
                 if (result.rowCount == 1) {
                     block.setDatabaseId(result.rows[0].id);
                 }
