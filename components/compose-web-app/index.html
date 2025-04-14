@@ -326,7 +326,7 @@ async function BuildVanTable(focus) {
         title.textContent = data[focus].name;
         section.appendChild(title);
 
-        const siteResult = await fetch(`api/v1alpha1/van/${focus}/members`);
+        const siteResult = await fetch(`api/v1alpha1/vans/${focus}/members`);
         const listdata   = await siteResult.json();
         const siteData   = {};
 
@@ -659,7 +659,7 @@ async function DepDetail(depid, vanid, action) {
     //
     // Populate the VAN member selector
     //
-    vanresponse = await fetch(`api/v1alpha1/van/${vanid}/members`);
+    vanresponse = await fetch(`api/v1alpha1/vans/${vanid}/members`);
     console.log(vanresponse);
     vandata     = await vanresponse.json();
     for (const member of vandata) {
