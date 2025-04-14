@@ -418,12 +418,24 @@ async function LibDetail(lbid) {
     }
     if (data.config != '') {
         TextArea(data.config, 'Config', section);
+    } else {
+        let empty = document.createElement('h3');
+        empty.textContent = 'No configuration section';
+        section.appendChild(empty);
     }
     if (data.interfaces != '') {
         TextArea(data.interfaces, 'Interfaces', section);
+    } else {
+        let empty = document.createElement('h3');
+        empty.textContent = 'No interface section';
+        section.appendChild(empty);
     }
     if (data.specbody != '') {
         TextArea(data.specbody, 'Body', section, 100);
+    } else {
+        let empty = document.createElement('h3');
+        empty.textContent = 'No body section';
+        section.appendChild(empty);
     }
 }
 
