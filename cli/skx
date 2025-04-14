@@ -396,32 +396,32 @@ DISPATCH = {   # {object : {verb : ([positional], [options], METHOD, URI, data-f
     ##
     'backbone' : {
         'create' : (['name'], ['multitenant'], 'POST',   '/api/v1alpha2/backbones', 'CreateResult'),
-        'delete' : (['backboneid'], [],        'DELETE', '/api/v1alpha2/backbone/${backboneid}', 'Result'),
+        'delete' : (['backboneid'], [],        'DELETE', '/api/v1alpha2/backbones/${backboneid}', 'Result'),
         'list'   : ([], [],                    'GET',    '/api/v1alpha2/backbones', 'Table', 'Backbone Networks',
                     ['id', 'name', ('stat', None, 'lifecycle'), 'failure', ('multitenant', 'YN')]),
-        'activate' : (['id'], [],              'PUT',    '/api/v1alpha2/backbone/${id}/activate', 'Result'),
+        'activate' : (['id'], [],              'PUT',    '/api/v1alpha2/backbones/${id}/activate', 'Result'),
     },
 
     ##
     ## Backbone-Site
     ##
     'site' : {
-        'create' : (['name'], ['backbone'], 'POST',   '/api/v1alpha2/backbone/${backbone}/sites', 'CreateResult'),
-        'delete' : (['siteid'], [],         'DELETE', '/api/v1alpha2/backbonesite/${siteid}', 'Result'),
-        'list'   : ([],       ['backbone'], 'GET',    '/api/v1alpha2/backbone/${backbone}/sites', 'Table', 'Backbone Sites',
+        'create' : (['name'], ['backbone'], 'POST',   '/api/v1alpha2/backbones/${backbone}/sites', 'CreateResult'),
+        'delete' : (['siteid'], [],         'DELETE', '/api/v1alpha2/backbonesites/${siteid}', 'Result'),
+        'list'   : ([],       ['backbone'], 'GET',    '/api/v1alpha2/backbones/${backbone}/sites', 'Table', 'Backbone Sites',
                     ['id', 'name', ('stat', None, 'lifecycle'), 'failure', ('deploy', None, 'deploymentstate'), ('since', None, 'firstactivetime'), ('last', None, 'lastheartbeat')]),
         'deploy' : (['siteid', 'outfile'], ['format'], 'GET', '/api/v1alpha1/backbonesite/${siteid}/${format}', 'File'),
-        'boot-ingress' : (['siteid', 'infile'], [], 'POST', '/api/v1alpha1/backbonesite/${siteid}/ingress', 'SendFile'),
-        'boot-finish'  : (['siteid', 'outfile'], ['format'],   'GET',  '/api/v1alpha1/backbonesite/${siteid}/accesspoints/${format}', 'File'),
+        'boot-ingress' : (['siteid', 'infile'], [], 'POST', '/api/v1alpha1/backbonesites/${siteid}/ingress', 'SendFile'),
+        'boot-finish'  : (['siteid', 'outfile'], ['format'],   'GET',  '/api/v1alpha1/backbonesites/${siteid}/accesspoints/${format}', 'File'),
     },
 
     ##
     ## Access Point
     ##
     'access-point' : {
-        'create' : (['siteid', 'kind'], ['bindhost'], 'POST',   '/api/v1alpha2/backbonesite/${siteid}/accesspoints', 'CreateResult'),
-        'delete' : (['apid'],           [],           'DELETE', '/api/v1alpha2/accesspoint/${apid}', 'Result'),
-        'list'   : (['siteid'],         [],           'GET',    '/api/v1alpha2/backbonesite/${siteid}/accesspoints', 'Table', 'Backbone Access Points',
+        'create' : (['siteid', 'kind'], ['bindhost'], 'POST',   '/api/v1alpha2/backbonesites/${siteid}/accesspoints', 'CreateResult'),
+        'delete' : (['apid'],           [],           'DELETE', '/api/v1alpha2/accesspoints/${apid}', 'Result'),
+        'list'   : (['siteid'],         [],           'GET',    '/api/v1alpha2/backbonesites/${siteid}/accesspoints', 'Table', 'Backbone Access Points',
                     ['id', 'name', ('stat', None, 'lifecycle'), 'failure', 'kind', 'bindhost']),
     },
 
@@ -429,9 +429,9 @@ DISPATCH = {   # {object : {verb : ([positional], [options], METHOD, URI, data-f
     ## Link
     ##
     'link' : {
-        'create' : (['accesspoint', 'connectingsite'], ['cost'], 'POST', '/api/v1alpha2/accesspoint/${accesspoint}/links', 'CreateResult'),
-        'delete' : (['linkid'], [], 'DELETE', '/api/v1alpha2/backbonelink/${linkid}', 'Result'),
-        'list'   : ([], ['backbone'], 'GET', '/api/v1alpha2/backbone/${backbone}/links', 'Table', 'Backbone Links',
+        'create' : (['accesspoint', 'connectingsite'], ['cost'], 'POST', '/api/v1alpha2/accesspoints/${accesspoint}/links', 'CreateResult'),
+        'delete' : (['linkid'], [], 'DELETE', '/api/v1alpha2/backbonelinks/${linkid}', 'Result'),
+        'list'   : ([], ['backbone'], 'GET', '/api/v1alpha2/backbones/${backbone}/links', 'Table', 'Backbone Links',
                     ['id', ('access-point', 'APNAME', 'accesspoint'), ('lSite', 'APSITENAME', 'accesspoint'), ('cSite', 'SITENAME', 'connectinginteriorsite'), ('cost', 'NUM', 'cost')]),
     },
 
@@ -439,11 +439,11 @@ DISPATCH = {   # {object : {verb : ([positional], [options], METHOD, URI, data-f
     ## VAN
     ##
     'van' : {
-        'create' : (['name'], ['backbone'], 'POST',   '/api/v1alpha1/backbone/${backbone}/vans', 'CreateResult'),
-        'delete' : (['vanid'], [],          'DELETE', '/api/v1alpha1/van/${vanid}', 'Result'),
+        'create' : (['name'], ['backbone'], 'POST',   '/api/v1alpha1/backbones/${backbone}/vans', 'CreateResult'),
+        'delete' : (['vanid'], [],          'DELETE', '/api/v1alpha1/vans/${vanid}', 'Result'),
         'list'   : ([], [],                 'GET',    '/api/v1alpha1/vans', 'Table', 'Application Networks',
                         ['id', ('backbone', None, 'backbonename'), 'name', ('stat', None, 'lifecycle'), 'failure', ('start', None, 'starttime'), ('end', None, 'endtime')]),
-        'evict'  : (['vanid'], [],          'PUT',    '/api/v1alpha1/van/${vanid}/evict', 'Result')
+        'evict'  : (['vanid'], [],          'PUT',    '/api/v1alpha1/vans/${vanid}/evict', 'Result')
     },
 
     ##
@@ -451,11 +451,11 @@ DISPATCH = {   # {object : {verb : ([positional], [options], METHOD, URI, data-f
     ##
     'invite' : {
         'create' : (['vanid', 'name', 'claimaccess', 'primaryaccess'], ['interactive', 'prefix', 'siteclass'], 'POST', '/api/v1alpha1/van/${vanid}/invitations', 'CreateResult'),
-        'delete' : (['inviteid'], [], 'DELETE', '/api/v1alpha1/invitation/${inviteid}', 'Result'),
-        'list'   : (['vanid'], [],    'GET',    '/api/v1alpha1/van/${vanid}/invitations', 'Table', 'Application Network Invitations',
+        'delete' : (['inviteid'], [], 'DELETE', '/api/v1alpha1/invitations/${inviteid}', 'Result'),
+        'list'   : (['vanid'], [],    'GET',    '/api/v1alpha1/vans/${vanid}/invitations', 'Table', 'Application Network Invitations',
                         ['id', 'name', ('stat', None, 'lifecycle'), 'failure', ('limit', 'NUM', 'instancelimit'), ('count', 'NUM', 'instancecount'), ('fetch', 'NUM', 'fetchcount'), ('interactive', 'YN', 'interactive'), ('deadline', None, 'joindeadline')]),
-        'deploy' : (['inviteid', 'outfile'], ['format'], 'GET', '/api/v1alpha1/invitation/${inviteid}/${format}', 'File'),
-        'expire' : (['inviteid'], [], 'PUT',    '/api/v1alpha1/invitation/${inviteid}/expire', 'Result')
+        'deploy' : (['inviteid', 'outfile'], ['format'], 'GET', '/api/v1alpha1/invitations/${inviteid}/${format}', 'File'),
+        'expire' : (['inviteid'], [], 'PUT',    '/api/v1alpha1/invitations/${inviteid}/expire', 'Result')
     },
 
     ##

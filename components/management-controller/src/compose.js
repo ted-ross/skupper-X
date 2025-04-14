@@ -1406,14 +1406,13 @@ const postApplication = async function(req, res) {
 
         const result = await client.query("INSERT INTO Applications (Name, RootBlock) VALUES ($1, $2) RETURNING Id",
                                           [norm.name, norm.rootblock]);
+        await client.query("COMMIT");
         if (result.rowCount == 1) {
             res.status(returnStatus).json(result.rows[0]);
         } else {
             returnStatus = 400;
             res.status(returnStatus).send(result.error);
         }
-
-        await client.query("COMMIT");
     } catch (error) {
         returnStatus = 400;
         res.status(returnStatus).send(error.message);
@@ -1619,17 +1618,24 @@ const deleteApplication = async function(apid, req, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        await client.query("DELETE FROM Bindings WHERE Application = $1", [apid]);
-        await client.query("DELETE FROM InstanceBlocks WHERE Application = $1", [apid]);
-        const result = await client.query("DELETE FROM Applications WHERE Id = $1", [apid]);
-        if (result.rowCount != 1) {
-            returnStatus = 404;
-            res.status(returnStatus).send('Not Found');
+        const check = await client.query("SELECT Lifecycle FROM Applications WHERE Id = $1", [apid]);
+        if (check.rowCount == 1 && check.rows[0].lifecycle == 'deployed') {
+            returnStatus = 400;
+            await client.query("COMMIT");
+            res.status(returnStatus).send('Cannot delete an Application that is deployed');
         } else {
-            delete cachedApplications[apid];
-            res.status(returnStatus).send('Deleted');
+            await client.query("DELETE FROM Bindings WHERE Application = $1", [apid]);
+            await client.query("DELETE FROM InstanceBlocks WHERE Application = $1", [apid]);
+            const result = await client.query("DELETE FROM Applications WHERE Id = $1", [apid]);
+            await client.query("COMMIT");
+            if (result.rowCount != 1) {
+                returnStatus = 404;
+                res.status(returnStatus).send('Not Found');
+            } else {
+                delete cachedApplications[apid];
+                res.status(returnStatus).send('Deleted');
+            }
         }
-        await client.query("COMMIT");
     } catch (error) {
         Log(`Exception in deleteApplication: ${error.stack}`);
         await client.query("ROLLBACK");
@@ -1639,6 +1645,34 @@ const deleteApplication = async function(apid, req, res) {
         client.release();
     }
     return returnStatus;
+}
+
+const listApplicationBlocks = async function(apid, req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query(
+            "SELECT InstanceBlocks.Id, InstanceName, LibraryBlock, " +
+            "LibraryBlocks.Name as libname, LibraryBlocks.Revision FROM InstanceBlocks " +
+            "JOIN LibraryBlocks ON LibraryBlocks.Id = LibraryBlock " +
+            "WHERE Application = $1",
+            [apid]
+        );
+        res.status(returnStatus).json(result.rows);
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in listApplicationBlocks: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+}
+
+const getApplicationBlock = async function(blockid, req, res) {
 }
 
 const postDeployment = async function(req, res) {
@@ -1661,6 +1695,7 @@ const postDeployment = async function(req, res) {
         }
         const result = await client.query("INSERT INTO DeployedApplications (Application, Van) VALUES ($1, $2) RETURNING Id",
                                           [norm.app, norm.van]);
+        await client.query("COMMIT");
         if (result.rowCount == 1) {
             await client.query("UPDATE Applications SET Lifecycle = 'deployed' WHERE Id = $1", [norm.app]);
             res.status(returnStatus).json(result.rows[0]);
@@ -1668,8 +1703,6 @@ const postDeployment = async function(req, res) {
             returnStatus = 400;
             res.status(returnStatus).send(result.error);
         }
-
-        await client.query("COMMIT");
     } catch (error) {
         await client.query("ROLLBACK");
         returnStatus = 400;
@@ -1822,9 +1855,9 @@ const deleteDeployment = async function(depid, req, res) {
         await client.query("BEGIN");
         await client.query("DELETE FROM SiteData WHERE DeployedApplication = $1", [depid]);
         const result = await client.query("DELETE FROM DeployedApplications WHERE Id = $1 RETURNING Application", [depid]);
+        let message = 'Not Found';
         if (result.rowCount != 1) {
             returnStatus = 404;
-            res.status(returnStatus).send('Not Found');
         } else {
             const appid = result.rows[0].application;
             const listResult = await client.query("SELECT Id FROM DeployedApplications WHERE Application = $1", [appid]);
@@ -1833,10 +1866,11 @@ const deleteDeployment = async function(depid, req, res) {
                 // If we just deleted the last deployment of the application, move its lifecycle back to 'build-complete'.
                 //
                 await client.query("UPDATE Applications SET LifeCycle = 'build-complete' WHERE Id = $1", [appid]);
+                message = 'Deleted';
             }
-            res.status(returnStatus).send('Deleted');
         }
         await client.query("COMMIT");
+        res.status(returnStatus).send(message);
     } catch (error) {
         Log(`Exception in deleteApplication: ${error.message}`);
         await client.query("ROLLBACK");
@@ -1914,6 +1948,14 @@ exports.ApiInit = function(app) {
 
     app.delete(COMPOSE_PREFIX + 'applications/:apid', async (req, res) => {
         await deleteApplication(req.params.apid, req, res);
+    });
+
+    app.get(COMPOSE_PREFIX + 'applications/:apid/blocks', async (req, res) => {
+        await listApplicationBlocks(req.params.apid, req, res);
+    });
+
+    app.get(COMPOSE_PREFIX + 'applications/:apid/blocks/:blockid', async (req, res) => {
+        await getApplicationBlock(req.params.blockid, req, res);
     });
 
     app.post(COMPOSE_PREFIX + 'deployments', async (req, res) => {

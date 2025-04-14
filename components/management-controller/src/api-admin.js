@@ -850,22 +850,22 @@ exports.Initialize = async function(app, keycloak) {
     .post(createBackbone)       // CREATE
     .get(listBackbones);        // LIST
 
-    app.route(API_PREFIX + 'backbone/:bid', keycloak.protect('realm:backbone-admin'))
+    app.route(API_PREFIX + 'backbones/:bid', keycloak.protect('realm:backbone-admin'))
     .get(listBackbones)         // READ
     .delete(deleteBackbone);    // DELETE
 
-    app.route(API_PREFIX + 'backbone/:bid/activate', keycloak.protect('realm:backbone-admin'))
+    app.route(API_PREFIX + 'backbones/:bid/activate', keycloak.protect('realm:backbone-admin'))
     .put(activateBackbone);     // ACTIVATE
 
     //========================================
     // Backbone/Interior Sites
     //========================================
 
-    app.route(API_PREFIX + 'backbone/:bid/sites', keycloak.protect('realm:backbone-admin'))
+    app.route(API_PREFIX + 'backbones/:bid/sites', keycloak.protect('realm:backbone-admin'))
     .post(createBackboneSite)     // CREATE
     .get(listBackboneSites);      // LIST
 
-    app.route(API_PREFIX + 'backbonesite/:sid', keycloak.protect('realm:backbone-admin'))
+    app.route(API_PREFIX + 'backbonesites/:sid', keycloak.protect('realm:backbone-admin'))
     .get(listBackboneSites)       // READ
     .put(updateBackboneSite)      // UPDATE
     .delete(deleteBackboneSite);  // DELETE
@@ -874,14 +874,14 @@ exports.Initialize = async function(app, keycloak) {
     // Interior Access Points
     //========================================
 
-    app.route(API_PREFIX + 'backbonesite/:sid/accesspoints', keycloak.protect('realm:backbone-admin'))
+    app.route(API_PREFIX + 'backbonesites/:sid/accesspoints', keycloak.protect('realm:backbone-admin'))
     .post(createAccessPoint)         // CREATE
     .get(listAccessPointsSite);      // LIST for Site
 
-    app.route(API_PREFIX + 'backbone/:bid/accesspoints', keycloak.protect('realm:backbone-admin'))
+    app.route(API_PREFIX + 'backbones/:bid/accesspoints', keycloak.protect('realm:backbone-admin'))
     .get(listAccessPointsBackbone);  // LIST for Backbone
 
-    app.route(API_PREFIX + 'accesspoint/:apid', keycloak.protect('realm:backbone-admin'))
+    app.route(API_PREFIX + 'accesspoints/:apid', keycloak.protect('realm:backbone-admin'))
     .get(readAccessPoint)            // READ
     .delete(deleteAccessPoint);      // DELETE
 
@@ -889,20 +889,20 @@ exports.Initialize = async function(app, keycloak) {
     // Interior Site Links
     //========================================
 
-    app.route(API_PREFIX + 'accesspoint/:apid/links', keycloak.protect('realm:backbone-admin'))
+    app.route(API_PREFIX + 'accesspoints/:apid/links', keycloak.protect('realm:backbone-admin'))
     .post(createBackboneLink);
 
-    app.route(API_PREFIX + 'backbone/:bid/links', keycloak.protect('realm:backbone-admin'))
+    app.route(API_PREFIX + 'backbones/:bid/links', keycloak.protect('realm:backbone-admin'))
     .get(listBackboneLinks);
 
-    app.route(API_PREFIX + 'backbonelink/:lid', keycloak.protect('realm:backbone-admin'))
+    app.route(API_PREFIX + 'backbonelinks/:lid', keycloak.protect('realm:backbone-admin'))
     .put(updateBackboneLink)
     .delete(deleteBackboneLink);
 
     //========================================
     // Backbone Access Points
     //========================================
-    app.get(API_PREFIX + 'backbonesite/:sid/ingresses', keycloak.protect(), async (req, res) => {
+    app.get(API_PREFIX + 'backbonesites/:sid/ingresses', keycloak.protect(), async (req, res) => {
         await listSiteIngresses(req.params.sid, res);
     });
 

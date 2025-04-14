@@ -42,6 +42,9 @@
         .nav ul li a {
             color: #333;
         }
+        td {
+            font-family: monospace;
+        }
         ul {
             margin-left: 0px;
         }
@@ -108,7 +111,7 @@ function setHeight() {
     document.getElementById("sectiondiv").style.height = newHeight;
 }
 
-async function toBackboneTab() {
+async function toBackboneTab(focus) {
     document.getElementById("tab-home").style.fontWeight = 'normal';
     document.getElementById("tab-bone").style.fontWeight = 'bold';
     document.getElementById("tab-van").style.fontWeight  = 'normal';
@@ -116,10 +119,10 @@ async function toBackboneTab() {
     document.getElementById("tab-app").style.fontWeight  = 'normal';
     document.getElementById("tab-dep").style.fontWeight  = 'normal';
     document.getElementById("sectiondiv").innerHTML = `<h2>Backbones</h2>`;
-    await BuildBackboneTable();
+    await BuildBackboneTable(focus);
 }
 
-async function toVanTab() {
+async function toVanTab(focus) {
     document.getElementById("tab-home").style.fontWeight = 'normal';
     document.getElementById("tab-bone").style.fontWeight = 'normal';
     document.getElementById("tab-van").style.fontWeight  = 'bold';
@@ -127,7 +130,7 @@ async function toVanTab() {
     document.getElementById("tab-app").style.fontWeight  = 'normal';
     document.getElementById("tab-dep").style.fontWeight  = 'normal';
     document.getElementById("sectiondiv").innerHTML = `<h2>Virtual Application Networks</h2>`;
-    await BuildVanTable();
+    await BuildVanTable(focus);
 }
 
 async function toLibraryTab() {
@@ -163,6 +166,204 @@ async function toDeploymentTab(action_result) {
     await BuildDeploymentTable();
 }
 
+function SetupTable(headers) {
+    let table = document.createElement('table');
+    table.setAttribute('border', '1');
+    table.setAttribute('cellpadding', '5');
+    table.setAttribute('cellspacing', '0');
+    table.setAttribute('bordercolor', 'lightgrey');
+
+    const headerRow = table.insertRow();
+
+    for (header of headers) {
+        let hdr = document.createElement('th');
+        hdr.textContent = header;
+        headerRow.appendChild(hdr);
+    }
+    return table;
+}
+
+async function BuildBackboneTable(focus) {
+    const response = await fetch('api/v1alpha2/backbones');
+    const listdata = await response.json();
+    let   section  = document.getElementById("sectiondiv");
+    let   data     = {};
+
+    for (const item of listdata) {
+        data[item.id] = item;
+    }
+
+    if (listdata.length > 0) {
+        let table = SetupTable(['Name', 'Status', 'Failure', 'Select']);
+        for (item of Object.values(data)) {
+            let row = table.insertRow();
+            row.insertCell().textContent = item.name;
+            row.insertCell().textContent = item.lifecycle.replace('partial', 'not-activated');
+            row.insertCell().textContent = item.failure || '';
+            let anchor = document.createElement('a');
+            anchor.setAttribute('href', '#');
+            if (focus == item.id) {
+                anchor.style.fontWeight = 'bold';
+                anchor.setAttribute('onclick', `toBackboneTab()`);
+                anchor.textContent = 'close';
+            } else {
+                anchor.setAttribute('onclick', `toBackboneTab('${item.id}')`);
+                anchor.textContent = 'open';
+            }
+            row.insertCell().appendChild(anchor);
+        }
+
+        section.appendChild(table);
+    } else {
+        let empty = document.createElement('i');
+        empty.textContent = 'No Backbones Found';
+        section.appendChild(empty);
+    }
+
+    let button = document.createElement('button');
+    button.setAttribute('onclick', `BackboneForm()`);
+    button.textContent = 'Create Backbone...';
+    section.appendChild(document.createElement('p'));
+    section.appendChild(button);
+
+    if (focus) {
+        let line = document.createElement('hr');
+        line.setAttribute('width', '50%');
+        line.setAttribute('align', 'left');
+        section.appendChild(line);
+
+        let title = document.createElement('h3');
+        title.textContent = data[focus].name;
+        section.appendChild(title);
+    }
+}
+
+async function BackboneForm() {
+    let section = document.getElementById("sectiondiv");
+    section.innerHTML = `
+    <h2>Create a Backbone Network</h2>
+    <table cellPadding="4">
+      <tr><td style="text-align:right">Backbone Name:</td><td><input id="bbname" type="text" name="name"></input></td></tr>
+      <tr><td style="text-align:right"></td><td><button onclick="BackboneSubmit(document.getElementById('bbname').value)">Submit</button></td></tr>
+    </table>
+    `;
+}
+
+async function BackboneSubmit(name) {
+    console.log(`BackboneSubmit: name=${name}`);
+    const response = await fetch('api/v1alpha2/backbones', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            name : name,
+        }),
+    });
+
+    if (response.ok) {
+        const data = await response.json();
+        await toBackboneTab(data.id, 'Backbone Create Successful');
+    } else {
+        const message = await response.text();
+        await toBackboneTab(undefined, `Backbone Create Failed: ${message}`);
+    }
+}
+
+async function BuildVanTable(focus) {
+    const response = await fetch('api/v1alpha1/vans');
+    const listdata = await response.json();
+    let   section  = document.getElementById("sectiondiv");
+    let   data     = {};
+
+    for (const item of listdata) {
+        data[item.id] = item;
+    }
+
+    if (listdata.length > 0) {
+        let table = SetupTable(['Name', 'Backbone', 'Status', 'Failure', 'Start Time', 'End Time', 'Select']);
+        for (item of Object.values(data)) {
+            let row = table.insertRow();
+            row.insertCell().textContent = item.name;
+            row.insertCell().textContent = item.backbonename;
+            row.insertCell().textContent = item.lifecycle.replace('partial', 'not-activated');
+            row.insertCell().textContent = item.failure || '';
+            row.insertCell().textContent = item.starttime;
+            row.insertCell().textContent = item.endtime || 'until deleted';
+            let anchor = document.createElement('a');
+            anchor.setAttribute('href', '#');
+            if (focus == item.id) {
+                anchor.style.fontWeight = 'bold';
+                anchor.setAttribute('onclick', `toVanTab()`);
+                anchor.textContent = 'close';
+            } else {
+                anchor.setAttribute('onclick', `toVanTab('${item.id}')`);
+                anchor.textContent = 'open';
+            }
+            row.insertCell().appendChild(anchor);
+        }
+
+        section.appendChild(table);
+    } else {
+        let empty = document.createElement('i');
+        empty.textContent = 'No VANs Found';
+        section.appendChild(empty);
+    }
+
+    let button = document.createElement('button');
+    button.setAttribute('onclick', `VanForm()`);
+    button.textContent = 'Create VAN...';
+    section.appendChild(document.createElement('p'));
+    section.appendChild(button);
+
+    if (focus) {
+        let line = document.createElement('hr');
+        line.setAttribute('width', '50%');
+        line.setAttribute('align', 'left');
+        section.appendChild(line);
+
+        let title = document.createElement('h3');
+        title.textContent = data[focus].name;
+        section.appendChild(title);
+
+        const siteResult = await fetch(`api/v1alpha1/van/${focus}/members`);
+        const listdata   = await siteResult.json();
+        const siteData   = {};
+
+        for (const siteItem of listdata) {
+            siteData[siteItem.id] = siteItem;
+        }
+
+        if (listdata.length > 0) {
+            let siteTable = SetupTable(['Name', 'Status', 'Failure', 'First Active Time', 'Last Heartbeat', 'Select']);
+            for (const site of Object.values(siteData)) {
+                let row = siteTable.insertRow();
+                row.insertCell().textContent = site.name;
+                row.insertCell().textContent = site.lifecycle;
+                row.insertCell().textContent = site.failure;
+                row.insertCell().textContent = site.firstactivetime;
+                row.insertCell().textContent = site.lastheartbeat;
+                let siteAnchor = document.createElement('a');
+                siteAnchor.setAttribute('href', '#');
+                if (focus == site.id) {
+                    siteAnchor.style.fontWeight = 'bold';
+                    siteAnchor.setAttribute('onclick', `toVanTab(${focus})`);
+                    siteAnchor.textContent = 'close';
+                } else {
+                    siteAnchor.setAttribute('onclick', `toVanTab('${focus}', '${site.id}')`);
+                    siteAnchor.textContent = 'open';
+                }
+                row.insertCell().appendChild(siteAnchor);
+            }
+            section.appendChild(siteTable);
+        } else {
+            let empty = document.createElement('i');
+            empty.textContent = 'No Members in the VAN';
+            section.appendChild(empty);
+        }
+    }
+}
+
 async function BuildLibraryTable() {
     const response = await fetch('compose/v1alpha1/library/blocks');
     const rawdata  = await response.json();
@@ -173,28 +374,7 @@ async function BuildLibraryTable() {
         }
     }
 
-    let table = document.createElement('table');
-    table.setAttribute('border', '1');
-    table.setAttribute('cellpadding', '5');
-    table.setAttribute('cellspacing', '0');
-    table.setAttribute('bordercolor', 'lightgrey');
-
-    const headerRow = table.insertRow();
-    const h1 = document.createElement('th');
-    const h2 = document.createElement('th');
-    const h3 = document.createElement('th');
-    const h4 = document.createElement('th');
-
-    h1.textContent = 'Name';
-    h2.textContent = 'Type';
-    h3.textContent = 'Rev';
-    h4.textContent = 'Created';
-
-    headerRow.appendChild(h1);
-    headerRow.appendChild(h2);
-    headerRow.appendChild(h3);
-    headerRow.appendChild(h4);
-    
+    let table = SetupTable(['Name', 'Type', 'Rev', 'Created']);
     for (item of Object.values(data)) {
         let row = table.insertRow();
         let anchor = document.createElement('a');
@@ -253,25 +433,7 @@ async function BuildApplicationTable() {
     let   section  = document.getElementById("sectiondiv");
 
     if (data.length > 0) {
-        let table = document.createElement('table');
-        table.setAttribute('border', '1');
-        table.setAttribute('cellpadding', '5');
-        table.setAttribute('cellspacing', '0');
-        table.setAttribute('bordercolor', 'lightgrey');
-
-        const headerRow  = table.insertRow();
-        const h1         = document.createElement('th');
-        const h2         = document.createElement('th');
-        const h3         = document.createElement('th');
-
-        h1.textContent = 'Name';
-        h2.textContent = 'Root Block';
-        h3.textContent = 'LifeCycle';
-
-        headerRow.appendChild(h1);
-        headerRow.appendChild(h2);
-        headerRow.appendChild(h3);
-
+        let table = SetupTable(['Name', 'Root Block', 'Lifecycle']);
         for (item of Object.values(data)) {
             let row = table.insertRow();
 
@@ -323,7 +485,7 @@ async function AppDetail(apid, action) {
     const response = await fetch(`compose/v1alpha1/applications/${apid}`);
     const data     = await response.json();
     let   section  = document.getElementById("sectiondiv");
-    section.innerHTML = `
+    let innerHtml = `
       <h2>${data.name}</h2>
       <table cellPadding="4">
         <tr><td style="text-align:right">Created:</td><td>${data.created}</td></tr>
@@ -333,6 +495,29 @@ async function AppDetail(apid, action) {
         <tr><td><button onClick="AppDetail('${apid}', 'delete')">Delete</button></td><td id="deletetextcell"></td></tr>
       </table>
     `;
+
+    if (data.lifecycle != 'created') {
+        innerHtml += `
+            <h3>Application Blocks</h3>
+            <table cellPadding="4" cellSpacing="0" border="1">
+            <tr><th>Instance Name</th><th>Library Block</th></tr>
+        `;
+        const iBlockResponse = await fetch(`compose/v1alpha1/applications/${apid}/blocks`);
+        const iBlocks        = await iBlockResponse.json();
+        for (const ib of iBlocks) {
+            innerHtml += `
+                <tr>
+                    <td>${ib.instancename}</td>
+                    <td><a href="#" onclick="LibDetail('${ib.libraryblock}')">${ib.libname};${ib.revision}<\a></td>
+                </tr>
+            `;
+        }
+        innerHtml += `
+            </table>
+        `;
+    }
+
+    section.innerHTML = innerHtml;
 
     TextArea(data.buildlog, 'Build Log', section, 250);
 
@@ -365,7 +550,7 @@ async function AppForm() {
         if (block.type == 'skupperx.io/container') {
             let option = document.createElement('option');
             option.setAttribute('value', `${block.id}`);
-            option.textContent = block.name;
+            option.textContent = `${block.name};${block.revision}`;
             document.getElementById('rootselect').appendChild(option);
         }
     }
@@ -395,35 +580,14 @@ async function BuildDeploymentTable() {
     let   section  = document.getElementById("sectiondiv");
 
     if (data.length > 0) {
-        let table = document.createElement('table');
-        table.setAttribute('border', '1');
-        table.setAttribute('cellpadding', '5');
-        table.setAttribute('cellspacing', '0');
-        table.setAttribute('bordercolor', 'lightgrey');
-
-        const headerRow  = table.insertRow();
-        const h1         = document.createElement('th');
-        const h2         = document.createElement('th');
-        const h3         = document.createElement('th');
-        const h4         = document.createElement('th');
-
-        h1.textContent = 'Detail';
-        h2.textContent = 'Application';
-        h3.textContent = 'VAN';
-        h4.textContent = 'Lifecycle';
-
-        headerRow.appendChild(h1);
-        headerRow.appendChild(h2);
-        headerRow.appendChild(h3);
-        headerRow.appendChild(h4);
-
+        let table = SetupTable(['Detail', 'Application', 'VAN', 'Lifecycle']);
         for (item of Object.values(data)) {
             let row = table.insertRow();
 
             let anchor = document.createElement('a');
             anchor.setAttribute('href', '#');
             anchor.setAttribute('onclick', `DepDetail('${item.id}', '${item.van}')`);
-            anchor.textContent = 'Detail';
+            anchor.textContent = 'detail';
             row.insertCell().appendChild(anchor);
 
             anchor = document.createElement('a');
@@ -466,10 +630,10 @@ async function DepDetail(depid, vanid, action) {
         }
     }
 
-    const response = await fetch(`compose/v1alpha1/deployments/${depid}`);
-    const data     = await response.json();
-    let   section  = document.getElementById("sectiondiv");
-    section.innerHTML = `
+    const response  = await fetch(`compose/v1alpha1/deployments/${depid}`);
+    const data      = await response.json();
+    let   section   = document.getElementById("sectiondiv");
+    let   innerHtml = `
       <h2>Deployment</h2>
       <table cellPadding="4">
         <tr><td style="text-align:right">Application:</td><td>${data.appname}</td></tr>
@@ -477,12 +641,18 @@ async function DepDetail(depid, vanid, action) {
         <tr><td style="text-align:right">Lifecycle:</td><td>${data.lifecycle}</td></tr>
         <tr><td><button onClick="DepDetail('${depid}', '${vanid}', 'deploy')">Deploy</button></td><td id="deploytextcell"></td></tr>
         <tr><td><button onClick="DepDetail('${depid}', '${vanid}', 'delete')">Delete</button></td><td id="deletetextcell"></td></tr>
-      </table>
-      <h2>Site-Specific Configuration for members of this VAN</h2>
-      <table cellPadding="4">
-        <tr><td><select id="vanmember" onchange="DepMemberChange('${depid}')"></select></td><td><a id="vananchor" download></a></td></tr>
-      </table>
-    `;
+      </table>`;
+
+    if (data.lifecycle == 'deployed') {
+        innerHtml += `
+        <h2>Site-Specific Configuration for members of this VAN</h2>
+        <table cellPadding="4">
+            <tr><td><select id="vanmember" onchange="DepMemberChange('${depid}')"></select></td><td><a id="vananchor" download></a></td></tr>
+        </table>
+        `;
+    }
+
+    section.innerHTML = innerHtml;
 
     TextArea(data.deploylog, 'Deploy Log', section, 150);
 

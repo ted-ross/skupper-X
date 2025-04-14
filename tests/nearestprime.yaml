@@ -1,0 +1,77 @@
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: skupperx.io/compose/v1alpha1
+kind: Block
+metadata:
+  name: nearestprime/main
+type: skupperx.io/component
+spec:
+  interfaces:
+  - name: request
+    blockType: library/http-simple
+    role: accept
+  body:
+    composite:
+      blocks:
+      - name: database
+        block: postgres-subsystem
+        siteClasses:
+        - hq
+      - name: worker
+        block: nearestprime
+        siteClasses:
+        - worksite
+        bindings:
+        - interface: control
+          super: request
+      - name: worker-to-database
+        block: postgres-balanced
+        bindings:
+        - interface: connector
+          block: worker
+          blockInterface: postgres
+        - interface: acceptor
+          block: database
+          blockInterface: postgres
+
+---
+apiVersion: skupperx.io/compose/v1alpha1
+kind: Block
+metadata:
+  name: nearestprime/container
+type: skupperx.io/container
+spec:
+  body:
+    composite:
+      blocks:
+      - name: mainApp
+        block: nearestprime/main
+        siteClasses:
+        - hq
+      - name: requestIngress
+        block: library/tcpIngress
+        siteClasses:
+        - hq
+      - name: request-ingress-to-main
+        block: library/http-simple
+        bindings:
+        - interface: acceptor
+          block: mainApp
+          blockInterface: request
+        - interface: connector
+          block: requestIngress
+          blockInterface: connector
+
+
