@@ -26,7 +26,7 @@ spec:
     composite:
       blocks:
       - name: database
-        block: postgres-subsystem
+        block: postgres/subsystem
         siteClasses:
         - hq
       - name: worker
@@ -64,11 +64,11 @@ spec:
         siteClasses:
         - hq
       - name: requestIngress
-        block: library/tcpIngress
+        block: nearestprime/ingress
         siteClasses:
         - hq
       - name: request-ingress-to-main
-        block: library/tcp-selector-with-policy
+        block: library/tcp-selector
         config:
           keyPrefix: http
           protocol: http
@@ -80,4 +80,38 @@ spec:
           block: requestIngress
           blockInterface: connector
 
-
+---
+apiVersion: skupperx.io/compose/v1alpha1
+kind: Block
+metadata:
+  name: nearestprime/ingress
+type: skupperx.io/ingress
+spec:
+  config:
+    serviceName: np-control.test
+    namePrefix: control
+  interfaces:
+  - name: connector
+    role: connect
+    host: nprime
+    port: 8000
+  body:
+    kubeTemplates:
+    - template:
+      - apiVersion: networking.k8s.io/v1
+        kind: Ingress
+        metadata:
+          name: ${namePrefix}-${ident}
+        spec:
+          ingressClassName: nginx
+          rules:
+            - host: ${serviceName}
+              http:
+                paths:
+                  - path: /
+                    pathType: Prefix
+                    backend:
+                      service:
+                        name: ${localif.connector:host}
+                        port:
+                          number: ${localif.connector:port}

@@ -395,20 +395,20 @@ DISPATCH = {   # {object : {verb : ([positional], [options], METHOD, URI, data-f
     ## Backbone
     ##
     'backbone' : {
-        'create' : (['name'], ['multitenant'], 'POST',   '/api/v1alpha2/backbones', 'CreateResult'),
-        'delete' : (['backboneid'], [],        'DELETE', '/api/v1alpha2/backbones/${backboneid}', 'Result'),
-        'list'   : ([], [],                    'GET',    '/api/v1alpha2/backbones', 'Table', 'Backbone Networks',
+        'create' : (['name'], ['multitenant'], 'POST',   '/api/v1alpha1/backbones', 'CreateResult'),
+        'delete' : (['backboneid'], [],        'DELETE', '/api/v1alpha1/backbones/${backboneid}', 'Result'),
+        'list'   : ([], [],                    'GET',    '/api/v1alpha1/backbones', 'Table', 'Backbone Networks',
                     ['id', 'name', ('stat', None, 'lifecycle'), 'failure', ('multitenant', 'YN')]),
-        'activate' : (['id'], [],              'PUT',    '/api/v1alpha2/backbones/${id}/activate', 'Result'),
+        'activate' : (['id'], [],              'PUT',    '/api/v1alpha1/backbones/${id}/activate', 'Result'),
     },
 
     ##
     ## Backbone-Site
     ##
     'site' : {
-        'create' : (['name'], ['backbone'], 'POST',   '/api/v1alpha2/backbones/${backbone}/sites', 'CreateResult'),
-        'delete' : (['siteid'], [],         'DELETE', '/api/v1alpha2/backbonesites/${siteid}', 'Result'),
-        'list'   : ([],       ['backbone'], 'GET',    '/api/v1alpha2/backbones/${backbone}/sites', 'Table', 'Backbone Sites',
+        'create' : (['name'], ['backbone'], 'POST',   '/api/v1alpha1/backbones/${backbone}/sites', 'CreateResult'),
+        'delete' : (['siteid'], [],         'DELETE', '/api/v1alpha1/backbonesites/${siteid}', 'Result'),
+        'list'   : ([],       ['backbone'], 'GET',    '/api/v1alpha1/backbones/${backbone}/sites', 'Table', 'Backbone Sites',
                     ['id', 'name', ('stat', None, 'lifecycle'), 'failure', ('deploy', None, 'deploymentstate'), ('since', None, 'firstactivetime'), ('last', None, 'lastheartbeat')]),
         'deploy' : (['siteid', 'outfile'], ['format'], 'GET', '/api/v1alpha1/backbonesite/${siteid}/${format}', 'File'),
         'boot-ingress' : (['siteid', 'infile'], [], 'POST', '/api/v1alpha1/backbonesites/${siteid}/ingress', 'SendFile'),
@@ -419,9 +419,9 @@ DISPATCH = {   # {object : {verb : ([positional], [options], METHOD, URI, data-f
     ## Access Point
     ##
     'access-point' : {
-        'create' : (['siteid', 'kind'], ['bindhost'], 'POST',   '/api/v1alpha2/backbonesites/${siteid}/accesspoints', 'CreateResult'),
-        'delete' : (['apid'],           [],           'DELETE', '/api/v1alpha2/accesspoints/${apid}', 'Result'),
-        'list'   : (['siteid'],         [],           'GET',    '/api/v1alpha2/backbonesites/${siteid}/accesspoints', 'Table', 'Backbone Access Points',
+        'create' : (['siteid', 'kind'], ['bindhost'], 'POST',   '/api/v1alpha1/backbonesites/${siteid}/accesspoints', 'CreateResult'),
+        'delete' : (['apid'],           [],           'DELETE', '/api/v1alpha1/accesspoints/${apid}', 'Result'),
+        'list'   : (['siteid'],         [],           'GET',    '/api/v1alpha1/backbonesites/${siteid}/accesspoints', 'Table', 'Backbone Access Points',
                     ['id', 'name', ('stat', None, 'lifecycle'), 'failure', 'kind', 'bindhost']),
     },
 
@@ -429,9 +429,9 @@ DISPATCH = {   # {object : {verb : ([positional], [options], METHOD, URI, data-f
     ## Link
     ##
     'link' : {
-        'create' : (['accesspoint', 'connectingsite'], ['cost'], 'POST', '/api/v1alpha2/accesspoints/${accesspoint}/links', 'CreateResult'),
-        'delete' : (['linkid'], [], 'DELETE', '/api/v1alpha2/backbonelinks/${linkid}', 'Result'),
-        'list'   : ([], ['backbone'], 'GET', '/api/v1alpha2/backbones/${backbone}/links', 'Table', 'Backbone Links',
+        'create' : (['accesspoint', 'connectingsite'], ['cost'], 'POST', '/api/v1alpha1/accesspoints/${accesspoint}/links', 'CreateResult'),
+        'delete' : (['linkid'], [], 'DELETE', '/api/v1alpha1/backbonelinks/${linkid}', 'Result'),
+        'list'   : ([], ['backbone'], 'GET', '/api/v1alpha1/backbones/${backbone}/links', 'Table', 'Backbone Links',
                     ['id', ('access-point', 'APNAME', 'accesspoint'), ('lSite', 'APSITENAME', 'accesspoint'), ('cSite', 'SITENAME', 'connectinginteriorsite'), ('cost', 'NUM', 'cost')]),
     },
 
@@ -556,12 +556,12 @@ def process(desc, data):
                         if val == 'None':
                             val = '-'
                     elif typetag == 'SITENAME':
-                        val = apiquery('GET', '/api/v1alpha2/backbonesite/%s' % obj[attrname]).json()['name']
+                        val = apiquery('GET', '/api/v1alpha1/backbonesite/%s' % obj[attrname]).json()['name']
                     elif typetag == 'APNAME':
-                        val = apiquery('GET', '/api/v1alpha2/accesspoint/%s' % obj[attrname]).json()['name']
+                        val = apiquery('GET', '/api/v1alpha1/accesspoint/%s' % obj[attrname]).json()['name']
                     elif typetag == 'APSITENAME':
-                        siteId = apiquery('GET', '/api/v1alpha2/accesspoint/%s' % obj[attrname]).json()['interiorsite']
-                        val    = apiquery('GET', '/api/v1alpha2/backbonesite/%s' % siteId).json()['name']
+                        siteId = apiquery('GET', '/api/v1alpha1/accesspoint/%s' % obj[attrname]).json()['interiorsite']
+                        val    = apiquery('GET', '/api/v1alpha1/backbonesite/%s' % siteId).json()['name']
                     elif typetag == 'INVITENAME':
                         val = apiquery('GET', '/api/v1alpha1/invitation/%s' % obj[attrname]).json()['name']
                     row.append(val)

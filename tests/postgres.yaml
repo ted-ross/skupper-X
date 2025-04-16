@@ -19,13 +19,13 @@
 apiVersion: skupperx.io/compose/v1alpha1
 kind: Block
 metadata:
-  name: postgresql
+  name: postgres/engine
 type: skupperx.io/component
 spec:
   config:
     selectorKey: block
     selectorValue: postgresql
-    POSTGRES_DB: database
+    POSTGRES_DB: demo-db
     POSTGRES_USER: access
     POSTGRES_PASSWORD: demopass
     imageVersion: 15
@@ -81,7 +81,7 @@ spec:
 apiVersion: skupperx.io/compose/v1alpha1
 kind: Block
 metadata:
-  name: postgres-volume
+  name: postgres/volume
 type: skupperx.io/connector
 spec:
   config:
@@ -123,7 +123,7 @@ spec:
 apiVersion: skupperx.io/compose/v1alpha1
 kind: Block
 metadata:
-  name: postgres-subsystem
+  name: postgres/subsystem
 type: skupperx.io/component
 spec:
   interfaces:
@@ -134,14 +134,14 @@ spec:
     composite:
       blocks:
       - name: database
-        block: postgresql
+        block: postgres/engine
         siteClasses:
         - hq
         bindings:
         - interface: postgres
           super: postgres
       - name: store
-        block: postgres-volume
+        block: postgres/volume
         bindings:
         - interface: mountpoint
           block: database

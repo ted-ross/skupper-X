@@ -273,24 +273,11 @@ spec:
 apiVersion: skupperx.io/compose/v1alpha1
 kind: Block
 metadata:
-  name: library/http-simple
-type: skupperx.io/connector
-spec:
-  inherit:
-    base: library/tcp-selector
-    transformOverwrite:
-      keyPrefix: http
-      protocol: http
-
----
-apiVersion: skupperx.io/compose/v1alpha1
-kind: Block
-metadata:
   name: library/http-safe
 type: skupperx.io/connector
 spec:
   inherit:
-    base: library/http-simple
+    base: library/tcp-selector-with-policy
     transformOverwrite:
       keyPrefix: http-safe
       protocol: http

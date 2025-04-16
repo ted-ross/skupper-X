@@ -26,7 +26,7 @@ const Log        = require('./common/log.js').Log;
 const deployment = require('./site-deployment-state.js');
 const util       = require('./common/util.js');
 
-const API_PREFIX   = '/api/v1alpha2/';
+const API_PREFIX   = '/api/v1alpha1/';
 const INGRESS_LIST = ['claim', 'peer', 'member', 'manage'];
 
 const createBackbone = async function(req, res) {

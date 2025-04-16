@@ -71,6 +71,8 @@ spec:
                 ports:
                 - containerPort: ${localif.control:port}
                 env:
+                - name: DDW_USER
+                  value: access
                 - name: DDW_PASSWORD
                   value: demopass
                 - name: DDW_HOST
