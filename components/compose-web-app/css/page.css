@@ -75,3 +75,8 @@ ul ul{
     text-align: center;
     padding: 5px;
 }
+.errorBox {
+    background: lightgrey;
+    color: darkred;
+    font-family: monospace;
+}

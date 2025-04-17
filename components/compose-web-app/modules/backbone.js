@@ -81,7 +81,7 @@ async function BackboneForm() {
     table.setAttribute('cellPadding', '4');
     let row  = table.insertRow();
     let cell = row.insertCell();
-    cell.style = 'text-align:right';
+    cell.style.textAlign = 'right';
     cell.textContent = 'Backbone Name:';
 
     cell = row.insertCell();

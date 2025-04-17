@@ -34,7 +34,7 @@ export function SetupTable(headers) {
     return table;
 }
 
-export function countLines(str) {
+function countLines(str) {
     return !!str ? (str.match(/\r\n|\r|\n/g) || []).length + 1 : 1;
 }
 
@@ -50,3 +50,38 @@ export function TextArea(item, title, section, cols=60) {
     section.appendChild(textarea);
 }
 
+//
+// items:  [ [caption, element] ]
+// action: function
+// cancel: function
+//
+export async function FormLayout(items, action, cancel) {
+    let layout = document.createElement('table');
+    layout.setAttribute('cellPadding', '4');
+
+    for (const [caption, element] of items) {
+        let row  = layout.insertRow();
+        let cell = row.insertCell();
+        cell.style.textAlign = 'right';
+        cell.textContent = caption;
+        cell = row.insertCell();
+        cell.appendChild(element);
+    }
+
+    let row = layout.insertRow();
+    row.insertCell();
+    let cell = row.insertCell();
+    let submit = document.createElement('button');
+    submit.textContent = 'Submit';
+    submit.addEventListener('click', action);
+    cell.appendChild(submit);
+    let cancelButton = document.createElement('button');
+    cancelButton.textContent = 'Cancel';
+    cancelButton.addEventListener('click', cancel);
+    let nobr = document.createElement('i');
+    nobr.textContent = ' ';
+    cell.appendChild(nobr);
+    cell.appendChild(cancelButton);
+
+    return layout;
+}

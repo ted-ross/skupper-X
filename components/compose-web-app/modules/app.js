@@ -18,7 +18,7 @@
 */
 
 import { LibDetail } from "./library.js";
-import { SetupTable, TextArea } from "./util.js";
+import { FormLayout, SetupTable, TextArea } from "./util.js";
 
 export async function BuildApplicationTable() {
     const response = await fetch('compose/v1alpha1/applications');
@@ -59,7 +59,7 @@ export async function BuildApplicationTable() {
     section.appendChild(button);
 }
 
-async function AppDetail(apid, action) {
+export async function AppDetail(apid, action) {
     let buildtext  = undefined;
     let deletetext = undefined;
     if (action == 'build') {
@@ -128,19 +128,17 @@ async function AppDetail(apid, action) {
 async function AppForm() {
     const libresponse = await fetch('compose/v1alpha1/library/blocks');
     const libdata     = await libresponse.json();
+    let   section     = document.getElementById("sectiondiv");
 
-    let   section  = document.getElementById("sectiondiv");
-    section.innerHTML = `
-    <h2>Create an Application</h2>
-    <table cellPadding="4">
-      <tr><td style="text-align:right">Application Name:</td><td><input id="appname" type="text" name="name"></input></td></tr>
-      <tr><td style="text-align:right">Root Block:</td><td><select id="rootselect" name="rootblock"></select></td></tr>
-      <tr><td style="text-align:right"></td><td><button id="appsubmit">Submit</button></td></tr>
-    </table>
-    `;
+    section.innerHTML = '<h2>Create an Application</h2>';
 
-    let submit = document.getElementById('appsubmit');
-    submit.addEventListener('click', () => { AppSubmit(document.getElementById('appname').value, document.getElementById('rootselect').value); });
+    let errorbox = document.createElement('pre');
+    errorbox.className = 'errorBox';
+
+    let appName      = document.createElement('input');
+    let rootSelector = document.createElement('select');
+
+    appName.type = 'text';
 
     //
     // Populate the root-block selector
@@ -150,26 +148,47 @@ async function AppForm() {
             let option = document.createElement('option');
             option.setAttribute('value', `${block.id}`);
             option.textContent = `${block.name};${block.revision}`;
-            document.getElementById('rootselect').appendChild(option);
+            rootSelector.appendChild(option);
         }
     }
-}
 
-async function AppSubmit(name, rootblock) {
-    console.log(`AppSubmit: name=${name} rootblock=${rootblock}`);
-    const response = await fetch('compose/v1alpha1/applications', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
+    const form = await FormLayout(
+        //
+        // Form fields
+        //
+        [
+            ['Application Name:', appName],
+            ['Root Block:',       rootSelector],
+        ],
+
+        //
+        // Submit button behavior
+        //
+        async () => {
+            const response = await fetch('compose/v1alpha1/applications', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name      : appName.value,
+                    rootblock : rootSelector.value,
+                }),
+            });
+        
+            if (response.ok) {
+                await toApplicationTab();
+            } else {
+                errorbox.textContent = await response.text();
+            }
         },
-        body: JSON.stringify({
-            name      : name,
-            rootblock : rootblock,
-        }),
-    });
 
-    let notice = response.ok ? 'Application Create Successful' : `Application Create Failed: ${await response.text()}`;
-    console.log('Notice', notice);
-    await toApplicationTab(notice);
+        //
+        // Cancel button behavior
+        //
+        async () => { await toApplicationTab(); }
+    );
+
+    section.appendChild(form);
+    section.appendChild(errorbox);
 }
-

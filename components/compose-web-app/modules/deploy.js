@@ -17,6 +17,10 @@
  under the License.
 */
 
+import { toDeploymentTab } from "../page.js";
+import { AppDetail } from "./app.js";
+import { FormLayout, SetupTable, TextArea } from "./util.js";
+
 export async function BuildDeploymentTable() {
     const response = await fetch('compose/v1alpha1/deployments');
     const data     = await response.json();
@@ -29,13 +33,13 @@ export async function BuildDeploymentTable() {
 
             let anchor = document.createElement('a');
             anchor.setAttribute('href', '#');
-            anchor.setAttribute('onclick', `DepDetail('${item.id}', '${item.van}')`);
+            anchor.addEventListener('click', () => { DepDetail(item.id, item.van); });
             anchor.textContent = 'detail';
             row.insertCell().appendChild(anchor);
 
             anchor = document.createElement('a');
             anchor.setAttribute('href', '#');
-            anchor.setAttribute('onclick', `AppDetail('${item.application}')`);
+            anchor.addEventListener('click', () => { AppDetail(item.applicaion); });
             anchor.textContent = item.appname;
             row.insertCell().appendChild(anchor);
 
@@ -51,7 +55,7 @@ export async function BuildDeploymentTable() {
     }
 
     let button = document.createElement('button');
-    button.addEventListener('click', () => { DepForm(); });
+    button.addEventListener('click', () => { DeploymentForm(); });
     button.textContent = 'Create Deployment...';
     section.appendChild(document.createElement('p'));
     section.appendChild(button);
@@ -82,38 +86,47 @@ async function DepDetail(depid, vanid, action) {
         <tr><td style="text-align:right">Application:</td><td>${data.appname}</td></tr>
         <tr><td style="text-align:right">VAN:</td><td>${data.vanname}</td></tr>
         <tr><td style="text-align:right">Lifecycle:</td><td>${data.lifecycle}</td></tr>
-        <tr><td><button onClick="DepDetail('${depid}', '${vanid}', 'deploy')">Deploy</button></td><td id="deploytextcell"></td></tr>
-        <tr><td><button onClick="DepDetail('${depid}', '${vanid}', 'delete')">Delete</button></td><td id="deletetextcell"></td></tr>
+        <tr><td><button id="depDeploy">Deploy</button></td><td id="deploytextcell"></td></tr>
+        <tr><td><button id="depDelete">Delete</button></td><td id="deletetextcell"></td></tr>
       </table>`;
 
     if (data.lifecycle == 'deployed') {
         innerHtml += `
         <h2>Site-Specific Configuration for members of this VAN</h2>
         <table cellPadding="4">
-            <tr><td><select id="vanmember" onchange="DepMemberChange('${depid}')"></select></td><td><a id="vananchor" download></a></td></tr>
+            <tr><td><select id="vanmember"></select></td><td><a id="vananchor" download></a></td></tr>
         </table>
         `;
     }
 
     section.innerHTML = innerHtml;
 
-    TextArea(data.deploylog, 'Deploy Log', section, 150);
+    let deployButton   = document.getElementById('depDeploy');
+    let deleteButton   = document.getElementById('depDelete');
+    let memberSelector = document.getElementById('vanmember');
 
-    //
-    // Populate the VAN member selector
-    //
-    vanresponse = await fetch(`api/v1alpha1/vans/${vanid}/members`);
-    console.log(vanresponse);
-    vandata     = await vanresponse.json();
-    for (const member of vandata) {
-        console.log('Member', member);
-        let option = document.createElement('option');
-        option.setAttribute('value', `${member.id}`);
-        option.textContent = member.name;
-        document.getElementById('vanmember').appendChild(option);
+    deployButton.addEventListener('click', () => { DepDetail(depid, vanid, 'deploy'); });
+    deleteButton.addEventListener('click', () => { DepDetail(depid, vanid, 'delete'); });
+    if (data.lifecycle == 'deployed') {
+        memberSelector.addEventListener('change', () => { DepMemberChange(depid); });
     }
 
-    await DepMemberChange(depid);
+    TextArea(data.deploylog, 'Deploy Log', section, 150);
+
+    if (data.lifecycle == 'deployed') {
+        //
+        // Populate the VAN member selector
+        //
+        const vanresponse = await fetch(`api/v1alpha1/vans/${vanid}/members`);
+        const vandata = await vanresponse.json();
+        for (const member of vandata) {
+            let option = document.createElement('option');
+            option.setAttribute('value', `${member.id}`);
+            option.textContent = member.name;
+            document.getElementById('vanmember').appendChild(option);
+        }
+        await DepMemberChange(depid);
+    }
 
     if (deploytext) {
         document.getElementById("deploytextcell").innerText = deploytext;
@@ -131,21 +144,20 @@ async function DepMemberChange(depid) {
     anchor.textContent = `Download site data for ${sitename}`;
 }
 
-async function DepForm() {
+async function DeploymentForm() {
     const appresponse = await fetch('compose/v1alpha1/applications');
     const appdata     = await appresponse.json();
     const vanresponse = await fetch('api/v1alpha1/vans');
     const vandata     = await vanresponse.json();
+    let   section     = document.getElementById("sectiondiv");
 
-    let   section  = document.getElementById("sectiondiv");
-    section.innerHTML = `
-    <h2>Create a Deployment</h2>
-    <table cellPadding="4">
-      <tr><td style="text-align:right">Application:</td><td><select id="appselect"></select></td></tr>
-      <tr><td style="text-align:right">VAN:</td><td><select id="vanselect"></select></td></tr>
-      <tr><td style="text-align:right"></td><td><button onclick="DepSubmit(document.getElementById('appselect').value, document.getElementById('vanselect').value)">Submit</button></td></tr>
-    </table>
-    `;
+    section.innerHTML = '<h2>Create a Deployment</h2>';
+
+    let errorbox = document.createElement('pre');
+    errorbox.className = 'errorBox';
+
+    let appSelector = document.createElement('select');
+    let vanSelector = document.createElement('select');
 
     //
     // Populate the application selector
@@ -154,7 +166,7 @@ async function DepForm() {
         let option = document.createElement('option');
         option.setAttribute('value', `${app.id}`);
         option.textContent = app.name;
-        document.getElementById('appselect').appendChild(option);
+        appSelector.appendChild(option);
     }
 
     //
@@ -164,25 +176,46 @@ async function DepForm() {
         let option = document.createElement('option');
         option.setAttribute('value', `${van.id}`);
         option.textContent = van.name;
-        document.getElementById('vanselect').appendChild(option);
+        vanSelector.appendChild(option);
     }
-}
 
-async function DepSubmit(app, van) {
-    console.log(`DepSubmit: app=${app} van=${van}`);
-    const response = await fetch('compose/v1alpha1/deployments', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
+    const form = await FormLayout(
+        //
+        // Form fields
+        //
+        [
+            ['Application:', appSelector],
+            ['VAN:',         vanSelector],
+        ],
+
+        //
+        // Submit button behavior
+        //
+        async () => {
+            const response = await fetch('compose/v1alpha1/deployments', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    app : appSelector.value,
+                    van : vanSelector.value,
+                }),
+            });
+
+            if (response.ok) {
+                await toDeploymentTab();
+            } else {
+                errorbox.textContent = await response.text();
+            }
         },
-        body: JSON.stringify({
-            app : app,
-            van : van,
-        }),
-    });
 
-    let notice = response.ok ? 'Deployment Create Successful' : `Deployment Create Failed: ${await response.text()}`;
-    console.log('Notice', notice);
-    await toDeploymentTab(notice);
+        //
+        // Cancel button behavior
+        //
+        async () => { await toDeploymentTab(); }
+    );
+
+    section.appendChild(form);
+    section.appendChild(errorbox);
 }
-
