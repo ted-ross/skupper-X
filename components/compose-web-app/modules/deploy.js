@@ -94,7 +94,7 @@ async function DepDetail(depid, vanid, action) {
         innerHtml += `
         <h2>Site-Specific Configuration for members of this VAN</h2>
         <table cellPadding="4">
-            <tr><td><select id="vanmember"></select></td><td><a id="vananchor" download></a></td></tr>
+            <tr><td><select id="vanmember"></select></td><td><a id="vanview" target="_blank" href="#"></a></td><td><a id="vandownload" download></a></td></tr>
         </table>
         `;
     }
@@ -137,11 +137,19 @@ async function DepDetail(depid, vanid, action) {
 }
 
 async function DepMemberChange(depid) {
-    let anchor   = document.getElementById("vananchor");
+    let dlanchor = document.getElementById("vandownload");
+    let vwanchor = document.getElementById("vanview");
     let select   = document.getElementById("vanmember");
     let sitename = select.selectedOptions[0].textContent;
-    anchor.setAttribute('href', `compose/v1alpha1/deployments/${depid}/site/${select.value}/sitedata/${sitename}.yaml`);
-    anchor.textContent = `Download site data for ${sitename}`;
+    dlanchor.textContent = 'Download';
+    dlanchor.setAttribute('href', `compose/v1alpha1/deployments/${depid}/site/${select.value}/sitedata/${sitename}.yaml`);
+    vwanchor.textContent = 'View';
+    vwanchor.addEventListener('click', async () => {
+        let view = window.open("", sitename);
+        const result = await fetch(`compose/v1alpha1/deployments/${depid}/site/${select.value}/sitedata/${sitename}.yaml`);
+        const text   = await result.text();
+        view.document.innerHTML = '<pre>' + text + '</pre>';
+    });
 }
 
 async function DeploymentForm() {

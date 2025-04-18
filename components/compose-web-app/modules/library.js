@@ -17,7 +17,7 @@
  under the License.
 */
 
-import { SetupTable } from "./util.js";
+import { SetupTable, TextArea } from "./util.js";
 
 export async function BuildLibraryTable() {
     const response = await fetch('compose/v1alpha1/library/blocks');
@@ -34,7 +34,7 @@ export async function BuildLibraryTable() {
         let row = table.insertRow();
         let anchor = document.createElement('a');
         anchor.setAttribute('href', '#');
-        anchor.setAttribute('onclick', `LibDetail('${item.id}')`);
+        anchor.addEventListener('click', () => { LibDetail(item.id); });
         anchor.textContent = item.name;
         row.insertCell().appendChild(anchor);
         row.insertCell().textContent = item.type.replace('skupperx.io/', '');
@@ -48,8 +48,6 @@ export async function BuildLibraryTable() {
 export async function LibDetail(lbid) {
     const response = await fetch(`compose/v1alpha1/library/blocks/${lbid}`);
     const data = await response.json();
-    console.log('response', response);
-    console.log('data', data);
     let section = document.getElementById("sectiondiv");
     section.innerHTML = `<h2>${data.name};${data.revision}</h2>`;
     if (data.inherit != '') {
