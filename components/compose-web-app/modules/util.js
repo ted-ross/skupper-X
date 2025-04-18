@@ -56,6 +56,10 @@ export function TextArea(item, title, section, cols=60) {
 // cancel: function
 //
 export async function FormLayout(items, action, cancel) {
+    //
+    // Use a table as a layout tool for the form.
+    // Captions right-justified on the left, form-inputs left-justified on the right.
+    //
     let layout = document.createElement('table');
     layout.setAttribute('cellPadding', '4');
 
@@ -68,20 +72,29 @@ export async function FormLayout(items, action, cancel) {
         cell.appendChild(element);
     }
 
-    let row = layout.insertRow();
-    row.insertCell();
-    let cell = row.insertCell();
-    let submit = document.createElement('button');
-    submit.textContent = 'Submit';
-    submit.addEventListener('click', action);
-    cell.appendChild(submit);
-    let cancelButton = document.createElement('button');
-    cancelButton.textContent = 'Cancel';
-    cancelButton.addEventListener('click', cancel);
-    let nobr = document.createElement('i');
-    nobr.textContent = ' ';
-    cell.appendChild(nobr);
-    cell.appendChild(cancelButton);
+    if (action) {
+        //
+        // Put the Submit button in the right column
+        //
+        let row = layout.insertRow();
+        row.insertCell();
+        let cell = row.insertCell();
+        let submit = document.createElement('button');
+        submit.textContent = 'Submit';
+        submit.addEventListener('click', action);
+        cell.appendChild(submit);
+
+        //
+        // Put the Cancel button in the right column
+        //
+        let cancelButton = document.createElement('button');
+        cancelButton.textContent = 'Cancel';
+        cancelButton.addEventListener('click', cancel);
+        let nobr = document.createElement('i');
+        nobr.textContent = ' ';
+        cell.appendChild(nobr);
+        cell.appendChild(cancelButton);
+    }
 
     return layout;
 }

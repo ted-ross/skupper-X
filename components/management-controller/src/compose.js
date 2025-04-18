@@ -1993,6 +1993,11 @@ exports.ApiInit = function(app) {
         await getSiteData(req.params.depid, req.params.siteid, req, res);
     });
 
+    //
+    // Provide a path option that includes a filename.  This can be used in a download link to influence
+    // the name of the file that is saved (rather than always downloading to 'sitedata').
+    // We ignore the filename.  We are simply allowing it to be included on the API path.
+    //
     app.get(COMPOSE_PREFIX + 'deployments/:depid/site/:siteid/sitedata/:filename', async (req, res) => {
         await getSiteData(req.params.depid, req.params.siteid, req, res);
     });

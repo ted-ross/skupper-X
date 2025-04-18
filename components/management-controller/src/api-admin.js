@@ -624,12 +624,22 @@ const listBackbones = async function(req, res) {
         } else {
             result = await client.query("SELECT Id, Name, Lifecycle, Failure, MultiTenant FROM Backbones");
         }
-        var list = [];
-        result.rows.forEach(row => {
-            list.push(row);
-        });
-        res.json(list);
-        res.status(returnStatus).end();
+
+        if (bid) {
+            if (result.rowCount < 1) {
+                returnStatus = 400;
+                res.status(returnStatus).send('Not Found');
+            } else {
+                res.status(returnStatus).json(result.rows[0]);
+            }
+        } else {
+            var list = [];
+            result.rows.forEach(row => {
+                list.push(row);
+            });
+            res.json(list);
+            res.status(returnStatus).end();
+        }
     } catch (error) {
         returnStatus = 400;
         res.status(returnStatus).send(error.message);

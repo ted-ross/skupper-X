@@ -17,7 +17,8 @@
  under the License.
 */
 
-import { SetupTable } from "./util.js";
+import { toBackboneTab } from "../page.js";
+import { FormLayout, SetupTable } from "./util.js";
 
 export async function BuildBackboneTable(focus) {
     const response = await fetch('api/v1alpha1/backbones');
@@ -30,23 +31,18 @@ export async function BuildBackboneTable(focus) {
     }
 
     if (listdata.length > 0) {
-        let table = SetupTable(['Name', 'Status', 'Failure', 'Select']);
+        let table = SetupTable(['Name', 'Status', 'Failure']);
         for (const item of Object.values(data)) {
             let row = table.insertRow();
-            row.insertCell().textContent = item.name;
+            let anchor = document.createElement('a');
+            anchor.innerHTML = item.name;
+            anchor.href = '#';
+            anchor.addEventListener('click', async () => {
+                await BackboneDetail(item.id);
+            });
+            row.insertCell().appendChild(anchor);
             row.insertCell().textContent = item.lifecycle.replace('partial', 'not-activated');
             row.insertCell().textContent = item.failure || '';
-            let anchor = document.createElement('a');
-            anchor.setAttribute('href', '#');
-            if (focus == item.id) {
-                anchor.style.fontWeight = 'bold';
-                anchor.setAttribute('onclick', `toBackboneTab()`);
-                anchor.textContent = 'close';
-            } else {
-                anchor.setAttribute('onclick', `toBackboneTab('${item.id}')`);
-                anchor.textContent = 'open';
-            }
-            row.insertCell().appendChild(anchor);
         }
 
         section.appendChild(table);
@@ -77,48 +73,99 @@ export async function BuildBackboneTable(focus) {
 async function BackboneForm() {
     let section = document.getElementById("sectiondiv");
     section.innerHTML = '<h2>Create a Backbone Network</h2>';
-    let table = document.createElement('table');
-    table.setAttribute('cellPadding', '4');
-    let row  = table.insertRow();
-    let cell = row.insertCell();
-    cell.style.textAlign = 'right';
-    cell.textContent = 'Backbone Name:';
 
-    cell = row.insertCell();
-    let bbname = document.createElement('input');
-    bbname.type = 'text';
-    bbname.name = 'name';
-    cell.appendChild(bbname);
+    let errorbox = document.createElement('pre');
+    errorbox.className = 'errorBox';
 
-    row = table.insertRow();
-    row.insertCell();
-    cell = row.insertCell();
-    let submit = document.createElement('button');
-    submit.textContent = 'Submit';
-    submit.addEventListener('click', () => { BackboneSubmit(bbname.value) });
-    cell.appendChild(submit);
+    let bbName = document.createElement('input');
+    bbName.type = 'text';
 
-    section.appendChild(table);
+    const form = await FormLayout(
+        //
+        // Form fields
+        //
+        [
+            ['Backbone Name:', bbName],
+        ],
+
+        //
+        // Submit button behavior
+        //
+        async () => {
+            const response = await fetch('api/v1alpha1/backbones', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name : bbName.value,
+                }),
+            });
+        
+            if (response.ok) {
+                await toBackboneTab();
+            } else {
+                errorbox.textContent = await response.text();
+            }
+        },
+
+        //
+        // Cancel button behavior
+        //
+        async () => { await toBackboneTab(); }
+    );
+
+    section.appendChild(form);
+    section.appendChild(errorbox);
 }
 
-async function BackboneSubmit(name) {
-    console.log(`BackboneSubmit: name=${name}`);
-    const response = await fetch('api/v1alpha1/backbones', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            name : name,
-        }),
-    });
+async function BackboneDetail(bbid) {
+    let   section = document.getElementById("sectiondiv");
+    const result  = await fetch(`api/v1alpha1/backbones/${bbid}`);
+    const data    = await result.json();
 
-    if (response.ok) {
-        const data = await response.json();
-        await toBackboneTab(data.id, 'Backbone Create Successful');
-    } else {
-        const message = await response.text();
-        await toBackboneTab(undefined, `Backbone Create Failed: ${message}`);
+    section.innerHTML = `<h2>${data.name}</h2>`;
+
+    let fields = [];
+    let status = document.createElement('pre');
+    status.textContent = data.lifecycle.replace('partial', 'not-activated');
+    if (data.failure) {
+        status.textContent += `, failure: ${data.failure}`;
+    }
+    fields.push(['Status:', status]);
+
+    if (data.lifecycle == 'partial') {
+        let activateButton = document.createElement('button');
+        activateButton.textContent = 'Activate';
+        activateButton.addEventListener('click', async () => {
+            let result = await fetch(`/api/v1alpha1/backbones/${bbid}/activate`, { method: 'PUT' });
+            await BackboneDetail(bbid);
+        });
+        fields.push(['', activateButton]);
+    }
+
+    let deleteButton = document.createElement('button');
+    deleteButton.textContent = 'Delete';
+    deleteButton.addEventListener('click', async () => {
+        await fetch(`/api/v1alpha1/backbones/${bbid}`, { method: 'DELETE' });
+        await toBackboneTab();
+    });
+    fields.push(['', deleteButton]);
+
+    const info = await FormLayout(fields);
+    section.appendChild(info);
+
+    let hr = document.createElement('hr');
+    hr.setAttribute('align', 'left');
+    hr.setAttribute('width', '50%');
+    section.appendChild(hr);
+
+    const siteResult = await fetch(`/api/v1alpha1/backbones/${bbid}/sites`);
+    const sites      = await siteResult.json();
+
+    if (sites.length == 0) {
+        let empty = document.createElement('i');
+        empty.textContent = 'No sites in this backbone network';
+        section.appendChild(empty);
     }
 }
-
