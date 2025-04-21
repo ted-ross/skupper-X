@@ -11,9 +11,8 @@ Features:
 * Centralized management, monitoring, and audit of all of the VANs in the installation
 * Supports DMZ-deployed routers
 * Git-ops support for deploying and managing a VAN
-* Site-scoped addressing for multiple workload instances so individual sites can be independently addressed
 * TLS-based security
-* Integration with the customer's PKI system
+* Integration with the user's PKI system
 * Automatic and seamless rotation of x.509 certificates
 * Forcible removal of an entire VAN as one operation
 * Forcible removal of a site/participant from the VAN
@@ -22,9 +21,19 @@ Features:
 
  * Distributed domain of trust - don't expect/require components of an application to authenticate to each other.
  * App network is isolated - no ingress or attack surface unless expressly created.
- * No sign-up needed to participate in networked applications.
+ * No authentication needed to participate in networked applications.
  * The workflow for application network setup is similar to that of setting up a video-conference meeting.
  * Network topology and Application topology are orthogonal.  Each can change dynamically without affecting the other.
+
+## Skupper-X Subsystems
+
+There are three separate parts of Skupper-X that work together to meet the above requirements:
+
+__Skupper-X Network__ - Concerns the communication infrastructure and the setup of Application Networks.
+
+__Skupper-X Compose__ - Provides tools for the formal composition of distributed software systems.
+
+__Skupper-X Deploy__ - Deploys a Composed Application onto an Application Network.  Deployment is an ongoing process that reacts to changes in the underlying network and application-driven deployment changes.
 
 ## Central Concepts for Network Topology
 
@@ -34,7 +43,7 @@ Features:
 
 The Service is the central management component of Skupper-X.  It uses a relational database as a central store for state and configuration and provides an administrative API/Console for the purpose of configuring and managing the use of Skupper-X.
 
-The Service may be distributed for high availability.  It is not intended to operate solely as a public service, but could be used in such a way.  It is intended to be installable at an enterprise of any size for the purpose of coordinating Application Networking across that enterprise.
+The Service may be distributed for high availability.  It is not intended to operate solely as a public service, but could be used in such a way.  It is intended to be installable at an enterprise of any size for the purpose of coordinating Application Networking across the world on behalf of that enterprise.
 
 ### Network Backbones
 
@@ -46,7 +55,7 @@ Network Backbone setup is an administrative-level activity in Skupper-X.  Once t
 
 ### Application Networks
 
-Application Networks are collections of network sites (locations in the Network Topology) where a user wishes to deploy components of a distributed software system.  An Application Network is built on a single Network Backbone.  The underlying network topology is not a concern to the Application Network and is not visible to the users of the Application Network.
+Application Networks are collections of network sites (locations in the Network Topology) where a user wishes to deploy components of a distributed software system.  An Application Network is built on a single Network Backbone.  The underlying network topology is not of concern to the Application Network and is not visible to the users of the Application Network.
 
 ### Invitation Claims, Sites, and Site Classes
 
@@ -60,7 +69,6 @@ All of the sites in an application network are able to host components of a dist
 
 "Application Topology" is concerned with the logical layout of distributed software systems.  The various software components involved and the exact way in which these components interact with one another is the business of Application Topology.  This dimension is orthogonal to Network Topology.  The only tie between the two dimensions is the allocation of software components in the Application Topology to sites in the Network Topology.
 
-The following section is being re-written to reflect the latest truth from the working code.
 
 
 ## Architecture of Skupper-X
@@ -68,6 +76,8 @@ The following section is being re-written to reflect the latest truth from the w
 ### Management and Control Plane
 
 The management plane components are logically centralized.  They may be physically distributed and replicated for availability and scale.  The management plane does not need to be deployed in the most "public" location.  Participating sites may join application networks from locations that cannot access the management plane via TCP/IP.
+
+Skupper-X management plane components are deployed on Kubernetes.  Backbone and Application Network sites can run on a wide variety of platforms and do not require Kubernetes.
 
 #### Database
 
