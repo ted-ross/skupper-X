@@ -704,7 +704,7 @@ const listAccessPointsBackbone = async function(req, res) {
             throw(Error('Id is not a valid uuid'));
         }
 
-        const result = await client.query("SELECT BackboneAccessPoints.Id, BackboneAccessPoints.Name, BackboneAccessPoints.Lifecycle, BackboneAccessPoints.Failure, Hostname, Port, Kind, Bindhost, InteriorSites.Name as sitename FROM BackboneAccessPoints " +
+        const result = await client.query("SELECT BackboneAccessPoints.Id, BackboneAccessPoints.Name, BackboneAccessPoints.Lifecycle, BackboneAccessPoints.Failure, Hostname, Port, Kind, Bindhost, InteriorSite, InteriorSites.Name as sitename FROM BackboneAccessPoints " +
                                           "JOIN InteriorSites ON InteriorSites.Id = InteriorSite " +
                                           "WHERE InteriorSites.Backbone = $1", [bid]);
         var list = [];
@@ -786,12 +786,36 @@ const listBackboneLinks = async function(req, res) {
             throw(Error('Backbone-Id is not a valid uuid'));
         }
 
-        const result = await client.query("SELECT InterRouterLinks.* FROM InterRouterLinks JOIN InteriorSites ON InterRouterLinks.ConnectingInteriorSite = InteriorSites.Id WHERE InteriorSites.Backbone = $1", [bid]);
+        const result = await client.query("SELECT InterRouterLinks.* FROM InterRouterLinks " +
+                                          "JOIN InteriorSites ON InterRouterLinks.ConnectingInteriorSite = InteriorSites.Id " +
+                                          "WHERE InteriorSites.Backbone = $1", [bid]);
         var list = [];
         result.rows.forEach(row => {
             list.push(row);
         });
         res.json(list);
+        res.status(returnStatus).end();
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+
+    return returnStatus;
+}
+
+const listBackboneLinksForSite = async function(req, res) {
+    var returnStatus = 200;
+    const sid = req.params.sid;
+    const client = await db.ClientFromPool();
+    try {
+        if (!util.IsValidUuid(sid)) {
+            throw(Error('Site-Id is not a valid uuid'));
+        }
+
+        const result = await client.query("SELECT InterRouterLinks.* FROM InterRouterLinks WHERE ConnectingInteriorSite = $1", [sid]);
+        res.json(result.rows);
         res.status(returnStatus).end();
     } catch (error) {
         returnStatus = 400;
@@ -904,6 +928,9 @@ exports.Initialize = async function(app, keycloak) {
 
     app.route(API_PREFIX + 'backbones/:bid/links', keycloak.protect('realm:backbone-admin'))
     .get(listBackboneLinks);
+
+    app.route(API_PREFIX + 'backbonesites/:sid/links', keycloak.protect('realm:backbone-admin'))
+    .get(listBackboneLinksForSite);
 
     app.route(API_PREFIX + 'backbonelinks/:lid', keycloak.protect('realm:backbone-admin'))
     .put(updateBackboneLink)

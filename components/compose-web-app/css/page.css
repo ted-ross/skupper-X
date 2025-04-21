@@ -80,3 +80,9 @@ ul ul{
     color: darkred;
     font-family: monospace;
 }
+.subtable {
+    border:2px solid lightslategrey;
+    border-radius: 5px;
+    padding:15px;
+    background-color:lightgrey;
+}

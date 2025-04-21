@@ -20,7 +20,7 @@
 import { toBackboneTab } from "../page.js";
 import { FormLayout, SetupTable } from "./util.js";
 
-export async function BuildBackboneTable(focus) {
+export async function BuildBackboneTable() {
     const response = await fetch('api/v1alpha1/backbones');
     const listdata = await response.json();
     let   section  = document.getElementById("sectiondiv");
@@ -57,17 +57,6 @@ export async function BuildBackboneTable(focus) {
     button.textContent = 'Create Backbone...';
     section.appendChild(document.createElement('p'));
     section.appendChild(button);
-
-    if (focus) {
-        let line = document.createElement('hr');
-        line.setAttribute('width', '50%');
-        line.setAttribute('align', 'left');
-        section.appendChild(line);
-
-        let title = document.createElement('h3');
-        title.textContent = data[focus].name;
-        section.appendChild(title);
-    }
 }
 
 async function BackboneForm() {
@@ -160,6 +149,10 @@ async function BackboneDetail(bbid) {
     hr.setAttribute('width', '50%');
     section.appendChild(hr);
 
+    BackboneSites(bbid, section);
+}
+
+async function BackboneSites(bbid, section) {
     const siteResult = await fetch(`/api/v1alpha1/backbones/${bbid}/sites`);
     const sites      = await siteResult.json();
 
@@ -167,5 +160,313 @@ async function BackboneDetail(bbid) {
         let empty = document.createElement('i');
         empty.textContent = 'No sites in this backbone network';
         section.appendChild(empty);
+    } else {
+        let table = SetupTable(['', 'Name', 'TLS Status', 'Deploy State', 'First Active Time', 'Last Heartbeat', 'Actions']);
+        for (const site of sites) {
+            let row = table.insertRow();
+            site._row      = row;
+            site._expanded = false;
+            let open = document.createElement('img');
+            open.src = 'images/angle-right.svg';
+            open.alt = 'open';
+            open.setAttribute('width', '10');
+            open.setAttribute('height', '10');
+            open.addEventListener('click', async () => {
+                site._expanded = !site._expanded;
+                open.src = site._expanded ? 'images/angle-down.svg' : 'images/angle-right.svg';
+                if (site._expanded) {
+                    let subrow  = table.insertRow(site._row.rowIndex + 1);
+                    subrow.insertCell();
+                    let subcell = subrow.insertCell();
+                    subcell.setAttribute('colspan', '6');
+
+                    let apDiv = document.createElement('div');
+                    apDiv.className = 'subtable';
+                    apDiv.style.marginBottom ='5px';
+                    subcell.appendChild(apDiv);
+                    await SiteAccessPoints(apDiv, site.id);
+
+                    let linkDiv = document.createElement('div');
+                    linkDiv.className = 'subtable';
+                    subcell.appendChild(linkDiv);
+                    await SiteLinks(linkDiv, bbid, site.id);
+                } else {
+                    table.deleteRow(site._row.rowIndex + 1);
+                }
+            });
+            row.insertCell().appendChild(open);
+            row.insertCell().textContent = site.name;
+            row.insertCell().textContent = site.lifecycle;
+            row.insertCell().textContent = site.deploymentstate;
+            row.insertCell().textContent = site.firstactivetime || 'never';
+            row.insertCell().textContent = site.lastheartbeat || 'never';
+        }
+        section.appendChild(table);
     }
+
+    let button = document.createElement('button');
+    button.addEventListener('click', async () => { await SiteForm(bbid); });
+    button.textContent = 'Create Site...';
+    section.appendChild(document.createElement('p'));
+    section.appendChild(button);
+}
+
+async function SiteAccessPoints(div, siteId) {
+    div.innerHTML = '<b>Access Points:</b><p />';
+    const result = await fetch(`/api/v1alpha1/backbonesites/${siteId}/accesspoints`);
+    const aplist = await result.json();
+    if (aplist.length == 0) {
+        let empty = document.createElement('i');
+        empty.textContent = 'No access points for this backbone site';
+        div.appendChild(empty);
+    } else {
+        let table = SetupTable(['Name', 'Kind', 'TLS Status', 'Bind Host']);
+        for (const ap of aplist) {
+            let row = table.insertRow();
+            row.insertCell().textContent = ap.name;
+            row.insertCell().textContent = ap.kind;
+            row.insertCell().textContent = ap.lifecycle;
+            row.insertCell().textContent = ap.bindhost || '-';
+        }
+        div.appendChild(table);
+    }
+
+    let button = document.createElement('button');
+    button.addEventListener('click', async () => { await AccessPointForm(div, siteId) });
+    button.textContent = 'Create Access Point...';
+    div.appendChild(document.createElement('p'));
+    div.appendChild(button);
+}
+
+async function SiteLinks(div, bbid, siteId) {
+    div.innerHTML = '<b>Inter-Router Links:</b><p />';
+    const apResult = await fetch(`/api/v1alpha1/backbones/${bbid}/accesspoints`);
+    const apList   = await apResult.json();
+    const result   = await fetch(`/api/v1alpha1/backbonesites/${siteId}/links`);
+    const linklist = await result.json();
+    if (linklist.length == 0) {
+        let empty = document.createElement('i');
+        empty.textContent = 'No inter-router links from this backbone site';
+        div.appendChild(empty);
+    } else {
+        let targetSiteNames = {};
+        for (const ap of apList) {
+            targetSiteNames[ap.id] = ap.sitename;
+        }
+        let table = SetupTable(['Peer Site', 'Cost']);
+        for (const link of linklist) {
+            let row = table.insertRow();
+            row.insertCell().textContent = targetSiteNames[link.accesspoint];
+            row.insertCell().textContent = link.cost;
+        }
+        div.appendChild(table);
+    }
+
+    let button = document.createElement('button');
+    button.addEventListener('click', async () => { await LinkForm(div, bbid, siteId) });
+    button.textContent = 'Create Link...';
+    div.appendChild(document.createElement('p'));
+    div.appendChild(button);
+}
+
+async function SiteForm(bbid) {
+    let section = document.getElementById("sectiondiv");
+    section.innerHTML = '<b>Create a Backbone Site</b>';
+
+    let errorbox = document.createElement('pre');
+    errorbox.className = 'errorBox';
+
+    let siteName = document.createElement('input');
+    siteName.type = 'text';
+
+    const form = await FormLayout(
+        //
+        // Form fields
+        //
+        [
+            ['Site Name:', siteName],
+        ],
+
+        //
+        // Submit button behavior
+        //
+        async () => {
+            const response = await fetch(`api/v1alpha1/backbones/${bbid}/sites`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name : siteName.value,
+                }),
+            });
+
+            if (response.ok) {
+                await BackboneDetail(bbid);
+            } else {
+                errorbox.textContent = await response.text();
+            }
+        },
+
+        //
+        // Cancel button behavior
+        //
+        async () => { await BackboneDetail(bbid); }
+    );
+
+    section.appendChild(form);
+    section.appendChild(errorbox);
+}
+
+async function AccessPointForm(div, siteId) {
+    div.innerHTML = '<b>Create an Access Point</b>';
+
+    let errorbox = document.createElement('pre');
+    errorbox.className = 'errorBox';
+
+    let apName = document.createElement('input');
+    apName.type = 'text';
+
+    let kindSelector = document.createElement('select');
+    for (const k of ['claim', 'peer', 'member', 'manage']) {
+        let option = document.createElement('option');
+        option.value = k;
+        option.textContent = k;
+        kindSelector.appendChild(option);
+    }
+
+    let bindHost = document.createElement('input');
+    bindHost.type = 'text';
+
+    const form = await FormLayout(
+        //
+        // Form fields
+        //
+        [
+            ['Kind:',              kindSelector],
+            ['Access Point Name:', apName],
+            ['Bind Host:',         bindHost],
+        ],
+
+        //
+        // Submit button behavior
+        //
+        async () => {
+            let body = {
+                name     : apName.value,
+                kind     : kindSelector.value,
+            };
+            if (bindHost.value != '') {
+                body.bindhost = bindHost.value;
+            }
+            const response = await fetch(`api/v1alpha1/backbonesites/${siteId}/accesspoints`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(body),
+            });
+
+            if (response.ok) {
+                await SiteAccessPoints(div, siteId);
+            } else {
+                errorbox.textContent = await response.text();
+            }
+        },
+
+        //
+        // Cancel button behavior
+        //
+        async () => { await SiteAccessPoints(div, siteId); }
+    );
+
+    div.appendChild(form);
+    div.appendChild(errorbox);
+}
+
+async function LinkForm(div, bbid, siteId) {
+    div.innerHTML = '<b>Create an inter-router link</b>';
+
+    let errorbox = document.createElement('pre');
+    errorbox.className = 'errorBox';
+
+    let peerSelector = document.createElement('select');
+    const siteResult = await fetch(`/api/v1alpha1/backbones/${bbid}/sites`);
+    const siteList   = await siteResult.json();
+    const apResult   = await fetch(`/api/v1alpha1/backbones/${bbid}/accesspoints`);
+    const apList     = await apResult.json();
+
+    //
+    // Annotate each site with its peer access points
+    //
+    for (const site of siteList) {
+        site._peeraps = [];
+        if (site.id != siteId) {
+            for (const ap of apList) {
+                if (ap.kind == 'peer' && ap.interiorsite == site.id) {
+                    site._peeraps.push(ap);
+                }
+            }
+        }
+    }
+
+    //
+    // Populate the site selector
+    //
+    for (const site of siteList) {
+        if (site._peeraps.length > 0) {
+            for (const pap of site._peeraps) {
+                let option = document.createElement('option');
+                option.value = pap.id;
+                option.textContent = `${site.name}/${pap.name}`;
+                peerSelector.appendChild(option);
+            }
+        }
+    }
+
+    let cost = document.createElement('input');
+    cost.type = 'text';
+    cost.value = '1';
+    cost.textContent = '1';
+
+    const form = await FormLayout(
+        //
+        // Form fields
+        //
+        [
+            ['Destination Site / Access Point:', peerSelector],
+            ['Link Cost:',                       cost],
+        ],
+
+        //
+        // Submit button behavior
+        //
+        async () => {
+            let body = {
+                connectingsite : siteId,
+                cost           : cost.value,
+            };
+            const response = await fetch(`api/v1alpha1/accesspoints/${peerSelector.value}/links`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(body),
+            });
+
+            if (response.ok) {
+                await SiteLinks(div, bbid, siteId);
+            } else {
+                errorbox.textContent = await response.text();
+            }
+        },
+
+        //
+        // Cancel button behavior
+        //
+        async () => { await SiteLinks(div, bbid, siteId); }
+    );
+
+    div.appendChild(form);
+    div.appendChild(errorbox);
 }

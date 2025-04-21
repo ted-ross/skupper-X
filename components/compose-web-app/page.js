@@ -43,11 +43,11 @@ function unboldTabs() {
     document.getElementById("tab-dep").style.fontWeight  = 'normal';
 }
 
-export async function toBackboneTab(focus) {
+export async function toBackboneTab() {
     unboldTabs();
     document.getElementById("tab-bone").style.fontWeight = 'bold';
     document.getElementById("sectiondiv").innerHTML = `<h2>Backbones</h2>`;
-    await BuildBackboneTable(focus);
+    await BuildBackboneTable();
 }
 
 export async function toVanTab(focus) {
