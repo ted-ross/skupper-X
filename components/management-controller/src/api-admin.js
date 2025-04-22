@@ -74,6 +74,7 @@ const createBackboneSite = async function(req, res) {
         const [fields, files] = await form.parse(req)
         const norm = util.ValidateAndNormalizeFields(fields, {
             'name'     : {type: 'dnsname', optional: false},
+            'platform' : {type: 'dnsname', optional: false},
             'metadata' : {type: 'string',  optional: true, default: null},
         });
 
@@ -104,7 +105,8 @@ const createBackboneSite = async function(req, res) {
             //
             // Create the site
             //
-            const result = await client.query(`INSERT INTO InteriorSites(Name, Backbone${extraCols}) VALUES ($1, $2${extraVals}) RETURNING Id`, [uniqueName, bid]);
+            const result = await client.query(`INSERT INTO InteriorSites(Name, TargetPlatform, Backbone${extraCols}) VALUES ($1, $2, $3${extraVals}) RETURNING Id`,
+                                              [uniqueName, norm.platform, bid]);
             const siteId = result.rows[0].id;
             await client.query("COMMIT");
 
@@ -670,14 +672,15 @@ const listBackboneSites = async function(req, res) {
             id = sid;
         }
 
-        const result = await client.query(`SELECT Id, Name, Lifecycle, Failure, Metadata, DeploymentState, FirstActiveTime, LastHeartbeat FROM InteriorSites WHERE ${byBackbone ? 'Backbone' : 'Id'} = $1`, [id]);
+        const result = await client.query("SELECT InteriorSites.Id, Name, Lifecycle, Failure, Metadata, DeploymentState, TargetPlatform, FirstActiveTime, LastHeartbeat, " +
+                                          "TlsCertificates.expiration as tlsexpiration, TlsCertificates.renewalTime as tlsrenewal, TargetPlatforms.LongName as PlatformLong " +
+                                          "FROM InteriorSites " +
+                                          "JOIN TlsCertificates ON TlsCertificates.Id = Certificate " +
+                                          "JOIN TargetPlatforms ON TargetPlatforms.ShortName = TargetPlatform " +
+                                          `WHERE ${byBackbone ? 'Backbone' : 'Id'} = $1`, [id]);
 
         if (byBackbone) {
-            var list = [];
-            result.rows.forEach(row => {
-                list.push(row);
-            });
-            res.json(list);
+            res.json(result.rows);
         } else {
             if (result.rowCount == 0) {
                 throw(Error('Not found'));

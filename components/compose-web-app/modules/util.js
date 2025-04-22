@@ -19,7 +19,6 @@
 
 export function SetupTable(headers) {
     let table = document.createElement('table');
-    table.setAttribute('border', '1');
     table.setAttribute('cellpadding', '5');
     table.setAttribute('cellspacing', '0');
     table.setAttribute('bordercolor', 'lightgrey');
@@ -28,6 +27,7 @@ export function SetupTable(headers) {
 
     for (const header of headers) {
         let hdr = document.createElement('th');
+        hdr.style.textAlign = 'left';
         hdr.textContent = header;
         headerRow.appendChild(hdr);
     }
@@ -97,4 +97,18 @@ export async function FormLayout(items, action, cancel) {
     }
 
     return layout;
+}
+
+export function LayoutRow(layout, cells) {
+    let row = layout.insertRow();
+    for (const obj of cells) {
+        let cell = row.insertCell();
+        if (typeof(obj) == 'string') {
+            cell.textContent = obj;
+        } else {
+            cell.appendChild(obj)
+        }
+    }
+
+    return row;
 }

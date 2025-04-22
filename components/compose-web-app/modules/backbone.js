@@ -18,7 +18,7 @@
 */
 
 import { toBackboneTab } from "../page.js";
-import { FormLayout, SetupTable } from "./util.js";
+import { FormLayout, LayoutRow, SetupTable } from "./util.js";
 
 export async function BuildBackboneTable() {
     const response = await fetch('api/v1alpha1/backbones');
@@ -113,7 +113,7 @@ async function BackboneDetail(bbid) {
     const result  = await fetch(`api/v1alpha1/backbones/${bbid}`);
     const data    = await result.json();
 
-    section.innerHTML = `<h2>${data.name}</h2>`;
+    section.innerHTML = `<b>Backbone: ${data.name}</b>`;
 
     let fields = [];
     let status = document.createElement('pre');
@@ -161,28 +161,33 @@ async function BackboneSites(bbid, section) {
         empty.textContent = 'No sites in this backbone network';
         section.appendChild(empty);
     } else {
-        let table = SetupTable(['', 'Name', 'TLS Status', 'Deploy State', 'First Active Time', 'Last Heartbeat', 'Actions']);
+        let layout = SetupTable(['', 'Name', 'TLS Status', 'Deploy State', 'First Active Time', 'Last Heartbeat']);
         for (const site of sites) {
-            let row = table.insertRow();
+            let row = layout.insertRow();
+            row.className = 'list';
             site._row      = row;
             site._expanded = false;
             let open = document.createElement('img');
             open.src = 'images/angle-right.svg';
             open.alt = 'open';
-            open.setAttribute('width', '10');
-            open.setAttribute('height', '10');
+            open.setAttribute('width', '12');
+            open.setAttribute('height', '12');
             open.addEventListener('click', async () => {
                 site._expanded = !site._expanded;
                 open.src = site._expanded ? 'images/angle-down.svg' : 'images/angle-right.svg';
                 if (site._expanded) {
-                    let subrow  = table.insertRow(site._row.rowIndex + 1);
+                    let subrow  = layout.insertRow(site._row.rowIndex + 1);
                     subrow.insertCell();
                     let subcell = subrow.insertCell();
                     subcell.setAttribute('colspan', '6');
 
+                    let siteDiv = document.createElement('div');
+                    siteDiv.className = 'subtable';
+                    subcell.appendChild(siteDiv);
+                    await SitePanel(siteDiv, site);
+
                     let apDiv = document.createElement('div');
                     apDiv.className = 'subtable';
-                    apDiv.style.marginBottom ='5px';
                     subcell.appendChild(apDiv);
                     await SiteAccessPoints(apDiv, site.id);
 
@@ -191,7 +196,7 @@ async function BackboneSites(bbid, section) {
                     subcell.appendChild(linkDiv);
                     await SiteLinks(linkDiv, bbid, site.id);
                 } else {
-                    table.deleteRow(site._row.rowIndex + 1);
+                    layout.deleteRow(site._row.rowIndex + 1);
                 }
             });
             row.insertCell().appendChild(open);
@@ -201,7 +206,7 @@ async function BackboneSites(bbid, section) {
             row.insertCell().textContent = site.firstactivetime || 'never';
             row.insertCell().textContent = site.lastheartbeat || 'never';
         }
-        section.appendChild(table);
+        section.appendChild(layout);
     }
 
     let button = document.createElement('button');
@@ -211,8 +216,97 @@ async function BackboneSites(bbid, section) {
     section.appendChild(button);
 }
 
+async function SitePanel(div, site) {
+    div.innerHTML = '';
+    let layout = document.createElement('table');
+    layout.setAttribute('cellPadding', '4');
+
+    LayoutRow(layout, ['Target Platform:',            site.platformlong]);
+    LayoutRow(layout, ['TLS Certificate Expiration:', site.tlsexpiration]);
+    LayoutRow(layout, ['TLS Certificate Renewal:',    site.tlsrenewal]);
+    LayoutRow(layout, ['Deployment State:',           site.deploymentstate]);
+
+    if (site.deploymentstate == 'ready-automatic') {
+        let anchor = document.createElement('a');
+        anchor.textContent = 'download site configuration';
+        anchor.href = `/api/v1alpha1/backbonesite/${site.id}/kube`;
+        anchor.download = `${site.name}.yaml`;
+        LayoutRow(layout, ['Configure Site:', anchor]);
+    }
+
+    if (site.deploymentstate == 'ready-bootstrap') {
+        let anchor1 = document.createElement('a');
+        anchor1.textContent = 'download bootstrap configuration';
+        anchor1.href = `/api/v1alpha1/backbonesite/${site.id}/kube`;
+        anchor1.download = `${site.name}.yaml`;
+        LayoutRow(layout, ['Bootstrap Step 1:', anchor1]);
+
+        let upload = document.createElement('button');
+        upload.textContent = 'Upload Ingress Data...';
+        let uploadRow = LayoutRow(layout, ['Bootstrap Step 2:', upload]);
+        upload.addEventListener('click', async () => {
+            upload.disabled = true;
+            let inputRow = layout.insertRow(uploadRow.rowIndex + 1);
+            let inputCell = inputRow.insertCell();
+            inputCell.setAttribute('colspan', '2');
+            let inputDiv = document.createElement('div');
+            inputCell.appendChild(inputDiv);
+
+            let textInput = document.createElement('textarea');
+            textInput.style.marginBottom = '5px';
+            textInput.style.width = '100%';
+            textInput.style.height = '150px';
+            inputDiv.appendChild(textInput);
+            let ebox = document.createElement('textarea');
+            ebox.className = 'errorBox';
+            ebox.style.width = '100%';
+
+            let submit = document.createElement('button');
+            submit.textContent = 'Submit';
+            submit.addEventListener('click', async () => {
+                const result = await fetch(`/api/v1alpha1/backbonesite/${site.id}/ingress`, {
+                    method : 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: textInput.value,
+                });
+                if (result.ok) {
+                    inputDiv.innerHTML = '<center>Ingress Data Uploaded</center>';
+                    upload.disabled = false;
+                } else {
+                    const message = await result.text();
+                    ebox.textContent = `Error: ${message}`;
+                    upload.disabled = false;
+                }
+            });
+            inputDiv.appendChild(submit);
+
+            let cancel = document.createElement('button');
+            cancel.style.marginLeft = '5px';
+            cancel.style.marginBottom = '5px';
+            cancel.textContent = 'Cancel';
+            cancel.addEventListener('click', () => {
+                layout.deleteRow(inputRow.rowIndex);
+                upload.disabled = false;
+            });
+            inputDiv.appendChild(cancel);
+            inputDiv.appendChild(ebox);
+        });
+
+        let anchor2 = document.createElement('a');
+        anchor2.textContent = 'download finishing configuration';
+        anchor2.href = `/api/v1alpha1/backbonesite/${site.id}/accesspoints/kube`;
+        anchor2.download = `${site.name}-finish.yaml`;
+        LayoutRow(layout, ['Bootstrap Step 3:', anchor2]);
+    }
+
+    div.appendChild(layout);
+}
+
 async function SiteAccessPoints(div, siteId) {
-    div.innerHTML = '<b>Access Points:</b><p />';
+    const max_hostname = 50;
+    div.innerHTML = '<b>Access Points (incoming):</b><p />';
     const result = await fetch(`/api/v1alpha1/backbonesites/${siteId}/accesspoints`);
     const aplist = await result.json();
     if (aplist.length == 0) {
@@ -220,13 +314,19 @@ async function SiteAccessPoints(div, siteId) {
         empty.textContent = 'No access points for this backbone site';
         div.appendChild(empty);
     } else {
-        let table = SetupTable(['Name', 'Kind', 'TLS Status', 'Bind Host']);
+        let table = SetupTable(['Name', 'Kind', 'TLS Status', 'Bind', 'Host', 'Port']);
         for (const ap of aplist) {
+            let hostname = (ap.hostname || '-').slice(0, max_hostname);
+            if (ap.hostname && ap.hostname.length > max_hostname) {
+                hostname += "...";
+            }
             let row = table.insertRow();
             row.insertCell().textContent = ap.name;
             row.insertCell().textContent = ap.kind;
             row.insertCell().textContent = ap.lifecycle;
             row.insertCell().textContent = ap.bindhost || '-';
+            row.insertCell().textContent = hostname;
+            row.insertCell().textContent = ap.port || '-';
         }
         div.appendChild(table);
     }
@@ -239,7 +339,7 @@ async function SiteAccessPoints(div, siteId) {
 }
 
 async function SiteLinks(div, bbid, siteId) {
-    div.innerHTML = '<b>Inter-Router Links:</b><p />';
+    div.innerHTML = '<b>Inter-Router Links (outgoing):</b><p />';
     const apResult = await fetch(`/api/v1alpha1/backbones/${bbid}/accesspoints`);
     const apList   = await apResult.json();
     const result   = await fetch(`/api/v1alpha1/backbonesites/${siteId}/links`);
@@ -251,7 +351,7 @@ async function SiteLinks(div, bbid, siteId) {
     } else {
         let targetSiteNames = {};
         for (const ap of apList) {
-            targetSiteNames[ap.id] = ap.sitename;
+            targetSiteNames[ap.id] = `${ap.sitename}/${ap.name}`;
         }
         let table = SetupTable(['Peer Site', 'Cost']);
         for (const link of linklist) {
@@ -279,12 +379,26 @@ async function SiteForm(bbid) {
     let siteName = document.createElement('input');
     siteName.type = 'text';
 
+    //
+    // Populate the platform selector
+    //
+    let platformSelector = document.createElement('select');
+    const psResult  = await fetch('/api/v1alpha1/targetplatforms');
+    const platforms = await psResult.json();
+    for (const platform of platforms) {
+        let option = document.createElement('option');
+        option.value       = platform.shortname;
+        option.textContent = platform.longname;
+        platformSelector.appendChild(option);
+    }
+
     const form = await FormLayout(
         //
         // Form fields
         //
         [
             ['Site Name:', siteName],
+            ['Target Platform:', platformSelector]
         ],
 
         //
@@ -297,7 +411,8 @@ async function SiteForm(bbid) {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    name : siteName.value,
+                    name     : siteName.value,
+                    platform : platformSelector.value,
                 }),
             });
 

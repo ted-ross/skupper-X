@@ -30,6 +30,7 @@ DROP TABLE InterRouterLinks;
 DROP TABLE BackboneAccessPoints;
 DROP TABLE InteriorSites;
 DROP TABLE Backbones;
+DROP TABLE TargetPlatforms;
 DROP TABLE TlsCertificates;
 DROP TABLE WebSessions;
 DROP TABLE Users;

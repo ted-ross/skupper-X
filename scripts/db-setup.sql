@@ -112,6 +112,18 @@ CREATE TABLE TlsCertificates (
 );
 
 --
+-- Target platforms for interior and member sites
+--
+CREATE TABLE TargetPlatforms (
+    ShortName      text PRIMARY KEY,
+    LongName       text UNIQUE,
+    SiteTemplate   text,
+    TlsTemplate    text,
+    AccessTemplate text,
+    LinkTemplate   text
+);
+
+--
 -- Interior backbone networks
 --
 CREATE TABLE Backbones (
@@ -137,6 +149,7 @@ CREATE TABLE InteriorSites (
     Failure text,
     Certificate UUID REFERENCES TlsCertificates,
     DeploymentState DeploymentStateType DEFAULT 'not-ready',
+    TargetPlatform text REFERENCES TargetPlatforms,
 
     Metadata text,
 
@@ -402,6 +415,11 @@ INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpir
     VALUES (0, 'skupperx-root', '30 days', '1 week', '1 year', 'quay.io/skupper/skupper-router:2.6.0', 'quay.io/tedlross/skupperx-site-controller:skx-0.1.2');
 INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 'tross@redhat.com', '18f4e1168a37a7a2d5ac2bff043c12c862d515a2cbb9ab5fe207ab4ef235e129c1a475ffca25c4cb3831886158c3836664d489c98f68c0ac7af5a8f6d35e04fa');
 INSERT INTO WebSessions (Id, UserId) VALUES (gen_random_uuid(), 1);
+
+INSERT INTO TargetPlatforms (ShortName, LongName) VALUES
+    ('sk2',        'Kubernetes with Skupper v2'),
+    ('kube',       'Kubernetes without Skupper'),
+    ('podman-sk2', 'Podman with Skupper v2');
 
 INSERT INTO BlockTypes (Name, AllowNorth, AllowSouth, AllocateToSite) VALUES
     ('skupperx.io/container', false, false, false),

@@ -22,6 +22,7 @@ import { SetupTable, TextArea } from "./util.js";
 export async function BuildLibraryTable() {
     const response = await fetch('compose/v1alpha1/library/blocks');
     const rawdata  = await response.json();
+    let section    = document.getElementById("sectiondiv");
     let data = {};
     for (const d of rawdata) {
         if (!data[d.name] || d.revision > data[d.name].revision) {
@@ -29,20 +30,27 @@ export async function BuildLibraryTable() {
         }
     }
 
-    let table = SetupTable(['Name', 'Type', 'Rev', 'Created']);
-    for (const item of Object.values(data)) {
-        let row = table.insertRow();
-        let anchor = document.createElement('a');
-        anchor.setAttribute('href', '#');
-        anchor.addEventListener('click', () => { LibDetail(item.id); });
-        anchor.textContent = item.name;
-        row.insertCell().appendChild(anchor);
-        row.insertCell().textContent = item.type.replace('skupperx.io/', '');
-        row.insertCell().textContent = item.revision;
-        row.insertCell().textContent = item.created;
-    }
+    if (rawdata.length == 0) {
+        let empty = document.createElement('i');
+        empty.textContent = 'No Library Blocks Found';
+        section.appendChild(empty);
 
-    document.getElementById("sectiondiv").appendChild(table);
+        // TODO - Add a create/upload button
+    } else {
+        let table = SetupTable(['Name', 'Type', 'Rev', 'Created']);
+        for (const item of Object.values(data)) {
+            let row = table.insertRow();
+            let anchor = document.createElement('a');
+            anchor.setAttribute('href', '#');
+            anchor.addEventListener('click', () => { LibDetail(item.id); });
+            anchor.textContent = item.name;
+            row.insertCell().appendChild(anchor);
+            row.insertCell().textContent = item.type.replace('skupperx.io/', '');
+            row.insertCell().textContent = item.revision;
+            row.insertCell().textContent = item.created;
+        }
+        section.appendChild(table);
+    }
 }
 
 export async function LibDetail(lbid) {

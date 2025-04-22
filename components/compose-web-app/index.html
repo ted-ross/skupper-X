@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Skupper-X Network and Compose</title>
+    <title>Skupper-X Network, Compose, Deploy</title>
     <link rel="stylesheet" href="css/page.css">
     <script type="module">
         import { Start, SetHeight, toBackboneTab, toVanTab, toLibraryTab, toApplicationTab, toDeploymentTab } from "./page.js";
@@ -19,7 +19,7 @@
 <body onload="Start()" onresize="SetHeight()">
     <div class="container">
         <div class="header">
-            <h1>Skupper-X Network and Compose</h1>
+            <h1>Skupper-X Network, Compose, Deploy</h1>
         </div>
         <div id="wrapperdiv" class="wrapper clearfix">
             <div id="navdiv" class="nav">
@@ -37,6 +37,11 @@
                         <ul>
                             <li><a id="tab-lib" href="#" onclick="toLibraryTab()">Library</a></li>
                             <li><a id="tab-app" href="#" onclick="toApplicationTab()">Applications</a></li>
+                        </ul>
+                    </li>
+                    <li>Deploy:</li>
+                    <li>
+                        <ul>
                             <li><a id="tab-dep" href="#" onclick="toDeploymentTab()">Deployments</a></li>
                         </ul>
                     </li>

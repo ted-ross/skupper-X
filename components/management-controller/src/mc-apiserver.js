@@ -356,7 +356,7 @@ const postBackboneIngress = async function (bsid, req, res) {
         const [fields, files] = await form.parse(req);
         for (const [apid, apdata] of Object.entries(fields)) {
             if (!util.IsValidUuid(apid)) {
-                throw Error(`Invalid access-point identifier ${apid}`);
+                throw new Error(`Invalid access-point identifier ${apid}`);
             }
             const norm = util.ValidateAndNormalizeFields(apdata, {
                 'host' : {type: 'string', optional: false},
@@ -366,10 +366,33 @@ const postBackboneIngress = async function (bsid, req, res) {
             count += await exports.AddHostToAccessPoint(bsid, apid, norm.host, norm.port);
         }
 
+        if (count == 0) {
+            throw new Error('No valid ingress records posted');
+        }
+
         res.status(returnStatus).json({ processed: count });
     } catch (error) {
         returnStatus = 400;
         res.status(returnStatus).send(error.message);
+    }
+
+    return returnStatus;
+}
+
+const getTargetPlatforms = async function (req, res) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query('BEGIN');
+        const result = await client.query("SELECT ShortName, LongName FROM TargetPlatforms");
+        res.status(returnStatus).json(result.rows);
+        await client.query('COMMIT');
+    } catch (err) {
+        await client.query('ROLLBACK');
+        returnStatus = 400;
+        res.status(returnStatus).send(err.message);
+    } finally {
+        client.release();
     }
 
     return returnStatus;
@@ -415,6 +438,10 @@ exports.Start = async function() {
 
     app.post(API_PREFIX + 'backbonesite/:bsid/ingress', async (req, res) => {
         await postBackboneIngress(req.params.bsid, req, res);
+    });
+
+    app.get(API_PREFIX + 'targetplatforms', async (req, res) => {
+        await getTargetPlatforms(req, res);
     });
 
     app.use(bodyParser.text({ type: ['application/yaml'] }));
