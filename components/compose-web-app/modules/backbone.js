@@ -177,15 +177,17 @@ async function BackboneDetail(bbid) {
 async function BackboneSites(bbid, panel) {
     const siteResult = await fetch(`/api/v1alpha1/backbones/${bbid}/sites`);
     const sites      = await siteResult.json();
+    var   layout;
 
     if (sites.length == 0) {
         let empty = document.createElement('i');
         empty.textContent = 'No sites in this backbone network';
         panel.appendChild(empty);
     } else {
-        let layout = SetupTable(['', 'Name', 'TLS Status', 'Deploy State', 'First Active Time', 'Last Heartbeat']);
+        layout = SetupTable(['', 'Name', 'TLS Status', 'Deploy State', 'First Active Time', 'Last Heartbeat']);
         for (const site of sites) {
             let row = layout.insertRow();
+            row._sid = site.id;
             row.className = 'list';
             site._row      = row;
             site._expanded = false;
@@ -221,12 +223,12 @@ async function BackboneSites(bbid, panel) {
                     layout.deleteRow(site._row.rowIndex + 1);
                 }
             });
-            row.insertCell().appendChild(open);
-            row.insertCell().textContent = site.name;
-            row.insertCell().textContent = site.lifecycle;
-            row.insertCell().textContent = site.deploymentstate;
-            row.insertCell().textContent = site.firstactivetime || 'never';
-            row.insertCell().textContent = site.lastheartbeat || 'never';
+            row.insertCell().appendChild(open);       // 0
+            row.insertCell().textContent = site.name; // 1
+            row.insertCell().textContent;             // 2
+            row.insertCell().textContent;             // 3
+            row.insertCell().textContent;             // 4
+            row.insertCell().textContent;             // 5
         }
         panel.appendChild(layout);
     }
@@ -236,22 +238,49 @@ async function BackboneSites(bbid, panel) {
     button.textContent = 'Create Site...';
     panel.appendChild(document.createElement('p'));
     panel.appendChild(button);
+
+    //
+    // Set up the poller to live-update values on this panel
+    //
+    await PollTable(panel, 5000, [
+        {
+            path  : `/api/v1alpha1/backbones/${bbid}/sites`,
+            items : [
+                async (site) => {
+                    for (const row of layout.rows) {
+                        if (row._sid == site.id) {
+                            const lifecycleCell       = row.cells[2];
+                            const deploymentStateCell = row.cells[3];
+                            const firstActiveCell     = row.cells[4];
+                            const lastheartbeatCell   = row.cells[5];
+
+                            if (lifecycleCell.textContent != site.lifecycle) {
+                                lifecycleCell.textContent = site.lifecycle;
+                            }
+
+                            if (deploymentStateCell.textContent != site.deploymentstate) {
+                                deploymentStateCell.textContent = site.deploymentstate;
+                            }
+                            let fa = site.firstactivetime || 'never';
+                            if (firstActiveCell.textContent != fa) {
+                                firstActiveCell.textContent = fa;
+                            }
+                            let lhb = site.lastheartbeat || 'never';
+                            if (lastheartbeatCell.textContent != lhb) {
+                                lastheartbeatCell.textContent = lhb;
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+    ]);
 }
 
-async function SitePanel(div, site) {
+async function PopulateDeploymentDiv(site, div) {
     div.innerHTML = '';
-
     let layout = document.createElement('table');
     layout.setAttribute('cellPadding', '4');
-
-    let tlsExpiration   = document.createElement('div');
-    let tlsRenewal      = document.createElement('div');
-    let deploymentState = document.createElement('div');
-
-    LayoutRow(layout, ['Target Platform:',            site.platformlong]);
-    LayoutRow(layout, ['TLS Certificate Expiration:', tlsExpiration]);
-    LayoutRow(layout, ['TLS Certificate Renewal:',    tlsRenewal]);
-    LayoutRow(layout, ['Deployment State:',           deploymentState]);
 
     if (site.deploymentstate == 'ready-automatic') {
         let anchor = document.createElement('a');
@@ -328,6 +357,31 @@ async function SitePanel(div, site) {
         LayoutRow(layout, ['Bootstrap Step 3:', anchor2]);
     }
 
+    div.appendChild(layout);
+}
+
+async function SitePanel(div, site) {
+    div.innerHTML = '';
+
+    let layout = document.createElement('table');
+    layout.setAttribute('cellPadding', '4');
+
+    let tlsExpiration   = document.createElement('div');
+    let tlsRenewal      = document.createElement('div');
+    let deploymentState = document.createElement('div');
+
+    LayoutRow(layout, ['Target Platform:',            site.platformlong]);
+    LayoutRow(layout, ['TLS Certificate Expiration:', tlsExpiration]);
+    LayoutRow(layout, ['TLS Certificate Renewal:',    tlsRenewal]);
+    LayoutRow(layout, ['Deployment State:',           deploymentState]);
+
+    let deploymentRow = layout.insertRow();
+    let deploymentCell = deploymentRow.insertCell();
+    deploymentCell.setAttribute('colspan', 2);
+    let deploymentDiv = document.createElement('div');
+    deploymentCell.appendChild(deploymentDiv);
+    await PopulateDeploymentDiv(site, deploymentDiv);
+
     //
     // Set up the poller to live-update values on this panel
     //
@@ -335,19 +389,21 @@ async function SitePanel(div, site) {
         {
             path  : `/api/v1alpha1/backbonesites/${site.id}`,
             items : {
-                'tlsexpiration' : (attr) => {
+                'tlsexpiration' : async (attr) => {
                     if (tlsExpiration.textContent != attr) {
                         tlsExpiration.textContent = attr;
                     }
                 },
-                'tlsrenewal' : (attr) => {
+                'tlsrenewal' : async (attr) => {
                     if (tlsRenewal.textContent != attr) {
                         tlsRenewal.textContent = attr;
                     }
                 },
-                'deploymentstate' : (attr) => {
+                'deploymentstate' : async (attr) => {
                     if (deploymentState.textContent != attr) {
                         deploymentState.textContent = attr;
+                        site.deploymentstate = attr;
+                        await PopulateDeploymentDiv(site, deploymentDiv);
                     }
                     return attr == 'deployed';
                 },
@@ -388,7 +444,7 @@ async function SiteAccessPoints(div, siteId) {
             {
                 path  : `/api/v1alpha1/backbonesites/${siteId}/accesspoints`,
                 items : [
-                    (ap) => {
+                    async (ap) => {
                         let result = false;
                         for (const row of table.rows) {
                             if (row._apid == ap.id) {

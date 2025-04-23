@@ -132,7 +132,7 @@ export async function PollObject(trackedDiv, delayMs, actions) {
         if (fetchResult.ok) {
             const fetchData = await fetchResult.json();
             for (const [attr, fn] of Object.entries(action.items)) {
-                stopPolling = fn(fetchData[attr]);
+                stopPolling = await fn(fetchData[attr]);
                 if (stopPolling) {
                     console.log('  stop-polling');
                 }
@@ -169,7 +169,7 @@ export async function PollTable(trackedDiv, delayMs, actions) {
             let stop = true;
             for (const row of table) {
                 for (const fn of action.items) {
-                    let s = fn(row);
+                    let s = await fn(row);
                     if (!s) {
                         stop = false;
                     }
