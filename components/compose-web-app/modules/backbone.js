@@ -18,7 +18,7 @@
 */
 
 import { toBackboneTab } from "../page.js";
-import { FormLayout, LayoutRow, SetupTable } from "./util.js";
+import { FormLayout, LayoutRow, PollObject, PollTable, SetupTable } from "./util.js";
 
 export async function BuildBackboneTable() {
     const response = await fetch('api/v1alpha1/backbones');
@@ -109,15 +109,19 @@ async function BackboneForm() {
 }
 
 async function BackboneDetail(bbid) {
-    let   section = document.getElementById("sectiondiv");
-    const result  = await fetch(`api/v1alpha1/backbones/${bbid}`);
-    const data    = await result.json();
+    let section = document.getElementById("sectiondiv");
+    let   panel = document.createElement('div');
+    section.innerHTML = '';
+    section.appendChild(panel);
 
-    section.innerHTML = `<b>Backbone: ${data.name}</b>`;
+    const result = await fetch(`api/v1alpha1/backbones/${bbid}`);
+    const data   = await result.json();
+
+    panel.innerHTML = `<b>Backbone: ${data.name}</b>`;
 
     let fields = [];
     let status = document.createElement('pre');
-    status.textContent = data.lifecycle.replace('partial', 'not-activated');
+    // The content of this element will be filled in by the poller
     if (data.failure) {
         status.textContent += `, failure: ${data.failure}`;
     }
@@ -142,24 +146,42 @@ async function BackboneDetail(bbid) {
     fields.push(['', deleteButton]);
 
     const info = await FormLayout(fields);
-    section.appendChild(info);
+    panel.appendChild(info);
 
     let hr = document.createElement('hr');
     hr.setAttribute('align', 'left');
     hr.setAttribute('width', '50%');
-    section.appendChild(hr);
+    panel.appendChild(hr);
 
-    BackboneSites(bbid, section);
+    //
+    // Set up the poller to live-update values on this panel
+    //
+    await PollObject(panel, 3000, [
+        {
+            path  : `/api/v1alpha1/backbones/${bbid}`,
+            items : {
+                'lifecycle' : (attr) => {
+                    const newval = attr.replace('partial', 'not-activated');
+                    if (status.textContent != newval) {
+                        status.textContent = newval;
+                    }
+                    return newval == 'ready';
+                },
+            },
+        },
+    ]);
+
+    await BackboneSites(bbid, panel);
 }
 
-async function BackboneSites(bbid, section) {
+async function BackboneSites(bbid, panel) {
     const siteResult = await fetch(`/api/v1alpha1/backbones/${bbid}/sites`);
     const sites      = await siteResult.json();
 
     if (sites.length == 0) {
         let empty = document.createElement('i');
         empty.textContent = 'No sites in this backbone network';
-        section.appendChild(empty);
+        panel.appendChild(empty);
     } else {
         let layout = SetupTable(['', 'Name', 'TLS Status', 'Deploy State', 'First Active Time', 'Last Heartbeat']);
         for (const site of sites) {
@@ -206,25 +228,30 @@ async function BackboneSites(bbid, section) {
             row.insertCell().textContent = site.firstactivetime || 'never';
             row.insertCell().textContent = site.lastheartbeat || 'never';
         }
-        section.appendChild(layout);
+        panel.appendChild(layout);
     }
 
     let button = document.createElement('button');
     button.addEventListener('click', async () => { await SiteForm(bbid); });
     button.textContent = 'Create Site...';
-    section.appendChild(document.createElement('p'));
-    section.appendChild(button);
+    panel.appendChild(document.createElement('p'));
+    panel.appendChild(button);
 }
 
 async function SitePanel(div, site) {
     div.innerHTML = '';
+
     let layout = document.createElement('table');
     layout.setAttribute('cellPadding', '4');
 
+    let tlsExpiration   = document.createElement('div');
+    let tlsRenewal      = document.createElement('div');
+    let deploymentState = document.createElement('div');
+
     LayoutRow(layout, ['Target Platform:',            site.platformlong]);
-    LayoutRow(layout, ['TLS Certificate Expiration:', site.tlsexpiration]);
-    LayoutRow(layout, ['TLS Certificate Renewal:',    site.tlsrenewal]);
-    LayoutRow(layout, ['Deployment State:',           site.deploymentstate]);
+    LayoutRow(layout, ['TLS Certificate Expiration:', tlsExpiration]);
+    LayoutRow(layout, ['TLS Certificate Renewal:',    tlsRenewal]);
+    LayoutRow(layout, ['Deployment State:',           deploymentState]);
 
     if (site.deploymentstate == 'ready-automatic') {
         let anchor = document.createElement('a');
@@ -301,6 +328,33 @@ async function SitePanel(div, site) {
         LayoutRow(layout, ['Bootstrap Step 3:', anchor2]);
     }
 
+    //
+    // Set up the poller to live-update values on this panel
+    //
+    await PollObject(div, 3000, [
+        {
+            path  : `/api/v1alpha1/backbonesites/${site.id}`,
+            items : {
+                'tlsexpiration' : (attr) => {
+                    if (tlsExpiration.textContent != attr) {
+                        tlsExpiration.textContent = attr;
+                    }
+                },
+                'tlsrenewal' : (attr) => {
+                    if (tlsRenewal.textContent != attr) {
+                        tlsRenewal.textContent = attr;
+                    }
+                },
+                'deploymentstate' : (attr) => {
+                    if (deploymentState.textContent != attr) {
+                        deploymentState.textContent = attr;
+                    }
+                    return attr == 'deployed';
+                },
+            },
+        },
+    ]);
+
     div.appendChild(layout);
 }
 
@@ -316,19 +370,56 @@ async function SiteAccessPoints(div, siteId) {
     } else {
         let table = SetupTable(['Name', 'Kind', 'TLS Status', 'Bind', 'Host', 'Port']);
         for (const ap of aplist) {
-            let hostname = (ap.hostname || '-').slice(0, max_hostname);
-            if (ap.hostname && ap.hostname.length > max_hostname) {
-                hostname += "...";
-            }
             let row = table.insertRow();
+            row._apid = ap.id;
             row.insertCell().textContent = ap.name;
             row.insertCell().textContent = ap.kind;
-            row.insertCell().textContent = ap.lifecycle;
+            row.insertCell();
             row.insertCell().textContent = ap.bindhost || '-';
-            row.insertCell().textContent = hostname;
-            row.insertCell().textContent = ap.port || '-';
+            row.insertCell();
+            row.insertCell();
         }
         div.appendChild(table);
+        
+        //
+        // Set up the poller to live-update values on this panel
+        //
+        await PollTable(div, 3000, [
+            {
+                path  : `/api/v1alpha1/backbonesites/${siteId}/accesspoints`,
+                items : [
+                    (ap) => {
+                        let result = false;
+                        for (const row of table.rows) {
+                            if (row._apid == ap.id) {
+                                const lifecycleCell = row.cells[2];
+                                const hostnameCell  = row.cells[4];
+                                const portCell      = row.cells[5];
+
+                                if (lifecycleCell.textContent != ap.lifecycle) {
+                                    lifecycleCell.textContent = ap.lifecycle;
+                                }
+
+                                let hostname = (ap.hostname || '-').slice(0, max_hostname);
+                                if (ap.hostname && ap.hostname.length > max_hostname) {
+                                    hostname += '...';
+                                }
+                                if (hostnameCell.textContent != hostname) {
+                                    hostnameCell.textContent = hostname;
+                                }
+                                let port = ap.port || '-';
+                                if (portCell.textContent != port) {
+                                    portCell.textContent = port;
+                                }
+
+                                result = ap.lifecycle == 'ready';
+                            }
+                        }
+                        return result;
+                    }
+                ]
+            },
+        ]);
     }
 
     let button = document.createElement('button');

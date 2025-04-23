@@ -103,7 +103,9 @@ export function LayoutRow(layout, cells) {
     let row = layout.insertRow();
     for (const obj of cells) {
         let cell = row.insertCell();
-        if (typeof(obj) == 'string') {
+        if (!obj) {
+            cell.textContent = '-';
+        } else if (typeof(obj) == 'string') {
             cell.textContent = obj;
         } else {
             cell.appendChild(obj)
@@ -111,4 +113,81 @@ export function LayoutRow(layout, cells) {
     }
 
     return row;
+}
+
+export async function PollObject(trackedDiv, delayMs, actions) {
+    //
+    // Exit and don't reschedule if the div is no longer visible.
+    //
+    if (!trackedDiv.checkVisibility()) {
+        console.log('Poller stopped due to div invisibility');
+        return;
+    }
+
+    var stopPolling = false;
+
+    for (const action of actions) {
+        console.log(`Poll fetching ${action.path}`);
+        const fetchResult = await fetch(action.path);
+        if (fetchResult.ok) {
+            const fetchData = await fetchResult.json();
+            for (const [attr, fn] of Object.entries(action.items)) {
+                stopPolling = fn(fetchData[attr]);
+                if (stopPolling) {
+                    console.log('  stop-polling');
+                }
+            }
+        }
+    }
+
+    //
+    // Schedule the next pass
+    //
+    if (!stopPolling) {
+        setTimeout(async () => {
+            await PollObject(trackedDiv, delayMs, actions);
+        }, delayMs);
+    }
+}
+
+export async function PollTable(trackedDiv, delayMs, actions) {
+    //
+    // Exit and don't reschedule if the div is no longer visible.
+    //
+    if (!trackedDiv.checkVisibility()) {
+        console.log('Table poller stopped due to div invisibility');
+        return;
+    }
+
+    var stopPolling = false;
+
+    for (const action of actions) {
+        console.log(`Poll fetching ${action.path}`);
+        const fetchResult = await fetch(action.path);
+        if (fetchResult.ok) {
+            const table = await fetchResult.json();
+            let stop = true;
+            for (const row of table) {
+                for (const fn of action.items) {
+                    let s = fn(row);
+                    if (!s) {
+                        stop = false;
+                    }
+                }
+            }
+            if (stop) {
+                stopPolling = true;
+                console.log('  stop table poll');
+            }
+        }
+    }
+
+    //
+    // Schedule the next pass
+    //
+    if (!stopPolling) {
+        setTimeout(async () => {
+            await PollTable(trackedDiv, delayMs, actions);
+        }, delayMs);
+    }
 }
