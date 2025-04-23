@@ -17,63 +17,83 @@
  under the License.
 */
 
-import { SetupTable } from "./util.js";
+import { FormLayout, PollTable, SetupTable } from "./util.js";
 
-export async function BuildVanTable(focus) {
+export async function BuildVanTable() {
     const response = await fetch('api/v1alpha1/vans');
     const listdata = await response.json();
-    let   section  = document.getElementById("sectiondiv");
-    let   data     = {};
-
-    for (const item of listdata) {
-        data[item.id] = item;
-    }
+    const section  = document.getElementById("sectiondiv");
+    let   panel    = document.createElement('div');
+    section.appendChild(panel);
+    var layout;
 
     if (listdata.length > 0) {
-        let table = SetupTable(['Name', 'Backbone', 'Status', 'Failure', 'Start Time', 'End Time', 'Select']);
-        for (const item of Object.values(data)) {
-            let row = table.insertRow();
-            row.insertCell().textContent = item.name;
-            row.insertCell().textContent = item.backbonename;
-            row.insertCell().textContent = item.lifecycle.replace('partial', 'not-activated');
-            row.insertCell().textContent = item.failure || '';
-            row.insertCell().textContent = item.starttime;
-            row.insertCell().textContent = item.endtime || 'until deleted';
+        layout = SetupTable(['Name', 'Backbone', 'Status', 'Start Time', 'End Time']);
+        for (const item of listdata) {
+            let row = layout.insertRow();
+            row._vanid = item.id;
             let anchor = document.createElement('a');
-            anchor.setAttribute('href', '#');
-            if (focus == item.id) {
-                anchor.style.fontWeight = 'bold';
-                anchor.setAttribute('onclick', `toVanTab()`);
-                anchor.textContent = 'close';
-            } else {
-                anchor.setAttribute('onclick', `toVanTab('${item.id}')`);
-                anchor.textContent = 'open';
-            }
-            row.insertCell().appendChild(anchor);
+            anchor.innerHTML = item.name;
+            anchor.href = '#';
+            anchor.addEventListener('click', async () => {
+                await VanDetail(item.id);
+            });
+            row.insertCell().appendChild(anchor);                           // 0
+            row.insertCell().textContent = item.backbonename;               // 1
+            row.insertCell();                                               // 2
+            row.insertCell().textContent = item.starttime;                  // 3
+            row.insertCell().textContent = item.endtime || 'until deleted'; // 4
         }
-
-        section.appendChild(table);
+        panel.appendChild(layout);
     } else {
         let empty = document.createElement('i');
         empty.textContent = 'No VANs Found';
-        section.appendChild(empty);
+        panel.appendChild(empty);
     }
 
     let button = document.createElement('button');
-    button.setAttribute('onclick', `VanForm()`);
+    button.addEventListener('click', async () => { await VanForm(); });
     button.textContent = 'Create VAN...';
-    section.appendChild(document.createElement('p'));
-    section.appendChild(button);
+    panel.appendChild(document.createElement('p'));
+    panel.appendChild(button);
 
-    if (focus) {
+    await PollTable(panel, 5000, [
+        {
+            path  : `/api/v1alpha1/vans`,
+            items : [
+                async (van) => {
+                    let result = true;
+                    for (const row of layout.rows) {
+                        if (row._vanid == van.id) {
+                            const lifecycleCell = row.cells[2];
+
+                            const lc = van.lifecycle;
+                            if (van.failure) {
+                                lc += ` (${van.failure})`;
+                            }
+                            if (lifecycleCell.textContent != lc) {
+                                lifecycleCell.textContent = lc;
+                            }
+                            if (van.lifecycle != 'ready') {
+                                result = false;
+                            }
+                        }
+                    }
+                    return result;
+                }
+            ]
+        },
+    ]);
+
+    if (0) {
         let line = document.createElement('hr');
         line.setAttribute('width', '50%');
         line.setAttribute('align', 'left');
-        section.appendChild(line);
+        panel.appendChild(line);
 
         let title = document.createElement('h3');
         title.textContent = data[focus].name;
-        section.appendChild(title);
+        panel.appendChild(title);
 
         const siteResult = await fetch(`api/v1alpha1/vans/${focus}/members`);
         const listdata   = await siteResult.json();
@@ -86,7 +106,7 @@ export async function BuildVanTable(focus) {
         if (listdata.length > 0) {
             let membertitle = document.createElement('h3');
             membertitle.textContent = 'Member Sites';
-            section.appendChild(membertitle);
+            panel.appendChild(membertitle);
             let siteTable = SetupTable(['Name', 'Status', 'Failure', 'First Active Time', 'Last Heartbeat', 'Select']);
             for (const site of Object.values(siteData)) {
                 let row = siteTable.insertRow();
@@ -107,12 +127,71 @@ export async function BuildVanTable(focus) {
                 }
                 row.insertCell().appendChild(siteAnchor);
             }
-            section.appendChild(siteTable);
+            panel.appendChild(siteTable);
         } else {
             let empty = document.createElement('i');
             empty.textContent = 'No Members in the VAN';
-            section.appendChild(empty);
+            panel.appendChild(empty);
         }
     }
 }
 
+async function VanForm() {
+    let section = document.getElementById("sectiondiv");
+    section.innerHTML = '<h2>Create a Virtual Application Network</h2>';
+
+    let errorbox = document.createElement('pre');
+    errorbox.className = 'errorBox';
+
+    let vanName = document.createElement('input');
+    vanName.type = 'text';
+
+    let bbSelector = document.createElement('select');
+    const bbResult = await fetch('/api/v1alpha1/backbones');
+    const bbList   = await bbResult.json();
+    for (const bb of bbList) {
+        let option = document.createElement('option');
+        option.textContent = bb.name;
+        option.value       = bb.id;
+        bbSelector.appendChild(option);
+    }
+
+    const form = await FormLayout(
+        //
+        // Form fields
+        //
+        [
+            ['VAN Name:', vanName],
+            ['Backbone:', bbSelector],
+        ],
+
+        //
+        // Submit button behavior
+        //
+        async () => {
+            const response = await fetch(`api/v1alpha1/backbones/${bbSelector.value}/vans`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name : vanName.value,
+                }),
+            });
+
+            if (response.ok) {
+                await toVanTab();
+            } else {
+                errorbox.textContent = await response.text();
+            }
+        },
+
+        //
+        // Cancel button behavior
+        //
+        async () => { await toVanTab(); }
+    );
+
+    section.appendChild(form);
+    section.appendChild(errorbox);
+}

@@ -50,11 +50,11 @@ export async function toBackboneTab() {
     await BuildBackboneTable();
 }
 
-export async function toVanTab(focus) {
+export async function toVanTab() {
     unboldTabs();
     document.getElementById("tab-van").style.fontWeight  = 'bold';
     document.getElementById("sectiondiv").innerHTML = `<h2>Virtual Application Networks</h2>`;
-    await BuildVanTable(focus);
+    await BuildVanTable();
 }
 
 export async function toLibraryTab() {

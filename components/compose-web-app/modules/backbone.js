@@ -53,7 +53,7 @@ export async function BuildBackboneTable() {
     }
 
     let button = document.createElement('button');
-    button.addEventListener('click', () => { BackboneForm(); });
+    button.addEventListener('click', async () => { await BackboneForm(); });
     button.textContent = 'Create Backbone...';
     section.appendChild(document.createElement('p'));
     section.appendChild(button);
