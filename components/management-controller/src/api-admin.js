@@ -327,7 +327,7 @@ const createBackboneLink = async function(req, res) {
             // Alert the sync and deployment-state modules that a new backbone link was added for the connecting site
             //
             try {
-                await deployment.LinkAddedOrDeleted(norm.connectingsite, accessPoint.siteId);
+                await deployment.LinkAddedOrDeleted(norm.connectingsite, apid);
                 await sync.LinkChanged(norm.connectingsite, linkId);
             } catch (error) {
                 Log(`Exception createBackboneLink module notifications: ${error.message}`);
@@ -635,12 +635,7 @@ const listBackbones = async function(req, res) {
                 res.status(returnStatus).json(result.rows[0]);
             }
         } else {
-            var list = [];
-            result.rows.forEach(row => {
-                list.push(row);
-            });
-            res.json(list);
-            res.status(returnStatus).end();
+            res.status(returnStatus).json(result.rows);
         }
     } catch (error) {
         returnStatus = 400;
@@ -675,9 +670,9 @@ const listBackboneSites = async function(req, res) {
         const result = await client.query("SELECT InteriorSites.Id, Name, Lifecycle, Failure, Metadata, DeploymentState, TargetPlatform, FirstActiveTime, LastHeartbeat, " +
                                           "TlsCertificates.expiration as tlsexpiration, TlsCertificates.renewalTime as tlsrenewal, TargetPlatforms.LongName as PlatformLong " +
                                           "FROM InteriorSites " +
-                                          "JOIN TlsCertificates ON TlsCertificates.Id = Certificate " +
+                                          "LEFT OUTER JOIN TlsCertificates ON TlsCertificates.Id = Certificate " +
                                           "JOIN TargetPlatforms ON TargetPlatforms.ShortName = TargetPlatform " +
-                                          `WHERE ${byBackbone ? 'Backbone' : 'Id'} = $1`, [id]);
+                                          `WHERE ${byBackbone ? 'Backbone' : 'InteriorSites.Id'} = $1`, [id]);
 
         if (byBackbone) {
             res.json(result.rows);
