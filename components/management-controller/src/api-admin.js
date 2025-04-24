@@ -212,7 +212,7 @@ const createAccessPoint = async function(req, res) {
 
             var extraCols = "";
             var extraVals = "";
-            const name = norm.name || siteResult.rows[0].name + "-" + norm.kind;
+            const name = norm.name || norm.kind;
 
             // TODO - If name will collide with another access point on the same site, add a differentiation number to the end
 

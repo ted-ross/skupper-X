@@ -605,9 +605,9 @@ async function AccessPointForm(div, siteId) {
         // Form fields
         //
         [
-            ['Kind:',              kindSelector],
-            ['Access Point Name:', apName],
-            ['Bind Host:',         bindHost],
+            ['Kind:',                         kindSelector],
+            ['Access Point Name (optional):', apName],
+            ['Bind Host (optional):',         bindHost],
         ],
 
         //

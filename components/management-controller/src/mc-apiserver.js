@@ -416,7 +416,7 @@ exports.Start = async function() {
 
     app.use(morgan(':ts :remote-addr :remote-user :method :url :status :res[content-length] :response-time ms'));
 
-    app.get(API_PREFIX + 'invitation/:iid/kube', async (req, res) => {
+    app.get(API_PREFIX + 'invitations/:iid/kube', async (req, res) => {
         await fetchInvitationKube(req.params.iid, res);
     });
 

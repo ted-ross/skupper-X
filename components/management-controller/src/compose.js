@@ -1051,7 +1051,7 @@ const evaluateVariable = function(key, block, affinityInterface, site) {
             if (scope.length == 2) {
                 throw new Error(`Malformed variable '${key}' - 'site' does not permit qualifiers`);
             }
-            return site[section[1]];
+            return site && site[section[1]];
     }
 
     throw new Error(`Malformed variable '${key}' - Unrecognized qualifier`);

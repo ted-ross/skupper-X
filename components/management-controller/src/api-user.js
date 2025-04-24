@@ -189,7 +189,7 @@ const readVan = async function(res, vid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT ApplicationNetworks.Name, ApplicationNetworks.LifeCycle, ApplicationNetworks.Failure, Backbones.Id as backboneid, Backbones.Name as backbonename, StartTime, EndTime, DeleteDelay FROM ApplicationNetworks " +
+        const result = await client.query("SELECT ApplicationNetworks.*, Backbones.Id as backboneid, Backbones.Name as backbonename FROM ApplicationNetworks " +
                                           "JOIN Backbones ON ApplicationNetworks.Backbone = Backbones.Id WHERE ApplicationNetworks.Id = $1", [vid]);
         if (result.rowCount == 1) {
             res.status(returnStatus).json(result.rows[0]);
@@ -283,7 +283,7 @@ const listInvitations = async function(res, vid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT Id, Name, LifeCycle, Failure, JoinDeadline, MemberClass, InstanceLimit, InstanceCount, FetchCount, InteractiveClaim as interactive FROM MemberInvitations WHERE MemberOf = $1", [vid]);
+        const result = await client.query("SELECT Id, Name, LifeCycle, Failure, JoinDeadline, MemberClasses, InstanceLimit, InstanceCount, FetchCount, InteractiveClaim as interactive FROM MemberInvitations WHERE MemberOf = $1", [vid]);
         res.status(returnStatus).json(result.rows);
     } catch (error) {
         returnStatus = 500
@@ -298,7 +298,10 @@ const listVanMembers = async function(res, vid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT id, Name, LifeCycle, Failure, FirstActiveTime, LastHeartbeat, SiteClasses, Invitation FROM MemberSites WHERE MemberOf = $1", [vid]);
+        const result = await client.query("SELECT MemberSites.*, MemberInvitations.name as invitationname " +
+                                          "FROM MemberSites " +
+                                          "JOIN MemberInvitations ON MemberInvitations.Id = Invitation " +
+                                          "WHERE MemberSites.MemberOf = $1", [vid]);
         res.status(returnStatus).json(result.rows);
     } catch (error) {
         returnStatus = 500

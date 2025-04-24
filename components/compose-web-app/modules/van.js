@@ -17,6 +17,8 @@
  under the License.
 */
 
+import { InvitationsTab } from "./invitations.js";
+import { MembersTab } from "./members.js";
 import { FormLayout, PollTable, SetupTable } from "./util.js";
 
 export async function BuildVanTable() {
@@ -194,4 +196,77 @@ async function VanForm() {
 
     section.appendChild(form);
     section.appendChild(errorbox);
+}
+
+async function VanDetail(vanId) {
+    const section  = document.getElementById("sectiondiv");
+    let   panel    = document.createElement('div');
+    section.innerHTML = '';
+    section.appendChild(panel);
+
+    const vanResult = await fetch(`/api/v1alpha1/vans/${vanId}`);
+    const van       = await vanResult.json();
+    console.log('van', van);
+
+    let title = document.createElement('b');
+    title.textContent = `Virtual Application Network: ${van.name}`;
+    panel.appendChild(title);
+
+    let tabsheet      = document.createElement('div');
+    let tsHeader      = document.createElement('div');
+    let tsStart       = document.createElement('div');
+    let tsDetails     = document.createElement('div');
+    let tsInvitations = document.createElement('div');
+    let tsMembers     = document.createElement('div');
+    let tsFiller      = document.createElement('div');
+    let tsBody        = document.createElement('div');
+
+    tabsheet.className      = 'tabsheet';
+    tsHeader.className      = 'tabsheetHeader';
+    tsStart.className       = 'tabsheetStart';
+    tsDetails.className     = 'tabsheetSelected';
+    tsInvitations.className = 'tabsheetUnselected';
+    tsMembers.className     = 'tabsheetUnselected';
+    tsFiller.className      = 'tabsheetFiller';
+    tsBody.className        = 'tabsheetBody';
+
+    tsDetails.textContent     = 'VAN Details';
+    tsInvitations.textContent = 'Invitations';
+    tsMembers.textContent     = 'Members';
+
+    tabsheet.appendChild(tsHeader);
+    tabsheet.appendChild(tsBody);
+    tsHeader.appendChild(tsStart);
+    tsHeader.appendChild(tsDetails);
+    tsHeader.appendChild(tsInvitations);
+    tsHeader.appendChild(tsMembers);
+    tsHeader.appendChild(tsFiller);
+    panel.appendChild(tabsheet);
+
+    DetailTab(tsBody, van);
+
+    tsDetails.addEventListener('click', async () => {
+        tsDetails.className     = 'tabsheetSelected';
+        tsInvitations.className = 'tabsheetUnselected';
+        tsMembers.className     = 'tabsheetUnselected';
+        await DetailTab(tsBody, van);
+    });
+
+    tsInvitations.addEventListener('click', async () => {
+        tsDetails.className     = 'tabsheetUnselected';
+        tsInvitations.className = 'tabsheetSelected';
+        tsMembers.className     = 'tabsheetUnselected';
+        await InvitationsTab(tsBody, van);
+    });
+
+    tsMembers.addEventListener('click', async () => {
+        tsDetails.className     = 'tabsheetUnselected';
+        tsInvitations.className = 'tabsheetUnselected';
+        tsMembers.className     = 'tabsheetSelected';
+        await MembersTab(tsBody, van);
+    });
+}
+
+async function DetailTab(panel, van) {
+    panel.innerHTML = `Detail Tab for ${van.name}`;
 }
