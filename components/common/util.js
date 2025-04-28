@@ -75,7 +75,7 @@ exports.allSettled = function(plist) {
 }
 
 const uuidRegex = RegExp("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
-const dnsRegex  = RegExp("^[A-Za-z][A-Za-z0-9-\.]{1,63}$");
+const dnsRegex  = RegExp("^[A-Za-z][A-Za-z0-9-\.]{0,63}$");
 
 exports.IsValidUuid = function(text) {
     return uuidRegex.test(text);
@@ -97,10 +97,10 @@ exports.ValidateAndNormalizeFields = function(fields, table) {
         switch (table[key].type) {
         case 'string' :
             if (typeof value != 'string') {
-                throw(Error(`Expected string value for key ${key}`));
+                throw(Error(`Expected string value for ${key}`));
             }
             if (value.indexOf("'") != -1) {
-                throw(Error(`Single quotes not permitted for key ${key}`));
+                throw(Error(`Single quotes not permitted for ${key}`));
             }
             normalized[key] = value;
             break;
@@ -109,7 +109,7 @@ exports.ValidateAndNormalizeFields = function(fields, table) {
             if (dnsRegex.test(value)) {
                 normalized[key] = value;
             } else {
-                throw(Error(`Expected valid DNS name for key ${key} (got ${value})`));
+                throw(Error(`Expected valid DNS-name syntax for ${key} (got '${value}')`));
             }
             break;
 
@@ -117,7 +117,7 @@ exports.ValidateAndNormalizeFields = function(fields, table) {
             if (value == 'claim' || value == 'peer' || value == 'member' || value == 'manage') {
                 normalized[key] = value;
             } else {
-                throw(Error(`Expected [claim, peer, member, manage] for key ${key}`));
+                throw(Error(`Expected [claim, peer, member, manage] for ${key}`));
             }
             break;
 
@@ -126,7 +126,7 @@ exports.ValidateAndNormalizeFields = function(fields, table) {
 
         case 'bool' :
             if (typeof value != 'string' || (value != 'true' && value != 'false')) {
-                throw(Error(`Expected [true, false] for key ${key}`));
+                throw(Error(`Expected [true, false] for ${key}`));
             }
             normalized[key] = value == 'true';
             break;
@@ -134,13 +134,13 @@ exports.ValidateAndNormalizeFields = function(fields, table) {
         case 'number' :
             if (typeof value == 'string') {
                 if (isNaN(value)) {
-                    throw(Error(`String value is not numeric for key ${key}`));
+                    throw(Error(`String value is not numeric for ${key}`));
                 }
                 normalized[key] = parseInt(value);
             } else if (typeof value == 'number') {
                 normalized[key] = value;
             } else {
-                throw(Error(`Expected a number or numeric string for key ${key}`));
+                throw(Error(`Expected a number or numeric string for ${key}`));
             }
             break;
 
@@ -149,7 +149,7 @@ exports.ValidateAndNormalizeFields = function(fields, table) {
 
         case 'uuid' :
             if (!exports.IsValidUuid(value)) {
-                throw(Error(`Expected valid uuid for key ${key}`));
+                throw(Error(`Expected valid uuid for ${key}`));
             }
             normalized[key] = value;
         }

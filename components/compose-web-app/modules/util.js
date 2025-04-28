@@ -191,3 +191,40 @@ export async function PollTable(trackedDiv, delayMs, actions) {
         }, delayMs);
     }
 }
+
+export async function ConfirmDialog(text, buttonText, asyncAction) {
+    let modalBox = document.createElement('div');
+    modalBox.className = 'modal';
+    let content = document.createElement('div');
+    content.className = 'modal-content';
+
+    let span = document.createElement('span');
+    span.className = 'close';
+    span.innerHTML = '&times;';
+    span.onclick = () => { modalBox.remove(); };
+    content.appendChild(span);
+
+    let modalText = document.createElement('p');
+    modalText.textContent = text;
+    content.appendChild(modalText);
+    modalBox.appendChild(content);
+
+    let confirm = document.createElement('button');
+    confirm.textContent = buttonText;
+    confirm.onclick = async () => {
+        await asyncAction();
+        modalBox.remove();
+    };
+    content.appendChild(confirm);
+
+    let cancel = document.createElement('button');
+    cancel.textContent = 'Cancel';
+    cancel.style.marginLeft = '5px';
+    cancel.onclick = () => {
+        modalBox.remove();
+    };
+    content.appendChild(cancel);
+
+    modalBox.style.display = 'block';
+    return modalBox;
+}

@@ -20,6 +20,7 @@
 import { InvitationsTab } from "./invitations.js";
 import { MembersTab } from "./members.js";
 import { FormLayout, PollTable, SetupTable } from "./util.js";
+import { DetailTab } from "./vandetail.js";
 
 export async function BuildVanTable() {
     const response = await fetch('api/v1alpha1/vans');
@@ -265,8 +266,4 @@ async function VanDetail(vanId) {
         tsMembers.className     = 'tabsheetSelected';
         await MembersTab(tsBody, van);
     });
-}
-
-async function DetailTab(panel, van) {
-    panel.innerHTML = `Detail Tab for ${van.name}`;
 }

@@ -392,6 +392,27 @@ const expireInvitation = async function(res, iid) {
     return returnStatus;
 }
 
+const readCertificate = async function(req, res) {
+    const cid = req.params.cid;
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        const result = await client.query("SELECT * FROM TlsCertificates WHERE Id = $1", [cid]);
+        if (result.rowCount == 1) {
+            res.status(returnStatus).json(result.rows[0]);
+        } else {
+            returnStatus = 400;
+            res.status(returnStatus).end();
+        }
+    } catch (error) {
+        returnStatus = 500
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+}
+
 const evictMember = async function(mid, req, res) {
     var returnStatus = 501;
     res.status(returnStatus).send("Not Implemented");
@@ -511,6 +532,13 @@ exports.Initialize = async function(api, keycloak) {
     // COMMANDS
     api.put(API_PREFIX + 'members/:mid/evict', keycloak.protect('realm:van-owner'), async (req, res) => {
         await evictMember(req.params.mid, req, res);
+    });
+
+    //========================================
+    // TLS Certificates
+    //========================================
+    api.get(API_PREFIX + 'tls-certificates/:cid', async (req, res) => {
+        await readCertificate(req, res);
     });
 
     //========================================

@@ -17,7 +17,7 @@
  under the License.
 */
 
-import { FormLayout, LayoutRow, PollTable, SetupTable } from "./util.js";
+import { ConfirmDialog, FormLayout, LayoutRow, PollTable, SetupTable } from "./util.js";
 
 export async function InvitationsTab(panel, van) {
     panel.innerHTML = '';
@@ -72,7 +72,7 @@ async function InivitationList(parent, vanid, invites) {
                 let inviteDiv = document.createElement('div');
                 inviteDiv.className = 'subtable';
                 subcell.appendChild(inviteDiv);
-                await InvitePanel(inviteDiv, invite);
+                await InvitePanel(inviteDiv, invite, [row, subrow]);
             } else {
                 layout.deleteRow(invite._row.rowIndex + 1);
             }
@@ -118,7 +118,7 @@ async function InivitationList(parent, vanid, invites) {
     ]);
 }
 
-async function InvitePanel(div, invite) {
+async function InvitePanel(div, invite, toRemove) {
     div.innerHTML = '';
     let layout = document.createElement('table');
     layout.setAttribute('cellPadding', '4');
@@ -132,22 +132,34 @@ async function InvitePanel(div, invite) {
     anchor.download    = `${invite.name}.yaml`;
 
     let expireButton = document.createElement('button');
-    expireButton.textContent = 'Expire Invitation Now';
-    expireButton.addEventListener('click', async () => {
-        const result = fetch(`/api/v1alpha1/invitations/${invite.id}/expire`, { method : 'PUT'});
-        if (!result.ok) {
-            errorbox.textContent = await result.text();
-        } else {
-            await InvitePanel(div, invite);
-        }
-    });
+    expireButton.textContent = 'Expire Invitation...';
+    expireButton.onclick = async () => {
+        let confirm = await ConfirmDialog(
+            'The invitation will be expired immediately.  Subsequent claims will be rejected.',
+            'Confirm Accelerated Expiration',
+            async () => {
+                const result = await fetch(`/api/v1alpha1/invitations/${invite.id}/expire`, { method : 'PUT'});
+                if (!result.ok) {
+                    errorbox.textContent = await result.text();
+                } else {
+                    expireButton.disabled = true;
+                }
+            }
+        );
+        div.appendChild(confirm);
+    };
+    if (invite.lifecycle == 'expired') {
+        expireButton.disabled = true;
+    }
 
     let deleteButton = document.createElement('button');
     deleteButton.textContent = 'Delete';
     deleteButton.addEventListener('click', async () => {
         const response = await fetch(`/api/v1alpha1/invitations/${invite.id}`, { method : 'DELETE'});
         if (response.ok) {
-            await InvitePanel(div, invite);
+            for (const element of toRemove) {
+                element.remove();
+            }
         } else {
             errorbox.textContent = await response.text();
         }
@@ -176,6 +188,7 @@ async function CreateForm(panel, van, completion) {
     instanceGroup.className = 'onerow';
     let instanceLimit = document.createElement('input');
     instanceLimit.type = 'text';
+    instanceLimit.value = "1";
     let unlimited     = document.createElement('input');
     unlimited.type = 'checkbox';
     let label = document.createElement('div');
@@ -228,7 +241,7 @@ async function CreateForm(panel, van, completion) {
             ['Claim Access Point:',            claimAccess],
             ['Member Access Point:',           memberAccess],
             ['Site Class (optional):',         siteClass],
-            ['Instance Limit (optional):',     instanceGroup],
+            ['Instance Limit:',                instanceGroup],
             ['Interactive:',                   isInteractive],
             ['Member Name Prefix (optional):', prefix],
         ],

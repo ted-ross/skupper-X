@@ -3,6 +3,8 @@
  - ~~Figure out the issue with incorrect return values from API functions~~
  - ~~Deleting sites and backbones causes exceptions to be repeatedly caught in the management controller~~
  - ~~There is a name-collision thing happening when a backbone is deleted and then re-created~~
+ - Multiple Access Points can be created on the same site with the same name
+ - Claim against an expired invitation is honored
 
 ## General Stuff
  - ~~Generalize and parameterize the "hash-sets" for site-to-management reconciliation allowing for greater flexibility in development~~
@@ -23,6 +25,10 @@
      - Accepted only if the connecting site has an authentic initial configuration
  - Consider having the sites generate their own certificates and CSRs to be sync'd to the MC for signing
    - This would require the installation of openssl into the site-controller container image
+ - Build APIs and front-end for managing the tree of certificates.  This includes:
+   - API for fetching all certificates signed by root or a CA (to support a tree-table)
+   - configuring and commanding certificate rotation
+   - viewing the important fields of a certificate
 
 ## Backbone Feature Tasks
  - ~~In initial setup, specify which ingresses are needed on the site based on configured access points (skupperx-incoming configmap?)~~
