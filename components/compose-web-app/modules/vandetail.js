@@ -72,6 +72,8 @@ export async function DetailTab(parent, van) {
                 let text = await response.text();
                 if (!response.ok) {
                     errorbox.textContent = text;
+                } else {
+                    toVanTab();
                 }
             }
         );

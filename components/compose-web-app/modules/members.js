@@ -17,7 +17,7 @@
  under the License.
 */
 
-import { LayoutRow, PollTable, SetupTable } from "./util.js";
+import { ConfirmDialog, LayoutRow, PollTable, SetupTable } from "./util.js";
 
 export async function MembersTab(parent, van) {
     parent.innerHTML = '';
@@ -115,7 +115,7 @@ function ReconcileRow(row, member) {
     }
 }
 
-async function MemberPanel(div, invite) {
+async function MemberPanel(div, member) {
     div.innerHTML = '';
     let layout = document.createElement('table');
     layout.setAttribute('cellPadding', '4');
@@ -123,36 +123,40 @@ async function MemberPanel(div, invite) {
     let errorbox = document.createElement('pre');
     errorbox.className = 'errorBox';
 
-    let anchor = document.createElement('a');
-    anchor.textContent = 'download invitation';
-    anchor.href        = `/api/v1alpha1/invitations/${invite.id}/kube`;
-    anchor.download    = `${invite.name}.yaml`;
+    let evictButton = document.createElement('button');
+    evictButton.textContent = 'Evict Member...';
+    evictButton.onclick = async () => {
+        let confirm = await ConfirmDialog(
+            'The member will be evicted from the network, and will no longer be able to communicate with other members',
+            'Confirm Member Eviction',
+            async () => {
+                const result = await fetch(`/api/v1alpha1/members/${member.id}/evict`, { method : 'PUT'});
+                if (!result.ok) {
+                    errorbox.textContent = await result.text();
+                } else {
+                    evictButton.disabled = true;
+                }
+            }
+        );
+        div.appendChild(confirm);
+    };
+    if (member.lifecycle == 'expired') {
+        evictButton.disabled = true;
+    }
 
-    let expireButton = document.createElement('button');
-    expireButton.textContent = 'Expire Invitation Now';
-    expireButton.addEventListener('click', async () => {
-        const result = fetch(`/api/v1alpha1/invitations/${invite.id}/expire`, { method : 'PUT'});
-        if (!result.ok) {
-            errorbox.textContent = await result.text();
-        } else {
-            await MemberPanel(div, invite);
+    if (member.certificate) {
+        const tlsResult = await fetch(`/api/v1alpha1/tls-certificates/${member.certificate}`);
+        if (tlsResult.ok) {
+            const tls = await tlsResult.json();
+            LayoutRow(layout, ['Certificate Expiration:', tls.expiration]);
+            LayoutRow(layout, ['Certificate Renewal Time:', tls.renewaltime]);
         }
-    });
+    }
 
-    let deleteButton = document.createElement('button');
-    deleteButton.textContent = 'Delete';
-    deleteButton.addEventListener('click', async () => {
-        const response = await fetch(`/api/v1alpha1/invitations/${invite.id}`, { method : 'DELETE'});
-        if (response.ok) {
-            await MemberPanel(div, invite);
-        } else {
-            errorbox.textContent = await response.text();
-        }
-    });
+    LayoutRow(layout, ['Site Classes:', member.siteclasses || '-']);
+    LayoutRow(layout, ['Metadata:', member.metadata]);
 
-    LayoutRow(layout, ['Invitation', anchor]);
-    LayoutRow(layout, [expireButton]);
-    LayoutRow(layout, [deleteButton]);
+    LayoutRow(layout, [evictButton]);
     div.appendChild(layout);
     div.appendChild(errorbox);
 }

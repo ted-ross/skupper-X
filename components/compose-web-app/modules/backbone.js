@@ -578,6 +578,7 @@ async function SiteForm(bbid) {
 
     section.appendChild(form);
     section.appendChild(errorbox);
+    siteName.focus();
 }
 
 async function AccessPointForm(div, siteId) {
@@ -590,7 +591,7 @@ async function AccessPointForm(div, siteId) {
     apName.type = 'text';
 
     let kindSelector = document.createElement('select');
-    for (const k of ['claim', 'peer', 'member', 'manage']) {
+    for (const k of ['claim', 'member', 'peer', 'manage']) {
         let option = document.createElement('option');
         option.value = k;
         option.textContent = k;

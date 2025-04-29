@@ -87,56 +87,6 @@ export async function BuildVanTable() {
             ]
         },
     ]);
-
-    if (0) {
-        let line = document.createElement('hr');
-        line.setAttribute('width', '50%');
-        line.setAttribute('align', 'left');
-        panel.appendChild(line);
-
-        let title = document.createElement('h3');
-        title.textContent = data[focus].name;
-        panel.appendChild(title);
-
-        const siteResult = await fetch(`api/v1alpha1/vans/${focus}/members`);
-        const listdata   = await siteResult.json();
-        const siteData   = {};
-
-        for (const siteItem of listdata) {
-            siteData[siteItem.id] = siteItem;
-        }
-
-        if (listdata.length > 0) {
-            let membertitle = document.createElement('h3');
-            membertitle.textContent = 'Member Sites';
-            panel.appendChild(membertitle);
-            let siteTable = SetupTable(['Name', 'Status', 'Failure', 'First Active Time', 'Last Heartbeat', 'Select']);
-            for (const site of Object.values(siteData)) {
-                let row = siteTable.insertRow();
-                row.insertCell().textContent = site.name;
-                row.insertCell().textContent = site.lifecycle;
-                row.insertCell().textContent = site.failure;
-                row.insertCell().textContent = site.firstactivetime;
-                row.insertCell().textContent = site.lastheartbeat;
-                let siteAnchor = document.createElement('a');
-                siteAnchor.setAttribute('href', '#');
-                if (focus == site.id) {
-                    siteAnchor.style.fontWeight = 'bold';
-                    siteAnchor.setAttribute('onclick', `toVanTab(${focus})`);
-                    siteAnchor.textContent = 'close';
-                } else {
-                    siteAnchor.setAttribute('onclick', `toVanTab('${focus}', '${site.id}')`);
-                    siteAnchor.textContent = 'open';
-                }
-                row.insertCell().appendChild(siteAnchor);
-            }
-            panel.appendChild(siteTable);
-        } else {
-            let empty = document.createElement('i');
-            empty.textContent = 'No Members in the VAN';
-            panel.appendChild(empty);
-        }
-    }
 }
 
 async function VanForm() {
@@ -159,27 +109,79 @@ async function VanForm() {
         bbSelector.appendChild(option);
     }
 
+    let startTimeGroup = document.createElement('div');
+    startTimeGroup.className = 'onerow';
+    let startTime = document.createElement('input');
+    startTime.type = 'datetime-local';
+    startTime.disabled = true;
+    let startNow = document.createElement('input');
+    startNow.type = 'checkbox';
+    startNow.checked = true;
+    startNow.onclick = () => {
+        if (startNow.checked) {
+            startTime.value = '';
+            startTime.disabled = true;
+        } else {
+            startTime.disabled = false;
+        }
+    }
+    let startLabel = document.createElement('div');
+    startLabel.textContent = 'Start Immediately';
+    startTimeGroup.appendChild(startTime);
+    startTimeGroup.appendChild(startNow);
+    startTimeGroup.appendChild(startLabel);
+
+    let endTimeGroup = document.createElement('div');
+    endTimeGroup.className = 'onerow';
+    let endTime = document.createElement('input');
+    endTime.type = 'datetime-local';
+    endTime.disabled = true;
+    let endSet = document.createElement('input');
+    endSet.type = 'checkbox';
+    endSet.style.marginLeft = '5px';
+    endSet.checked = true;
+    endSet.onclick = () => {
+        if (endSet.checked) {
+            endTime.value = '';
+            endTime.disabled = true;
+        } else {
+            endTime.disabled = false;
+        }
+    }
+    let endLabel = document.createElement('div');
+    endLabel.textContent = 'No End Time';
+    endTimeGroup.appendChild(endTime);
+    endTimeGroup.appendChild(endSet);
+    endTimeGroup.appendChild(endLabel);
+
     const form = await FormLayout(
         //
         // Form fields
         //
         [
-            ['VAN Name:', vanName],
-            ['Backbone:', bbSelector],
+            ['VAN Name:',   vanName],
+            ['Backbone:',   bbSelector],
+            ['Start Time:', startTimeGroup],
+            ['End Time:',   endTimeGroup],
         ],
 
         //
         // Submit button behavior
         //
         async () => {
+            let body = { name : vanName.value };
+            if (!startNow.checked) {
+                body.starttime = startTime.value;
+            }
+            if (!endSet.checked) {
+                body.endtime = endTime.value;
+            }
             const response = await fetch(`api/v1alpha1/backbones/${bbSelector.value}/vans`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    name : vanName.value,
-                }),
+                body: JSON.stringify(body),
             });
 
             if (response.ok) {
@@ -197,6 +199,7 @@ async function VanForm() {
 
     section.appendChild(form);
     section.appendChild(errorbox);
+    vanName.focus();
 }
 
 async function VanDetail(vanId) {
@@ -246,24 +249,24 @@ async function VanDetail(vanId) {
 
     DetailTab(tsBody, van);
 
-    tsDetails.addEventListener('click', async () => {
+    tsDetails.onclick = async () => {
         tsDetails.className     = 'tabsheetSelected';
         tsInvitations.className = 'tabsheetUnselected';
         tsMembers.className     = 'tabsheetUnselected';
         await DetailTab(tsBody, van);
-    });
+    };
 
-    tsInvitations.addEventListener('click', async () => {
+    tsInvitations.onclick = async () => {
         tsDetails.className     = 'tabsheetUnselected';
         tsInvitations.className = 'tabsheetSelected';
         tsMembers.className     = 'tabsheetUnselected';
         await InvitationsTab(tsBody, van);
-    });
+    };
 
-    tsMembers.addEventListener('click', async () => {
+    tsMembers.onclick = async () => {
         tsDetails.className     = 'tabsheetUnselected';
         tsInvitations.className = 'tabsheetUnselected';
         tsMembers.className     = 'tabsheetSelected';
         await MembersTab(tsBody, van);
-    });
+    };
 }

@@ -76,6 +76,7 @@ exports.allSettled = function(plist) {
 
 const uuidRegex = RegExp("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
 const dnsRegex  = RegExp("^[A-Za-z][A-Za-z0-9-\.]{0,63}$");
+const dtzRegex  = RegExp("^[1-2][0-9]{3}-[0-1][0-9]-[0-5][0-9]T[0-2][0-9]:[0-5][0-9]$");
 
 exports.IsValidUuid = function(text) {
     return uuidRegex.test(text);
@@ -122,7 +123,7 @@ exports.ValidateAndNormalizeFields = function(fields, table) {
             break;
 
         case 'kubeselector' :
-            throw(Error('kubeselector field type not implemented'));
+            throw(Error(`kubeselector field type not implemented, got ${value}`));
 
         case 'bool' :
             if (typeof value != 'string' || (value != 'true' && value != 'false')) {
@@ -145,7 +146,12 @@ exports.ValidateAndNormalizeFields = function(fields, table) {
             break;
 
         case 'timestampz' :
-            throw(Error('timestampz field type not implemented'));
+            if (dtzRegex.test(value)) {
+                normalized[key] = value;
+            } else {
+                throw(Error(`timestampz field malformed: ${value}`));
+            }
+            break;
 
         case 'uuid' :
             if (!exports.IsValidUuid(value)) {

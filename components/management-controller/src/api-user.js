@@ -154,6 +154,11 @@ const createInvitation = async function(vid, req, res) {
                 extraVals += `, ${norm.instancelimit}`;
             }
 
+            if (norm.joindeadline) {
+                extraCols += ', JoinDeadline';
+                extraVals += `, '${norm.joindeadline}'`;
+            }
+
             //
             // Create the application network
             //
@@ -324,16 +329,18 @@ const deleteVan = async function(res, vid) {
                 if (delResult.certificate) {
                     await client.query("DELETE FROM TlsCertificates WHERE Id = $1", [delResult.certificate]);
                 }
+                await client.query("COMMIT");
                 res.status(returnStatus).send("Application network deleted");
             } else {
+                await client.query("ROLLBACK");
                 returnStatus = 404;
                 res.status(returnStatus).send("Application network not found");
             }
         } else {
+            await client.query("ROLLBACK");
             returnStatus = 400;
             res.status(returnStatus).send('Cannot delete application network because is still has members');
         }
-        await client.query("COMMIT");
     } catch (error) {
         await client.query("ROLLBACK");
         returnStatus = 500;

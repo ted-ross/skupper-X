@@ -118,7 +118,7 @@ async function InivitationList(parent, vanid, invites) {
     ]);
 }
 
-async function InvitePanel(div, invite, toRemove) {
+async function InvitePanel(div, invite, toRemoveOnDelete) {
     div.innerHTML = '';
     let layout = document.createElement('table');
     layout.setAttribute('cellPadding', '4');
@@ -157,7 +157,7 @@ async function InvitePanel(div, invite, toRemove) {
     deleteButton.addEventListener('click', async () => {
         const response = await fetch(`/api/v1alpha1/invitations/${invite.id}`, { method : 'DELETE'});
         if (response.ok) {
-            for (const element of toRemove) {
+            for (const element of toRemoveOnDelete) {
                 element.remove();
             }
         } else {
@@ -232,6 +232,41 @@ async function CreateForm(panel, van, completion) {
         }
     }
 
+    let deadlineGroup = document.createElement('div');
+    deadlineGroup.className = 'onerow';
+    let joinDeadline = document.createElement('input');
+    joinDeadline.type = 'datetime-local';
+    let defaultDeadline = new Date(Date.now() + 15 * 60000);
+    joinDeadline.value = defaultDeadline.toISOString().slice(0, 16);
+    deadlineGroup.appendChild(joinDeadline);
+
+    let dlHour = document.createElement('button');
+    dlHour.style.marginLeft = '5px';
+    dlHour.textContent = 'One Hour';
+    dlHour.onclick = () => {
+        let dl = new Date(Date.now() + 60 * 60000);
+        joinDeadline.value = dl.toISOString().slice(0, 16);
+    }
+    deadlineGroup.appendChild(dlHour);
+
+    let dlDay = document.createElement('button');
+    dlDay.style.marginLeft = '5px';
+    dlDay.textContent = 'One Day';
+    dlDay.onclick = () => {
+        let dl = new Date(Date.now() + 24 * 60 * 60000);
+        joinDeadline.value = dl.toISOString().slice(0, 16);
+    }
+    deadlineGroup.appendChild(dlDay);
+
+    let dlYear = document.createElement('button');
+    dlYear.style.marginLeft = '5px';
+    dlYear.textContent = 'One Year';
+    dlYear.onclick = () => {
+        let dl = new Date(Date.now() + 365 * 24 * 60 * 60000);
+        joinDeadline.value = dl.toISOString().slice(0, 16);
+    }
+    deadlineGroup.appendChild(dlYear);
+
     const form = await FormLayout(
         //
         // Form fields
@@ -240,6 +275,7 @@ async function CreateForm(panel, van, completion) {
             ['Invitation Name:',               name],
             ['Claim Access Point:',            claimAccess],
             ['Member Access Point:',           memberAccess],
+            ['Join Deadline:',                 deadlineGroup],
             ['Site Class (optional):',         siteClass],
             ['Instance Limit:',                instanceGroup],
             ['Interactive:',                   isInteractive],
@@ -256,6 +292,7 @@ async function CreateForm(panel, van, completion) {
                 primaryaccess : memberAccess.value,
                 siteclass     : siteClass.value,
                 interactive   : isInteractive.checked ? 'true' : 'false',
+                joindeadline  : joinDeadline.value,
             };
             if (instanceLimit.value.length > 0) {
                 body.instancelimit = instanceLimit.value;
@@ -286,4 +323,5 @@ async function CreateForm(panel, van, completion) {
 
     panel.appendChild(form);
     panel.appendChild(errorbox);
+    name.focus();
 }

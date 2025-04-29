@@ -159,12 +159,13 @@ const processNewNetworks = async function() {
 
             if (row.endtime) {
                 duration_ms = row.endtime.getTime() - row.starttime.getTime() + db.IntervalMilliseconds(row.deletedelay);
+                // TODO - if duration is greater than the default CA expiration, reduce it to the default.
             } else {
                 duration_ms = db.IntervalMilliseconds(config.DefaultCaExpiration());
             }
             await client.query(
                 "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, ApplicationNetwork, Issuer) VALUES(gen_random_uuid(), 'vanCA', now(), $1, $2, $3, $4)",
-                [row.starttime, duration_ms / 3600000, row.id, row.bbca]
+                [row.starttime, Math.trunc(duration_ms / 3600000), row.id, row.bbca]
             );
             await client.query("UPDATE ApplicationNetworks SET Lifecycle = 'skx_cr_created', VanId = $1 WHERE Id = $2", [van_id, row.id]);
             reschedule_delay = 0;
