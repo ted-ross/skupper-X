@@ -17,7 +17,7 @@
  under the License.
 */
 
-import { ConfirmDialog, LayoutRow, PollTable, SetupTable } from "./util.js";
+import { ConfirmDialog, LayoutRow, PollTable, SetupTable, TimeAgo } from "./util.js";
 
 export async function MembersTab(parent, van) {
     parent.innerHTML = '';
@@ -28,7 +28,7 @@ export async function MembersTab(parent, van) {
     empty.textContent = 'No members found for this VAN';
     panel.appendChild(empty);
 
-    let layout = SetupTable(['', 'Name', 'TLS Status', 'First Active Time', 'Last Heartbeat', 'Invitation']);
+    let layout = SetupTable(['', 'Name', 'TLS Status', 'Last Heartbeat', 'Invitation', 'First Active Time']);
     let isEmpty = true;
 
     await PollTable(panel, 5000, [
@@ -72,7 +72,7 @@ export async function MembersTab(parent, van) {
                                 let memberDiv = document.createElement('div');
                                 memberDiv.className = 'subtable';
                                 subcell.appendChild(memberDiv);
-                                await MemberPanel(memberDiv, member);
+                                await MemberPanel(memberDiv, member.id);
                             } else {
                                 layout.deleteRow(member._row.rowIndex + 1);
                             }
@@ -94,9 +94,12 @@ export async function MembersTab(parent, van) {
 function ReconcileRow(row, member) {
     const nameCell          = row.cells[1];
     const lifecycleCell     = row.cells[2];
-    const firstActiveCell   = row.cells[3];
-    const lastHeartbeatCell = row.cells[4];
-    const invitationCell    = row.cells[5];
+    const lastHeartbeatCell = row.cells[3];
+    const invitationCell    = row.cells[4];
+    const firstActiveCell   = row.cells[5];
+
+    const sinceLastHeartbeat = TimeAgo(new Date(member.lastheartbeat));
+    const firstTime          = new Date(member.firstactivetime).toUTCString();
 
     if (nameCell.textContent != member.name) {
         nameCell.textContent = member.name;
@@ -104,18 +107,20 @@ function ReconcileRow(row, member) {
     if (lifecycleCell.textContent != member.lifecycle) {
         lifecycleCell.textContent = member.lifecycle;
     }
-    if (firstActiveCell.textContent != member.firstactivetime) {
-        firstActiveCell.textContent = member.firstactivetime;
+    if (firstActiveCell.textContent != firstTime) {
+        firstActiveCell.textContent = firstTime;
     }
-    if (lastHeartbeatCell.textContent != member.lastheartbeat) {
-        lastHeartbeatCell.textContent = member.lastheartbeat;
+    if (lastHeartbeatCell.textContent != sinceLastHeartbeat) {
+        lastHeartbeatCell.textContent = sinceLastHeartbeat;
     }
     if (invitationCell.textContent != member.invitationname) {
         invitationCell.textContent = member.invitationname;
     }
 }
 
-async function MemberPanel(div, member) {
+async function MemberPanel(div, mid) {
+    const result = await fetch(`/api/v1alpha1/members/${mid}`);
+    const member = await result.json();
     div.innerHTML = '';
     let layout = document.createElement('table');
     layout.setAttribute('cellPadding', '4');
@@ -144,16 +149,21 @@ async function MemberPanel(div, member) {
         evictButton.disabled = true;
     }
 
+    LayoutRow(layout, ['Last Heartbeat:', new Date(member.lastheartbeat).toUTCString()]);
+
     if (member.certificate) {
         const tlsResult = await fetch(`/api/v1alpha1/tls-certificates/${member.certificate}`);
         if (tlsResult.ok) {
             const tls = await tlsResult.json();
-            LayoutRow(layout, ['Certificate Expiration:', tls.expiration]);
-            LayoutRow(layout, ['Certificate Renewal Time:', tls.renewaltime]);
+            LayoutRow(layout, ['Certificate Expiration:', new Date(tls.expiration).toUTCString()]);
+            LayoutRow(layout, ['Certificate Renewal Time:', new Date(tls.renewaltime).toUTCString()]);
         }
     }
 
-    LayoutRow(layout, ['Site Classes:', member.siteclasses || '-']);
+    let siteclasses = member.siteclasses || [];
+
+
+    LayoutRow(layout, ['Site Classes:', `${siteclasses}`]);
     LayoutRow(layout, ['Metadata:', member.metadata]);
 
     LayoutRow(layout, [evictButton]);

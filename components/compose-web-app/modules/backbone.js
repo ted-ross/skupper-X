@@ -18,7 +18,7 @@
 */
 
 import { toBackboneTab } from "../page.js";
-import { FormLayout, LayoutRow, PollObject, PollTable, SetupTable } from "./util.js";
+import { FormLayout, LayoutRow, PollObject, PollTable, SetupTable, TimeAgo } from "./util.js";
 
 export async function BuildBackboneTable() {
     const response = await fetch('api/v1alpha1/backbones');
@@ -106,6 +106,7 @@ async function BackboneForm() {
 
     section.appendChild(form);
     section.appendChild(errorbox);
+    bbName.focus();
 }
 
 async function BackboneDetail(bbid) {
@@ -184,7 +185,7 @@ async function BackboneSites(bbid, panel) {
         empty.textContent = 'No sites in this backbone network';
         panel.appendChild(empty);
     } else {
-        layout = SetupTable(['', 'Name', 'TLS Status', 'Deploy State', 'First Active Time', 'Last Heartbeat']);
+        layout = SetupTable(['', 'Name', 'TLS Status', 'Deploy State', 'Last Heartbeat', 'First Active Time']);
         for (const site of sites) {
             let row = layout.insertRow();
             row._sid = site.id;
@@ -251,8 +252,8 @@ async function BackboneSites(bbid, panel) {
                         if (row._sid == site.id) {
                             const lifecycleCell       = row.cells[2];
                             const deploymentStateCell = row.cells[3];
-                            const firstActiveCell     = row.cells[4];
-                            const lastheartbeatCell   = row.cells[5];
+                            const lastheartbeatCell   = row.cells[4];
+                            const firstActiveCell     = row.cells[5];
 
                             if (lifecycleCell.textContent != site.lifecycle) {
                                 lifecycleCell.textContent = site.lifecycle;
@@ -261,11 +262,11 @@ async function BackboneSites(bbid, panel) {
                             if (deploymentStateCell.textContent != site.deploymentstate) {
                                 deploymentStateCell.textContent = site.deploymentstate;
                             }
-                            let fa = site.firstactivetime || 'never';
+                            let fa = site.firstactivetime ? new Date(site.firstactivetime).toUTCString() : 'never';
                             if (firstActiveCell.textContent != fa) {
                                 firstActiveCell.textContent = fa;
                             }
-                            let lhb = site.lastheartbeat || 'never';
+                            let lhb = site.lastheartbeat ? TimeAgo(new Date(site.lastheartbeat)) : 'never';
                             if (lastheartbeatCell.textContent != lhb) {
                                 lastheartbeatCell.textContent = lhb;
                             }
@@ -500,7 +501,7 @@ async function SiteLinks(div, bbid, siteId) {
         for (const ap of apList) {
             targetSiteNames[ap.id] = `${ap.sitename}/${ap.name}`;
         }
-        let table = SetupTable(['Peer Site', 'Cost']);
+        let table = SetupTable(['Access-Point', 'Cost']);
         for (const link of linklist) {
             let row = table.insertRow();
             row.insertCell().textContent = targetSiteNames[link.accesspoint];

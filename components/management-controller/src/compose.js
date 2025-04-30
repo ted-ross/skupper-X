@@ -327,6 +327,9 @@ class InstanceBlock {
     }
 
     siteClassMatches(siteClasses) {
+        if (!siteClasses) {
+            return false;
+        }
         if (this.derivative.siteClasses) {
             for (const left of this.derivative.siteClasses) {
                 for (const right of siteClasses) {

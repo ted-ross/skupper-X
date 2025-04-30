@@ -48,7 +48,7 @@ async function InivitationList(parent, vanid, invites) {
     let panel = document.createElement('div');
     parent.appendChild(panel);
 
-    let layout = SetupTable(['', 'Name', 'Interactive', 'TLS Status', 'Join-Deadline', 'Limit', 'Member-Count', 'Fetch-Count']);
+    let layout = SetupTable(['', 'Name', 'Interactive', 'TLS Status', 'Limit', 'Member-Count', 'Fetch-Count', 'Join-Deadline']);
     for (const invite of invites) {
         let row = layout.insertRow();
         row._iid = invite.id;
@@ -81,10 +81,10 @@ async function InivitationList(parent, vanid, invites) {
         row.insertCell().textContent = invite.name;                         // 1
         row.insertCell().textContent = invite.interactive ? 'yes' : 'no';   // 2
         row.insertCell().textContent;                                       // 3
-        row.insertCell().textContent = invite.joindeadline || '-';          // 4
-        row.insertCell().textContent = invite.instancelimit || 'unlimited'; // 5
+        row.insertCell().textContent = invite.instancelimit || 'unlimited'; // 4
+        row.insertCell().textContent;                                       // 5
         row.insertCell().textContent;                                       // 6
-        row.insertCell().textContent;                                       // 7
+        row.insertCell().textContent = invite.joindeadline ? new Date(invite.joindeadline).toUTCString() : '-';
     }
     panel.appendChild(layout);
 
@@ -96,8 +96,8 @@ async function InivitationList(parent, vanid, invites) {
                     for (const row of layout.rows) {
                         if (row._iid == invite.id) {
                             const lifecycleCell   = row.cells[3];
-                            const memberCountCell = row.cells[6];
-                            const fetchCountCell  = row.cells[7];
+                            const memberCountCell = row.cells[5];
+                            const fetchCountCell  = row.cells[6];
 
                             if (lifecycleCell.textContent != invite.lifecycle) {
                                 lifecycleCell.textContent = invite.lifecycle;
@@ -166,6 +166,8 @@ async function InvitePanel(div, invite, toRemoveOnDelete) {
     });
 
     LayoutRow(layout, ['Invitation', anchor]);
+    LayoutRow(layout, ['Member Classes:', `${invite.memberclasses}`]);
+    LayoutRow(layout, ['Metadata:', invite.requiredmetadata ? `${invite.requiredmetadata}` : '-']);
     LayoutRow(layout, [expireButton]);
     LayoutRow(layout, [deleteButton]);
     div.appendChild(layout);

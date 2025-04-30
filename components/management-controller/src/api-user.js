@@ -236,7 +236,7 @@ const readVanMember = async function(res, mid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT MemberSites.Name, MemberSites.LifeCycle, MemberSites.Failure, ApplicationNetworks.Name as vanname, FiratActiveTime, LastHeartbeat, SiteClass FROM MemberSites " +
+        const result = await client.query("SELECT MemberSites.*, ApplicationNetworks.Name as vanname FROM MemberSites " +
                                           "JOIN ApplicationNetworks ON ApplicationNetworks.Id = MemberSites.MemberOf WHERE MemberSites.Id = $1", [mid]);
         if (result.rowCount == 1) {
             res.status(returnStatus).json(result.rows[0]);
@@ -422,13 +422,13 @@ const readCertificate = async function(req, res) {
 
 const evictMember = async function(mid, req, res) {
     var returnStatus = 501;
-    res.status(returnStatus).send("Not Implemented");
+    res.status(returnStatus).send("Member eviction not implemented");
     return returnStatus;
 }
 
 const evictVan = async function(vid, req, res) {
     var returnStatus = 501;
-    res.status(returnStatus).send("Not Implemented");
+    res.status(returnStatus).send("Network eviction not implemented");
     return returnStatus;
 }
 

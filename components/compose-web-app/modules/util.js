@@ -228,3 +228,35 @@ export async function ConfirmDialog(text, buttonText, asyncAction) {
     modalBox.style.display = 'block';
     return modalBox;
 }
+
+export function TimeAgo(date) {
+    var seconds = Math.floor((new Date() - date) / 1000);
+
+    var interval = Math.floor(seconds / 31536000);
+    if (interval > 0) {
+      return  `${interval} year${interval > 1 ? 's' : ''}`;
+    }
+
+    interval = Math.floor(seconds / 2592000);
+    if (interval > 0) {
+      return `${interval} month${interval > 1 ? 's' : ''}`
+    }
+
+    interval = Math.floor(seconds / 86400);
+    if (interval > 0) {
+      return `${interval} day${interval > 1 ? 's' : ''}`
+    }
+
+    interval = Math.floor(seconds / 3600);
+    if (interval > 0) {
+      return `${interval} hour${interval > 1 ? 's' : ''}`
+    }
+
+    interval = Math.floor(seconds / 60);
+    if (interval > 0) {
+      return `${interval} minute${interval > 1 ? 's' : ''}`
+    }
+
+    interval = Math.floor(seconds);
+    return `${interval} second${interval != 1 ? 's' : ''}`
+  }
