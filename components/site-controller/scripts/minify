@@ -4,7 +4,8 @@ rm -rf app
 mkdir app
 mkdir app/src
 mkdir app/src/common
-uglifyjs index.js -c -m -o app/index.js
+cp index.js app/index.js
+#uglifyjs index.js -c -m -o app/index.js
 for MODULE in api-member ingress links sc-apiserver sc-main claim router-port sync-site-kube hash pod-connector
 do
     cp src/$MODULE.js app/src/$MODULE.js

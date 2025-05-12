@@ -210,28 +210,18 @@ const fetchBackboneSiteCrd = async function (siteId, res) {
             const secret = await kube.LoadSecret(site.objectname);
             let text = '';
             text += siteTemplates.SecretYaml(secret, `tls-client-${site.certificate}`, false);
-            text += "---\n" + yaml.dump(crdTemplates.BackboneSite(site.name));
 
-            //
-            // Generate CRs for router access points
-            //
-            const accessResult = await client.query(
-                "SELECT Id, Lifecycle, Certificate, Kind, BindHost FROM BackboneAccessPoints " +
-                "WHERE InteriorSite = $1", [site.id]
-            );
-            for (const accessPoint of accessResult.rows) {
-                if (accessPoint.lifecycle == 'ready') {
-                    const tlsResult = await client.query("SELECT Id, ObjectName FROM TlsCertificates WHERE Id = $1", [accessPoint.certificate]);
-                    if (tlsResult.rowCount == 1) {
-                        const accessSecret = await kube.LoadSecret(tlsResult.rows[0].objectname);
-                        const tlsName = `tls-server-${tlsResult.rows[0].id}`;
-                        text += "---\n" + siteTemplates.SecretYaml(accessSecret, tlsName, false);
-                        text += "---\n" + yaml.dump(crdTemplates.RouterAccess(accessPoint, tlsName));
-                    } else {
-                        throw(Error(`Unexpected failure to find a TlsCertificate for AccessPoint ${accessPoint.id}`));
-                    }
-                }
+            const links = await sync.GetBackboneLinks_TX(client, siteId);
+            for (const [linkId, linkData] of Object.entries(links)) {
+                text += siteTemplates.LinkConfigMapYaml(linkId, linkData);
             }
+
+            const accessPoints = await sync.GetBackboneAccessPoints_TX(client, siteId, true);
+            for (const [apId, apData] of Object.entries(accessPoints)) {
+                text += siteTemplates.AccessPointConfigMapYaml(apId, apData);
+            }
+
+            text += "---\n" + yaml.dump(crdTemplates.BackboneSite(site.name, siteId));
 
             res.status(returnStatus).send(text);
         } else {
@@ -420,16 +410,24 @@ exports.Start = async function() {
         await fetchInvitationKube(req.params.iid, res);
     });
 
-    app.get(API_PREFIX + 'backbonesite/:bsid/kube', async (req, res) => {
-        await fetchBackboneSiteKube(req.params.bsid, res);
+    app.get(API_PREFIX + 'backbonesite/:bsid/:target', async (req, res) => {
+        switch (req.params.target) {
+            case 'sk2'  : await fetchBackboneSiteCrd(req.params.bsid, res);   break;
+            case 'kube' : await fetchBackboneSiteKube(req.params.bsid, res);  break;
+            default:
+                res.status(400).send(`Unsupported target: ${req.params.target}`);
+        }
     });
 
-    app.get(API_PREFIX + 'backbonesite/:bsid/crd', async (req, res) => {
-        await fetchBackboneSiteCrd(req.params.bsid, res);
-    });
-
-    app.get(API_PREFIX + 'backbonesite/:bsid/accesspoints/kube', async (req, res) => {
-        await fetchBackboneAccessPointsKube(req.params.bsid, res);
+    app.get(API_PREFIX + 'backbonesite/:bsid/accesspoints/:target', async (req, res) => {
+        switch (req.params.target) {
+            case 'sk2'  :
+            case 'kube' :
+                await fetchBackboneAccessPointsKube(req.params.bsid, res);
+                break;
+            default:
+                res.status(400).send(`Unsupported target: ${req.params.target}`);
+        }
     });
 
     app.get(API_PREFIX + 'backbonesite/:bsid/links/outgoing/kube', async (req, res) => {

@@ -286,7 +286,7 @@ async function PopulateDeploymentDiv(site, div) {
     if (site.deploymentstate == 'ready-automatic') {
         let anchor = document.createElement('a');
         anchor.textContent = 'download site configuration';
-        anchor.href = `/api/v1alpha1/backbonesite/${site.id}/kube`;
+        anchor.href = `/api/v1alpha1/backbonesite/${site.id}/${site.targetplatform}`;
         anchor.download = `${site.name}.yaml`;
         LayoutRow(layout, ['Configure Site:', anchor]);
     }
@@ -294,7 +294,7 @@ async function PopulateDeploymentDiv(site, div) {
     if (site.deploymentstate == 'ready-bootstrap') {
         let anchor1 = document.createElement('a');
         anchor1.textContent = 'download bootstrap configuration';
-        anchor1.href = `/api/v1alpha1/backbonesite/${site.id}/kube`;
+        anchor1.href = `/api/v1alpha1/backbonesite/${site.id}/${site.targetplatform}`;
         anchor1.download = `${site.name}.yaml`;
         LayoutRow(layout, ['Bootstrap Step 1:', anchor1]);
 
@@ -353,7 +353,7 @@ async function PopulateDeploymentDiv(site, div) {
 
         let anchor2 = document.createElement('a');
         anchor2.textContent = 'download finishing configuration';
-        anchor2.href = `/api/v1alpha1/backbonesite/${site.id}/accesspoints/kube`;
+        anchor2.href = `/api/v1alpha1/backbonesite/${site.id}/accesspoints/${site.targetplatform}`;
         anchor2.download = `${site.name}-finish.yaml`;
         LayoutRow(layout, ['Bootstrap Step 3:', anchor2]);
     }

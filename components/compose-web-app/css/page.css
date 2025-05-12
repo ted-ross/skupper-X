@@ -104,17 +104,17 @@ ul ul{
     flex-direction: row;
 }
 .tabsheetBody {
-    border-left: 1px solid lightslategray;
-    border-bottom: 1px solid lightslategray;
-    border-right: 1px solid lightslategray;
+    border-left: 2px solid lightslategray;
+    border-bottom: 2px solid lightslategray;
+    border-right: 2px solid lightslategray;
     padding: 5px;
 }
 .tabsheetStart {
-    border-bottom: 1px solid lightslategray;
+    border-bottom: 2px solid lightslategray;
     width: 10px;
 }
 .tabsheetFiller {
-    border-bottom: 1px solid lightslategray;
+    border-bottom: 2px solid lightslategray;
     flex-grow: 1;
 }
 .tabsheetSelected {
@@ -131,6 +131,7 @@ ul ul{
     border-top-left-radius: 5px;
     font-family: monospace;
     font-weight: bold;
+    background-color: lightgrey;
 }
 .tabsheetUnselected {
     padding-top: 2px;
@@ -138,6 +139,7 @@ ul ul{
     padding-left: 10px;
     padding-right: 10px;
     border: 1px solid lightslategray;
+    border-bottom: 2px solid lightslategray;
     text-align: center;
     border-top-right-radius: 5px;
     border-top-left-radius: 5px;

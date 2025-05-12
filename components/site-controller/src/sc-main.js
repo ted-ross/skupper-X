@@ -36,21 +36,23 @@ const Log          = require('./common/log.js').Log;
 const Flush        = require('./common/log.js').Flush;
 const pods         = require('./pod-connector.js');
 
-const VERSION       = '0.1.2';
-const STANDALONE    = (process.env.SKX_STANDALONE || 'NO') == 'YES';
-const BACKBONE_MODE = (process.env.SKX_BACKBONE || 'NO') == 'YES';
-var   site_id       = process.env.SKUPPERX_SITE_ID || 'unknown';
+const VERSION              = '0.1.2';
+const STANDALONE_NAMESPACE = process.env.SKX_STANDALONE_NAMESPACE;
+const BACKBONE_MODE        = (process.env.SKX_BACKBONE || 'NO') == 'YES';
+var   site_id              = process.env.SKUPPERX_SITE_ID || 'unknown';
 
 Log(`Skupper-X Site controller version ${VERSION}`);
-Log(`Backbone   : ${BACKBONE_MODE}`);
-Log(`Standalone : ${STANDALONE}`);
+Log(`Backbone : ${BACKBONE_MODE}`);
+if (STANDALONE_NAMESPACE) {
+    Log(`Standalone Namespace : ${STANDALONE_NAMESPACE}`);
+}
 
 //
 // This is the main program startup sequence.
 //
 exports.Main = async function() {
     try {
-        await kube.Start(k8s, fs, yaml, !STANDALONE);
+        await kube.Start(k8s, fs, yaml, STANDALONE_NAMESPACE);
         await amqp.Start(rhea);
 
         //

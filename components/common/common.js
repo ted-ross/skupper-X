@@ -58,4 +58,4 @@ exports.MEMBER_CONFIG_MAP_NAME = 'skx-member';
 //
 // Skupper CRD constants
 //
-exports.CRD_API_VERSION = 'skupper.io/v1alpha1';
+exports.CRD_API_VERSION = 'skupper.io/v2alpha1';

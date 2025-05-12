@@ -154,7 +154,7 @@ const getInitialHashState = async function() {
 }
 
 const doStateChangeSpec = async function(hash, data) {
-    if (data.format)
+    //if (data.format)
 }
 
 const onNewPeer = async function(_peerId, peerClass) {

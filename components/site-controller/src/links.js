@@ -112,11 +112,11 @@ const sync_listeners = async function() {
         const router_listeners = await router.ListListeners();
 
         //
-        // Build a map of the synchronizable listeners.  Exclude the listeners that are built into the basic configuration.
+        // Build a map of the synchronizable listeners.  Exclude the listeners that we didn't create.
         //
         let listener_map = {};
         for (const rl of router_listeners) {
-            if (rl.name != 'health' && rl.name != 'sidecar') {
+            if (rl.name.indexOf('skx_') == 0) {
                 listener_map[rl.name] = rl;
             }
         }
@@ -148,7 +148,7 @@ const sync_listeners = async function() {
         }
 
         for (const [key, value] of Object.entries(config_listeners)) {
-            const lname = `listener_${value.kind}_${key}`;
+            const lname = `skx_listener_${value.kind}_${key}`;
             if (lname in listener_map) {
                 delete listener_map[lname];
             } else {

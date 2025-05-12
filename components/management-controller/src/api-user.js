@@ -159,6 +159,11 @@ const createInvitation = async function(vid, req, res) {
                 extraVals += `, '${norm.joindeadline}'`;
             }
 
+            if (norm.prefix) {
+                extraCols += ', MemberNamePrefix';
+                extraVals += `, '${norm.prefix}'`;
+            }
+
             //
             // Create the application network
             //

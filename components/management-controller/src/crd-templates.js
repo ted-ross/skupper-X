@@ -21,26 +21,20 @@
 
 const common = require('./common/common.js');
 
-exports.BackboneSite = function(name) {
+exports.BackboneSite = function(name, siteId) {
     return {
         apiVersion : common.CRD_API_VERSION,
         kind       : 'Site',
         metadata : {
             name : name,
-            [common.META_ANNOTATION_SKUPPERX_CONTROLLED] : true,
         },
         spec : {
             linkAccess : 'none',
-            settings   : [
-                {
-                    name  : 'enable-skupperx-management',
-                    value : true,
-                },
-                {
-                    name  : 'skupperx-controller-version',
-                    value : '0.2.0',
-                },
-            ],
+            settings   : {
+                'management-plane'   : 'skupperx',
+                'skupperx-site-id'   : siteId,
+                'skupperx-site-type' : 'backbone',
+            }
         },
     };
 }

@@ -63,7 +63,7 @@ exports.GetBackboneAccessPoints_TX = async function(client, siteId, initialOnly 
     const result = await client.query(
         'SELECT Id, Kind, BindHost FROM BackboneAccessPoints WHERE InteriorSite = $1', [siteId]);
     for (const ap of result.rows) {
-        if (!initialOnly || (ap.kind == 'manage' || ap.kind == 'peer')) {
+        if (!initialOnly || (ap.kind == 'manage')) {
             data[ap.id] = {
                 kind : ap.kind,
             };
