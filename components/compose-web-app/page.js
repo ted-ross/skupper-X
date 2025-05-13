@@ -17,7 +17,7 @@
  under the License.
 */
 
-import { BuildApplicationTable } from "./modules/app.js";
+import { BuildApplicationTable } from "./modules/app_old.js";
 import { BuildBackboneTable } from "./modules/backbone.js";
 import { BuildDeploymentTable } from "./modules/deploy.js";
 import { BuildLibraryTable } from "./modules/library.js";

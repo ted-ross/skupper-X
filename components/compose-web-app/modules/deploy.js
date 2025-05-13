@@ -18,7 +18,7 @@
 */
 
 import { toDeploymentTab } from "../page.js";
-import { AppDetail } from "./app.js";
+import { AppDetail } from "./app_old.js";
 import { FormLayout, SetupTable, TextArea } from "./util.js";
 
 export async function BuildDeploymentTable() {

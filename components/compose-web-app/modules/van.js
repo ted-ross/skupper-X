@@ -19,6 +19,7 @@
 
 import { InvitationsTab } from "./invitations.js";
 import { MembersTab } from "./members.js";
+import { TabSheet } from "./tabsheet.js";
 import { FormLayout, PollTable, SetupTable } from "./util.js";
 import { DetailTab } from "./vandetail.js";
 
@@ -216,57 +217,20 @@ async function VanDetail(vanId) {
     title.textContent = `Virtual Application Network: ${van.name}`;
     panel.appendChild(title);
 
-    let tabsheet      = document.createElement('div');
-    let tsHeader      = document.createElement('div');
-    let tsStart       = document.createElement('div');
-    let tsDetails     = document.createElement('div');
-    let tsInvitations = document.createElement('div');
-    let tsMembers     = document.createElement('div');
-    let tsFiller      = document.createElement('div');
-    let tsBody        = document.createElement('div');
+    let tabsheet = await TabSheet([
+        {
+            title        : 'VAN Details',
+            selectAction : async (panel) => { DetailTab(panel, van); },
+        },
+        {
+            title        : 'Invitations',
+            selectAction : async (panel) => { InvitationsTab(panel, van); },
+        },
+        {
+            title        : 'Members',
+            selectAction : async (panel) => { MembersTab(panel, van); },
+        },
+    ]);
 
-    tabsheet.className      = 'tabsheet';
-    tsHeader.className      = 'tabsheetHeader';
-    tsStart.className       = 'tabsheetStart';
-    tsDetails.className     = 'tabsheetSelected';
-    tsInvitations.className = 'tabsheetUnselected';
-    tsMembers.className     = 'tabsheetUnselected';
-    tsFiller.className      = 'tabsheetFiller';
-    tsBody.className        = 'tabsheetBody';
-
-    tsDetails.textContent     = 'VAN Details';
-    tsInvitations.textContent = 'Invitations';
-    tsMembers.textContent     = 'Members';
-
-    tabsheet.appendChild(tsHeader);
-    tabsheet.appendChild(tsBody);
-    tsHeader.appendChild(tsStart);
-    tsHeader.appendChild(tsDetails);
-    tsHeader.appendChild(tsInvitations);
-    tsHeader.appendChild(tsMembers);
-    tsHeader.appendChild(tsFiller);
     panel.appendChild(tabsheet);
-
-    DetailTab(tsBody, van);
-
-    tsDetails.onclick = async () => {
-        tsDetails.className     = 'tabsheetSelected';
-        tsInvitations.className = 'tabsheetUnselected';
-        tsMembers.className     = 'tabsheetUnselected';
-        await DetailTab(tsBody, van);
-    };
-
-    tsInvitations.onclick = async () => {
-        tsDetails.className     = 'tabsheetUnselected';
-        tsInvitations.className = 'tabsheetSelected';
-        tsMembers.className     = 'tabsheetUnselected';
-        await InvitationsTab(tsBody, van);
-    };
-
-    tsMembers.onclick = async () => {
-        tsDetails.className     = 'tabsheetUnselected';
-        tsInvitations.className = 'tabsheetUnselected';
-        tsMembers.className     = 'tabsheetSelected';
-        await MembersTab(tsBody, van);
-    };
 }
