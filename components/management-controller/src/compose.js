@@ -825,8 +825,10 @@ const importBlock = async function(client, block, blockRevisions) {
         }
     }
 
-    await client.query("INSERT INTO LibraryBlocks (Type, Name, Revision, Format, Inherit, Config, Interfaces, SpecBody) VALUES ($1, $2, $3, 'application/yaml', $4, $5, $6, $7)",
-                       [block.type, name, newRevision, inherit, config, ifObject, bodyObject]);
+    const isComposite = !!block.spec.body && !!block.spec.body.composite;
+
+    await client.query("INSERT INTO LibraryBlocks (Type, Name, Revision, IsComposite, Format, Inherit, Config, Interfaces, SpecBody) VALUES ($1, $2, $3, $4, 'application/yaml', $5, $6, $7, $8)",
+                       [block.type, name, newRevision, isComposite, inherit, config, ifObject, bodyObject]);
     return 1;
 }
 
@@ -1335,16 +1337,69 @@ const postLibraryBlocks = async function(req, res) {
     }
 }
 
+const createLibraryBlock = async function(req, res) {
+    var returnStatus = 201;
+    const client = await db.ClientFromPool();
+    const form = new formidable.IncomingForm();
+    try {
+        await client.query("BEGIN");
+        const [fields, files] = await form.parse(req);
+        const norm = util.ValidateAndNormalizeFields(fields, {
+            'name'      : {type: 'dnsname', optional: false},
+            'type'      : {type: 'string',  optional: false},
+            'provider'  : {type: 'dnsname', optional: true, default: ''},
+            'composite' : {type: 'bool',    optional: true, default: 'false'},
+        });
+
+        const result = await client.query("INSERT INTO LibraryBlocks (Type, Name, Provider, IsComposite) VALUES ($1, $2, $3, $4) RETURNING Id",
+                                          [norm.type, norm.name, norm.provider, norm.composite]);
+        await client.query("COMMIT");
+        if (result.rowCount == 1) {
+            res.status(returnStatus).json(result.rows[0]);
+        } else {
+            returnStatus = 400;
+            res.status(returnStatus).send(result.error);
+        }
+    } catch (error) {
+        returnStatus = 400;
+        res.status(returnStatus).send(error.message);
+        await client.query("ROLLBACK");
+    } finally {
+        client.release();
+    }
+
+    return returnStatus;
+}
+
 const listLibraryBlocks = async function(req, res) {
     var   returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT Id, Type, Name, Revision, Created FROM LibraryBlocks");
+        const result = await client.query("SELECT Id, Type, Name, Provider, IsComposite, Revision, Created FROM LibraryBlocks");
         res.status(returnStatus).json(result.rows);
         await client.query("COMMIT");
     } catch (error) {
         Log(`Exception in listLibraryBlocks: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+}
+
+const getBlockTypes = async function(req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT * FROM BlockTypes");
+        res.status(returnStatus).json(result.rows);
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in getBlockTypes: ${error.message}`);
         await client.query("ROLLBACK");
         returnStatus = 500;
         res.status(returnStatus).send(error.message);
@@ -1920,13 +1975,21 @@ const getSiteData = async function(depid, siteid, req, res) {
 exports.ApiInit = function(app) {
     app.use(express.static('../compose-web-app'));
 
-    app.post(COMPOSE_PREFIX + 'library/blocks', async (req, res) => {
+    app.post(COMPOSE_PREFIX + 'library/blocks/import', async (req, res) => {
         await postLibraryBlocks(req, res);
+    });
+
+    app.post(COMPOSE_PREFIX + 'library/blocks', async (req, res) => {
+        await createLibraryBlock(req, res);
     });
 
     app.get(COMPOSE_PREFIX + 'library/blocks', async (req, res) => {
         await listLibraryBlocks(req, res);
     });
+
+    app.get(COMPOSE_PREFIX + 'library/blocktypes', async (req, res) => {
+        await getBlockTypes(req, res);
+    })
 
     app.get(COMPOSE_PREFIX + 'library/blocks/:blockid', async (req, res) => {
         await getLibraryBlock(req.params.blockid, req, res);

@@ -350,6 +350,7 @@ CREATE TABLE LibraryBlocks (
     Name        text,
     Provider    text,
     Description text,
+    IsComposite boolean,
     Revision    integer     DEFAULT 1,
     Created     timestamptz DEFAULT CURRENT_TIMESTAMP,
     Format      text,

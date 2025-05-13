@@ -36,14 +36,20 @@ export async function TabSheet(tabs) {
     let tabDivs = [];
     for (const tab of tabs) {
         let tabDiv = document.createElement('div');
-        tabDiv.className = 'tabsheetUnselected';
         tabDiv.textContent = tab.title;
-        tabDiv.onclick = async () => {
-            for (const td of tabDivs) {
-                td.className = 'tabsheetUnselected';
+        if (tab.enabled) {
+            tabDiv.className = 'tabsheetUnselected';
+            tabDiv.onclick = async () => {
+                for (const td of tabDivs) {
+                    if (td.className == 'tabsheetSelected') {
+                        td.className = 'tabsheetUnselected';
+                    }
+                }
+                tabDiv.className = 'tabsheetSelected';
+                await tab.selectAction(tsBody);
             }
-            tabDiv.className = 'tabsheetSelected';
-            await tab.selectAction(tsBody);
+        } else {
+            tabDiv.className = 'tabsheetDisabled';
         }
         tabDivs.push(tabDiv);
     }

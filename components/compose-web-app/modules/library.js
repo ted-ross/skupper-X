@@ -17,7 +17,15 @@
  under the License.
 */
 
-import { SetupTable, TextArea } from "./util.js";
+import { toLibraryTab } from "../page.js";
+import { LibraryTestBuild } from "./library-build.js";
+import { LibraryEditComposite } from "./library-composite.js";
+import { LibraryConfiguration } from "./library-config.js";
+import { LibraryEditInterfaces } from "./library-interfaces.js";
+import { LibraryEditSimple } from "./library-simple.js";
+import { LibrarySummary } from "./library-summary.js";
+import { TabSheet } from "./tabsheet.js";
+import { FormLayout, SetupTable, TextArea } from "./util.js";
 
 export async function BuildLibraryTable() {
     const response = await fetch('compose/v1alpha1/library/blocks');
@@ -30,6 +38,11 @@ export async function BuildLibraryTable() {
         }
     }
 
+    let addButton = document.createElement('button');
+    addButton.textContent = 'Add Library Block...';
+    addButton.onclick     = async () => { await BlockForm(); }
+    section.appendChild(addButton);
+
     if (rawdata.length == 0) {
         let empty = document.createElement('i');
         empty.textContent = 'No Library Blocks Found';
@@ -37,20 +50,158 @@ export async function BuildLibraryTable() {
 
         // TODO - Add a create/upload button
     } else {
-        let table = SetupTable(['Name', 'Type', 'Rev', 'Created']);
+        let table = SetupTable(['Name', 'Provider', 'Type', 'Rev', 'Composite', 'Created']);
         for (const item of Object.values(data)) {
             let row = table.insertRow();
             let anchor = document.createElement('a');
             anchor.setAttribute('href', '#');
-            anchor.addEventListener('click', () => { LibDetail(item.id); });
+            anchor.onclick = async () => { await LibTabSheet(item.id); };
             anchor.textContent = item.name;
             row.insertCell().appendChild(anchor);
+            row.insertCell().textContent = item.provider || '-';
             row.insertCell().textContent = item.type.replace('skupperx.io/', '');
             row.insertCell().textContent = item.revision;
+            row.insertCell().textContent = item.iscomposite ? 'Y' : '';
             row.insertCell().textContent = item.created;
         }
         section.appendChild(table);
     }
+}
+
+async function BlockForm() {
+    const btresponse = await fetch('compose/v1alpha1/library/blocktypes');
+    const btdata     = await btresponse.json();
+    let   section    = document.getElementById("sectiondiv");
+
+    section.innerHTML = '<h2>Create a new library block</h2>';
+
+    let errorbox = document.createElement('pre');
+    errorbox.className = 'errorBox';
+
+    let lbName       = document.createElement('input');
+    let btSelector   = document.createElement('select');
+    let provider     = document.createElement('input');
+    let bodySelector = document.createElement('select');
+
+    lbName.type = 'text';
+
+    //
+    // Populate the block-type selector
+    //
+    for (const bt of btdata) {
+        let option = document.createElement('option');
+        option.setAttribute('value', bt.name);
+        option.textContent = bt.name;
+        btSelector.appendChild(option);
+    }
+
+    //
+    // Populate the body type selector
+    //
+    let simple = document.createElement('option');
+    simple.setAttribute('value', 'false');
+    simple.textContent = 'Simple';
+    bodySelector.appendChild(simple);
+
+    let composite = document.createElement('option');
+    composite.setAttribute('value', 'true');
+    composite.textContent = 'Composite';
+    bodySelector.appendChild(composite);
+
+    const form = await FormLayout(
+        //
+        // Form fields
+        //
+        [
+            ['Library Block Name:',  lbName],
+            ['Block Type:',          btSelector],
+            ['Provider (optional):', provider],
+            ['Body Type:',           bodySelector],
+        ],
+
+        //
+        // Submit button behavior
+        //
+        async () => {
+            const response = await fetch('compose/v1alpha1/library/blocks', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name      : lbName.value,
+                    type      : btSelector.value,
+                    provider  : provider.value,
+                    composite : bodySelector.value,
+                }),
+            });
+        
+            if (response.ok) {
+                let responsedata = await response.json();
+                await LibTabSheet(responsedata.id);
+            } else {
+                errorbox.textContent = await response.text();
+            }
+        },
+
+        //
+        // Cancel button behavior
+        //
+        async () => { await toLibraryTab(); }
+    );
+
+    section.appendChild(form);
+    section.appendChild(errorbox);
+    lbName.focus();
+}
+
+async function LibTabSheet(lbid) {
+    const section  = document.getElementById("sectiondiv");
+    let   panel    = document.createElement('div');
+    section.innerHTML = '';
+    section.appendChild(panel);
+
+    const result = await fetch(`/compose/v1alpha1/library/blocks/${lbid}`);
+    const block  = await result.json();
+
+    let title = document.createElement('b');
+    title.textContent = `Library Block: ${block.name}`;
+    panel.appendChild(title);
+
+    let tabsheet = await TabSheet([
+        {
+            title        : 'Block Summary',
+            selectAction : async (panel) => { LibrarySummary(panel, block); },
+            enabled      : true,
+        },
+        {
+            title        : 'Configuration',
+            selectAction : async (panel) => { LibraryConfiguration(panel, block); },
+            enabled      : true,
+        },
+        {
+            title        : 'Edit Interfaces',
+            selectAction : async (panel) => { LibraryEditInterfaces(panel, block); },
+            enabled      : true,
+        },
+        {
+            title        : 'Edit Simple Body',
+            selectAction : async (panel) => { LibraryEditSimple(panel, block); },
+            enabled      : !block.iscomposite,
+        },
+        {
+            title        : 'Edit Composite Body',
+            selectAction : async (panel) => { LibraryEditComposite(panel, block); },
+            enabled      : block.iscomposite,
+        },
+        {
+            title        : 'Test Build',
+            selectAction : async (panel) => { LibraryTestBuild(panel, block); },
+            enabled      : block.iscomposite,
+        },
+    ]);
+
+    panel.appendChild(tabsheet);
 }
 
 export async function LibDetail(lbid) {

@@ -72,28 +72,32 @@ export async function FormLayout(items, action, cancel) {
         cell.appendChild(element);
     }
 
-    if (action) {
-        //
-        // Put the Submit button in the right column
-        //
+    if (action || cancel) {
         let row = layout.insertRow();
         row.insertCell();
         let cell = row.insertCell();
-        let submit = document.createElement('button');
-        submit.textContent = 'Submit';
-        submit.addEventListener('click', action);
-        cell.appendChild(submit);
+        if (action) {
+            //
+            // Put the Submit button in the right column
+            //
+            let submit = document.createElement('button');
+            submit.textContent = 'Submit';
+            submit.addEventListener('click', action);
+            cell.appendChild(submit);
+        }
 
-        //
-        // Put the Cancel button in the right column
-        //
-        let cancelButton = document.createElement('button');
-        cancelButton.textContent = 'Cancel';
-        cancelButton.addEventListener('click', cancel);
-        let nobr = document.createElement('i');
-        nobr.textContent = ' ';
-        cell.appendChild(nobr);
-        cell.appendChild(cancelButton);
+        if (cancel) {
+            //
+            // Put the Cancel button in the right column
+            //
+            let cancelButton = document.createElement('button');
+            cancelButton.textContent = 'Cancel';
+            cancelButton.addEventListener('click', cancel);
+            let nobr = document.createElement('i');
+            nobr.textContent = ' ';
+            cell.appendChild(nobr);
+            cell.appendChild(cancelButton);
+        }
     }
 
     return layout;
