@@ -221,14 +221,17 @@ async function VanDetail(vanId) {
         {
             title        : 'VAN Details',
             selectAction : async (panel) => { DetailTab(panel, van); },
+            enabled      : true,
         },
         {
             title        : 'Invitations',
             selectAction : async (panel) => { InvitationsTab(panel, van); },
+            enabled      : true,
         },
         {
             title        : 'Members',
             selectAction : async (panel) => { MembersTab(panel, van); },
+            enabled      : true,
         },
     ]);
 

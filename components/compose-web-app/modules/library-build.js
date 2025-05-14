@@ -18,5 +18,5 @@
 */
 
 export async function LibraryTestBuild(panel, block) {
-    panel.innerHtml = '';
+    panel.innerHTML = '';
 }

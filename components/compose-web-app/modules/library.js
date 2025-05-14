@@ -40,8 +40,10 @@ export async function BuildLibraryTable() {
 
     let addButton = document.createElement('button');
     addButton.textContent = 'Add Library Block...';
+    addButton.style.marginBottom = '5px';
     addButton.onclick     = async () => { await BlockForm(); }
     section.appendChild(addButton);
+    section.appendChild(document.createElement('br'));
 
     if (rawdata.length == 0) {
         let empty = document.createElement('i');
@@ -171,27 +173,27 @@ async function LibTabSheet(lbid) {
     let tabsheet = await TabSheet([
         {
             title        : 'Block Summary',
-            selectAction : async (panel) => { LibrarySummary(panel, block); },
+            selectAction : async (body) => { LibrarySummary(body, block); },
             enabled      : true,
         },
         {
             title        : 'Configuration',
-            selectAction : async (panel) => { LibraryConfiguration(panel, block); },
+            selectAction : async (body) => { LibraryConfiguration(body, block); },
             enabled      : true,
         },
         {
             title        : 'Edit Interfaces',
-            selectAction : async (panel) => { LibraryEditInterfaces(panel, block); },
+            selectAction : async (body) => { LibraryEditInterfaces(body, block); },
             enabled      : true,
         },
         {
             title        : 'Edit Simple Body',
-            selectAction : async (panel) => { LibraryEditSimple(panel, block); },
+            selectAction : async (body) => { LibraryEditSimple(body, block); },
             enabled      : !block.iscomposite,
         },
         {
             title        : 'Edit Composite Body',
-            selectAction : async (panel) => { LibraryEditComposite(panel, block); },
+            selectAction : async (body) => { LibraryEditComposite(body, block); },
             enabled      : block.iscomposite,
         },
         {

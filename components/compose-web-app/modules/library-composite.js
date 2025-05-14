@@ -18,5 +18,5 @@
 */
 
 export async function LibraryEditComposite(panel, block) {
-    panel.innerHtml = '';
+    panel.innerHTML = '';
 }

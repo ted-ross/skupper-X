@@ -58,6 +58,14 @@ spec:
       type: bool
       description: "Generate network policy to match the connector"
       default: true
+    vanFlowTransport:
+      type: bool
+      description: "Generate vanFlow transport events"
+      default: false
+    vanFlowProtocol:
+      type: bool
+      description: "Generate vanFlow protocol events"
+      default: false
   interfaces:
   - name: acceptor
     role: accept
@@ -165,9 +173,15 @@ metadata:
 type: skupperx.io/component
 spec:
   config:
-    replicas: 2
-    selectorKey: application
-    selectorValue: nearestprime
+    replicas:
+      type: integer
+      default: 1
+    selectorKey:
+      type: string
+      default: application
+    selectorValue:
+      type: string
+      default: nearestprime
   interfaces:
   - name: postgres
     blockType: postgres-balanced
@@ -394,6 +408,8 @@ spec:
         - hq
       - name: worker
         block: nearestprime
+        config:
+          replicas: 2
         siteClasses:
         - worksite
         bindings:

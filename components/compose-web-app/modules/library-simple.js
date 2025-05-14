@@ -18,5 +18,5 @@
 */
 
 export async function LibraryEditSimple(panel, block) {
-    panel.innerHtml = '';
+    panel.innerHTML = '';
 }

@@ -1414,7 +1414,7 @@ const getLibraryBlock = async function(blockid, req, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT * FROM LibraryBlocks WHERE Id = $1", [blockid]);
+        const result = await client.query("SELECT Id, Type, Name, Provider, IsComposite, Revision, Created FROM LibraryBlocks WHERE Id = $1", [blockid]);
         if (result.rowCount == 1) {
             res.status(returnStatus).json(result.rows[0]);
         } else {
@@ -1424,6 +1424,31 @@ const getLibraryBlock = async function(blockid, req, res) {
         await client.query("COMMIT");
     } catch (error) {
         Log(`Exception in getLibraryBlock: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+}
+
+const getLibraryBlockSection = async function(blockid, section, req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query(`SELECT ${section} as data FROM LibraryBlocks WHERE Id = $1`, [blockid]);
+        if (result.rowCount == 1) {
+            const jdata = yaml.load(result.rows[0].data);
+            res.status(returnStatus).json(jdata);
+        } else {
+            returnStatus = 404;
+            res.status(returnStatus).send('Not Found');
+        }
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in getLibraryBlockSection(${section}): ${error.message}`);
         await client.query("ROLLBACK");
         returnStatus = 500;
         res.status(returnStatus).send(error.message);
@@ -1993,6 +2018,18 @@ exports.ApiInit = function(app) {
 
     app.get(COMPOSE_PREFIX + 'library/blocks/:blockid', async (req, res) => {
         await getLibraryBlock(req.params.blockid, req, res);
+    });
+
+    app.get(COMPOSE_PREFIX + 'library/blocks/:blockid/config', async (req, res) => {
+        await getLibraryBlockSection(req.params.blockid, 'Config', req, res);
+    });
+
+    app.get(COMPOSE_PREFIX + 'library/blocks/:blockid/interfaces', async (req, res) => {
+        await getLibraryBlockSection(req.params.blockid, 'Interfaces', req, res);
+    });
+
+    app.get(COMPOSE_PREFIX + 'library/blocks/:blockid/body', async (req, res) => {
+        await getLibraryBlockSection(req.params.blockid, 'SpecBody', req, res);
     });
 
     app.delete(COMPOSE_PREFIX + 'library/blocks/:blockid', async (req, res) => {

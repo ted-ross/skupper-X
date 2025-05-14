@@ -104,9 +104,6 @@ ul ul{
     flex-direction: row;
 }
 .tabsheetBody {
-    border-left: 2px solid lightslategray;
-    border-bottom: 2px solid lightslategray;
-    border-right: 2px solid lightslategray;
     padding: 5px;
 }
 .tabsheetStart {
