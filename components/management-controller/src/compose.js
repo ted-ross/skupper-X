@@ -1396,7 +1396,15 @@ const getBlockTypes = async function(req, res) {
     try {
         await client.query("BEGIN");
         const result = await client.query("SELECT * FROM BlockTypes");
-        res.status(returnStatus).json(result.rows);
+        let btmap = {};
+        for (const row of result.rows) {
+            btmap[row.name] = {
+                allownorth     : row.allownorth,
+                allowsouth     : row.allowsouth,
+                allocatetosite : row.allocatetosite,
+            };
+        }
+        res.status(returnStatus).json(btmap);
         await client.query("COMMIT");
     } catch (error) {
         Log(`Exception in getBlockTypes: ${error.message}`);

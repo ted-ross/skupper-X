@@ -90,10 +90,10 @@ async function BlockForm() {
     //
     // Populate the block-type selector
     //
-    for (const bt of btdata) {
+    for (const btname of Object.keys(btdata)) {
         let option = document.createElement('option');
-        option.setAttribute('value', bt.name);
-        option.textContent = bt.name;
+        option.setAttribute('value', btname);
+        option.textContent = btname;
         btSelector.appendChild(option);
     }
 

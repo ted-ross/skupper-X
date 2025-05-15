@@ -72,81 +72,73 @@ spec:
   - name: connector
     role: connect
   body:
-    kubeTemplates:
-    - affinity: acceptor
-      template:
-      - apiVersion: skupper.io/v2alpha1
-        kind: Connector
-        metadata:
-          name: connector-${ident}
-        spec:
-          type: tcp
-          selector: ${peerblock:selectorKey}=${peerblock:selectorValue}
-          port: ${peerif:port}
-          routingKey: ${keyPrefix}${name}
-      - apiVersion: networking.k8s.io/v1
-        kind: NetworkPolicy
-        metadata:
-          name: ingress-policy-${ident}
-        spec:
-          podSelector:
-            matchLabels:
-              ${peerblock:selectorKey} : ${peerblock:selectorValue}
-          policyTypes:
-          - Ingress
-          ingress:
-          - from:
-            - podSelector:
-                matchLabels:
-                  skupper.io/component: router
-            ports:
-            - protocol: TCP
-              port: ${peerif:port}
-    - affinity: connector
-      template:
-      - apiVersion: skupper.io/v2alpha1
-        kind: Listener
-        metadata:
-          name: listener-${ident}
-        spec:
-          type: tcp
-          host: ${peerif:host}
-          port: ${peerif:port}
-          routingKey: ${keyPrefix}${name}
-      - apiVersion: networking.k8s.io/v1
-        kind: NetworkPolicy
-        metadata:
-          name: egress-policy-${ident}
-        spec:
-          podSelector:
-            matchLabels:
-              ${peerblock:selectorKey} : ${peerblock:selectorValue}
-          policyTypes:
-          - Egress
-          egress:
-          - to:
-            - podSelector:
-                matchLabels:
-                  skupper.io/component: router
-            ports:
-            - protocol: TCP
-              port: ${peerif:port}
-
----
-apiVersion: skupperx.io/compose/v1alpha1
-kind: Block
-metadata:
-  name: library/http-safe
-type: skupperx.io/connector
-spec:
-  inherit:
-    base: library/tcp-connection
-    transformOverwrite:
-      keyPrefix: http-safe
-      protocol: http
-      allow:
-      - segment: /
-        methods: [GET, HEAD, OPTIONS, TRACE]
+    simple:
+    - affinity: [acceptor]
+      targetPlatforms: [sk2]
+      description: "Interface to Skupper-v2 acceptors on kubernetes sites"
+      template: |
+        - apiVersion: skupper.io/v2alpha1
+          kind: Connector
+          metadata:
+            name: connector-{{.ident}}
+          spec:
+            type: tcp
+            selector: {{$affblock.selectorKey}}={{$affblock.selectorValue}}
+            port: {{$affif.port}}
+            routingKey: {{.keyPrefix}}{{.name}}
+        {{- if .networkPolicyOnAcceptor}}
+        - apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: ingress-policy-{{.ident}}
+          spec:
+            podSelector:
+              matchLabels:
+                {{$affblock.selectorKey}} : {{$affblock.selectorValue}}
+            policyTypes:
+            - Ingress
+            ingress:
+            - from:
+              - podSelector:
+                  matchLabels:
+                    skupper.io/component: router
+              ports:
+              - protocol: TCP
+                port: {{$affif.port}}
+        {{end}}
+    - affinity: [connector]
+      targetPlatforms: [sk2]
+      description: "Interface to Skupper-v2 connectors on kubernetes sites"
+      template: |
+        - apiVersion: skupper.io/v2alpha1
+          kind: Listener
+          metadata:
+            name: listener-{{.ident}}
+          spec:
+            type: tcp
+            host: {{$affif.host}}
+            port: {{$affif.port}}
+            routingKey: {{.keyPrefix}}{{.name}}
+        {{- if .networkPolicyOnConnector}}
+        - apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: egress-policy-{{.ident}}
+          spec:
+            podSelector:
+              matchLabels:
+                {{$affblock.selectorKey} : {{$affblock.selectorValue}}
+            policyTypes:
+            - Egress
+            egress:
+            - to:
+              - podSelector:
+                  matchLabels:
+                    skupper.io/component: router
+              ports:
+              - protocol: TCP
+                port: {{$affif.port}}
+        {{end}}
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
@@ -193,47 +185,48 @@ spec:
     role: accept
     port: 8000
   body:
-    kubeTemplates:
-    - template:
-      - apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: nearestprime-${ident}
-        spec:
-          replicas: ${replicas}
-          selector:
-            matchLabels:
-              ${selectorKey}: ${selectorValue}
-          template:
-            metadata:
-              labels:
-                ${selectorKey}: ${selectorValue}
-            spec:
-              containers:
-              - name: nearestprime
-                image: quay.io/tedlross/nearestprime:latest
-                imagePullPolicy: Always
-                livenessProbe:
-                  failureThreshold: 3
-                  httpGet:
-                    path: /healthz
-                    port: ${localif.control:port}
-                    scheme: HTTP
-                  initialDelaySeconds: 60
-                  periodSeconds: 10
-                  successThreshold: 1
-                  timeoutSeconds: 5
-                ports:
-                - containerPort: ${localif.control:port}
-                env:
-                - name: DDW_USER
-                  value: access
-                - name: DDW_PASSWORD
-                  value: demopass
-                - name: DDW_HOST
-                  value: ${localif.postgres:host}
-                - name: DDW_SITENAME
-                  value: ${site:name}
+    simple:
+    - targetPlatforms: [sk2, podman-sk2]
+      template: |
+        - apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: nearestprime-{{.ident}}
+          spec:
+            replicas: {{.replicas}}
+            selector:
+              matchLabels:
+                {{.selectorKey}}: {{.selectorValue}}
+            template:
+              metadata:
+                labels:
+                  {{.selectorKey}}: {{.selectorValue}}
+              spec:
+                containers:
+                - name: nearestprime
+                  image: quay.io/tedlross/nearestprime:latest
+                  imagePullPolicy: Always
+                  livenessProbe:
+                    failureThreshold: 3
+                    httpGet:
+                      path: /healthz
+                      port: {{$localif.control.port}}
+                      scheme: HTTP
+                    initialDelaySeconds: 60
+                    periodSeconds: 10
+                    successThreshold: 1
+                    timeoutSeconds: 5
+                  ports:
+                  - containerPort: {{$localif.control.port}}
+                  env:
+                  - name: DDW_USER
+                    value: access
+                  - name: DDW_PASSWORD
+                    value: demopass
+                  - name: DDW_HOST
+                    value: {{$localif.postgres.host}}
+                  - name: DDW_SITENAME
+                    value: {{$site.name}}
 
 ##
 ## PostgresSql Database

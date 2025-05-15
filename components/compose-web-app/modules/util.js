@@ -55,7 +55,14 @@ export function TextArea(item, title, section, cols=60) {
 // action: function
 // cancel: function
 //
-export async function FormLayout(items, action, cancel) {
+export async function FormLayout(items, action, cancel, submitText, cancelText) {
+    if (!submitText) {
+        submitText = 'Submit';
+    }
+    if (!cancelText) {
+        cancelText = 'Cancel';
+    }
+
     //
     // Use a table as a layout tool for the form.
     // Captions right-justified on the left, form-inputs left-justified on the right.
@@ -81,7 +88,7 @@ export async function FormLayout(items, action, cancel) {
             // Put the Submit button in the right column
             //
             let submit = document.createElement('button');
-            submit.textContent = 'Submit';
+            submit.textContent = submitText;
             submit.addEventListener('click', action);
             cell.appendChild(submit);
         }
@@ -91,7 +98,7 @@ export async function FormLayout(items, action, cancel) {
             // Put the Cancel button in the right column
             //
             let cancelButton = document.createElement('button');
-            cancelButton.textContent = 'Cancel';
+            cancelButton.textContent = cancelText;
             cancelButton.addEventListener('click', cancel);
             let nobr = document.createElement('i');
             nobr.textContent = ' ';
@@ -263,4 +270,42 @@ export function TimeAgo(date) {
 
     interval = Math.floor(seconds);
     return `${interval} second${interval != 1 ? 's' : ''}`
-  }
+}
+
+export function ExpandableRow(layout, trackedObject, columnCount, expandAction, insertPoint) {
+    if (!insertPoint) {
+        insertPoint = -1;
+    }
+    let row = layout.insertRow(insertPoint);
+    row.className = 'list';
+    trackedObject._row      = row;
+    trackedObject._expanded = false;
+    let open = document.createElement('img');
+    open.src = 'images/angle-right.svg';
+    open.alt = 'open';
+    open.setAttribute('width', '12');
+    open.setAttribute('height', '12');
+    open.addEventListener('click', async () => {
+        trackedObject._expanded = !trackedObject._expanded;
+        open.src = trackedObject._expanded ? 'images/angle-down.svg' : 'images/angle-right.svg';
+        if (trackedObject._expanded) {
+            let subrow  = layout.insertRow(trackedObject._row.rowIndex + 1);
+            subrow.insertCell();
+            let subcell = subrow.insertCell();
+            subcell.setAttribute('colspan', `${columnCount}`);
+
+            let subRowDiv = document.createElement('div');
+            subRowDiv.className = 'subtable';
+            subcell.appendChild(subRowDiv);
+            await expandAction(subRowDiv, [subrow], () => {
+                trackedObject._expanded = !trackedObject._expanded;
+                open.src = trackedObject._expanded ? 'images/angle-down.svg' : 'images/angle-right.svg';
+                layout.deleteRow(trackedObject._row.rowIndex + 1);
+            });
+        } else {
+            layout.deleteRow(trackedObject._row.rowIndex + 1);
+        }
+    });
+    row.insertCell().appendChild(open);
+    return row;
+}

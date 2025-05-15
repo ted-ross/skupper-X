@@ -418,9 +418,11 @@ INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 
 INSERT INTO WebSessions (Id, UserId) VALUES (gen_random_uuid(), 1);
 
 INSERT INTO TargetPlatforms (ShortName, LongName) VALUES
-    ('sk2',        'Kubernetes with Skupper v2'),
-    ('kube',       'Kubernetes without Skupper'),
-    ('podman-sk2', 'Podman with Skupper v2');
+    ('sk2',        'Kubernetes+SkupperV2'),
+    ('kube',       'Kubernetes'),
+    ('podman-sk2', 'Podman+SkupperV2'),
+    ('docker-sk2', 'Docker+SkupperV2'),
+    ('linux-sk2',  'Linux+SkupperV2');
 
 INSERT INTO BlockTypes (Name, AllowNorth, AllowSouth, AllocateToSite) VALUES
     ('skupperx.io/container', false, false, false),
