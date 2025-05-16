@@ -391,7 +391,7 @@ class LibraryBlock {
     }
 
     isComposite() {
-        return !!this.item.spec.body.composite;
+        return this.item.spec.bodyStyle == 'composite';
     }
 
     overWriteSpec(updated) {
@@ -825,10 +825,8 @@ const importBlock = async function(client, block, blockRevisions) {
         }
     }
 
-    const isComposite = !!block.spec.body && !!block.spec.body.composite;
-
-    await client.query("INSERT INTO LibraryBlocks (Type, Name, Revision, IsComposite, Format, Inherit, Config, Interfaces, SpecBody) VALUES ($1, $2, $3, $4, 'application/yaml', $5, $6, $7, $8)",
-                       [block.type, name, newRevision, isComposite, inherit, config, ifObject, bodyObject]);
+    await client.query("INSERT INTO LibraryBlocks (Type, Name, Revision, BodyStyle, Format, Inherit, Config, Interfaces, SpecBody) VALUES ($1, $2, $3, $4, 'application/yaml', $5, $6, $7, $8)",
+                       [block.type, name, newRevision, block.spec.bodyStyle, inherit, config, ifObject, bodyObject]);
     return 1;
 }
 
@@ -888,8 +886,8 @@ const loadLibraryBlock = async function(client, library, blockName, buildLog) {
     // If the body of the desired block references other blocks (it's composite or derived), load those into the map as well.
     //
     const body = yaml.load(revisionBlock.specbody);
-    if (body && typeof(body.composite) == "object") {
-        for (const subblock of body.composite.blocks) {
+    if (body && revisionBlock.bodystyle == 'composite') {
+        for (const subblock of body.blocks) {
             await loadLibraryBlock(client, library, subblock.block, buildLog)
         }
     }
@@ -1347,12 +1345,12 @@ const createLibraryBlock = async function(req, res) {
         const norm = util.ValidateAndNormalizeFields(fields, {
             'name'      : {type: 'dnsname', optional: false},
             'type'      : {type: 'string',  optional: false},
+            'bodystyle' : {type: 'string',  optional: false},
             'provider'  : {type: 'dnsname', optional: true, default: ''},
-            'composite' : {type: 'bool',    optional: true, default: 'false'},
         });
 
-        const result = await client.query("INSERT INTO LibraryBlocks (Type, Name, Provider, IsComposite) VALUES ($1, $2, $3, $4) RETURNING Id",
-                                          [norm.type, norm.name, norm.provider, norm.composite]);
+        const result = await client.query("INSERT INTO LibraryBlocks (Type, Name, Provider, BodyStyle) VALUES ($1, $2, $3, $4) RETURNING Id",
+                                          [norm.type, norm.name, norm.provider, norm.bodystyle]);
         await client.query("COMMIT");
         if (result.rowCount == 1) {
             res.status(returnStatus).json(result.rows[0]);
@@ -1376,7 +1374,7 @@ const listLibraryBlocks = async function(req, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT Id, Type, Name, Provider, IsComposite, Revision, Created FROM LibraryBlocks");
+        const result = await client.query("SELECT Id, Type, Name, Provider, BodyStyle, Revision, Created FROM LibraryBlocks");
         res.status(returnStatus).json(result.rows);
         await client.query("COMMIT");
     } catch (error) {
@@ -1422,7 +1420,7 @@ const getLibraryBlock = async function(blockid, req, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT Id, Type, Name, Provider, IsComposite, Revision, Created FROM LibraryBlocks WHERE Id = $1", [blockid]);
+        const result = await client.query("SELECT Id, Type, Name, Provider, BodyStyle, Revision, Created FROM LibraryBlocks WHERE Id = $1", [blockid]);
         if (result.rowCount == 1) {
             res.status(returnStatus).json(result.rows[0]);
         } else {

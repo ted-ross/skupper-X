@@ -327,6 +327,8 @@ CREATE TYPE ApplicationLifecycle AS ENUM ('created', 'build-warnings', 'build-er
 
 CREATE TYPE DeploymentLifecycle AS ENUM ('created', 'deploy-warnings', 'deploy-errors', 'deployed');
 
+CREATE TYPE BlockBodyStyle AS ENUM ('simple', 'composite');
+
 --
 -- Block Types
 --
@@ -350,7 +352,7 @@ CREATE TABLE LibraryBlocks (
     Name        text,
     Provider    text,
     Description text,
-    IsComposite boolean,
+    BodyStyle   BlockBodyStyle,
     Revision    integer     DEFAULT 1,
     Created     timestamptz DEFAULT CURRENT_TIMESTAMP,
     Format      text,
@@ -418,8 +420,8 @@ INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 
 INSERT INTO WebSessions (Id, UserId) VALUES (gen_random_uuid(), 1);
 
 INSERT INTO TargetPlatforms (ShortName, LongName) VALUES
-    ('sk2',        'Kubernetes+SkupperV2'),
     ('kube',       'Kubernetes'),
+    ('sk2',        'Kubernetes+SkupperV2'),
     ('podman-sk2', 'Podman+SkupperV2'),
     ('docker-sk2', 'Docker+SkupperV2'),
     ('linux-sk2',  'Linux+SkupperV2');

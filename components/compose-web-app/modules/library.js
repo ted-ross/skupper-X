@@ -63,7 +63,7 @@ export async function BuildLibraryTable() {
             row.insertCell().textContent = item.provider || '-';
             row.insertCell().textContent = item.type.replace('skupperx.io/', '');
             row.insertCell().textContent = item.revision;
-            row.insertCell().textContent = item.iscomposite ? 'Composite' : 'Simple';
+            row.insertCell().textContent = item.bodystyle;
             row.insertCell().textContent = item.created;
         }
         section.appendChild(table);
@@ -101,12 +101,12 @@ async function BlockForm() {
     // Populate the body type selector
     //
     let simple = document.createElement('option');
-    simple.setAttribute('value', 'false');
+    simple.setAttribute('value', 'simple');
     simple.textContent = 'Simple';
     bodySelector.appendChild(simple);
 
     let composite = document.createElement('option');
-    composite.setAttribute('value', 'true');
+    composite.setAttribute('value', 'composite');
     composite.textContent = 'Composite';
     bodySelector.appendChild(composite);
 
@@ -192,7 +192,7 @@ async function LibTabSheet(lbid) {
             title        : 'Body',
             enabled      : true,
             selectAction : async (body) => {
-                if (block.iscomposite) {
+                if (block.bodystyle == 'composite') {
                     LibraryEditComposite(body, block);
                 } else {
                     LibraryEditSimple(body, block);
@@ -201,7 +201,7 @@ async function LibTabSheet(lbid) {
         },
         {
             title        : 'Test Build',
-            enabled      : block.iscomposite,
+            enabled      : block.bodystyle == 'composite',
             selectAction : async (panel) => { LibraryTestBuild(panel, block); },
         },
     ]);

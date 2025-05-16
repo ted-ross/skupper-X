@@ -48,7 +48,7 @@ export async function LibraryEditSimple(panel, block) {
     }
 
     let layout = SetupTable(columns);
-    for (const template of simpleBody.simple) {
+    for (const template of simpleBody) {
         let row = ExpandableRow(
             layout,
             colCount,
@@ -76,7 +76,7 @@ export async function LibraryEditSimple(panel, block) {
             description     : "",
             template        : "",
         };
-        simpleBody.simple.push(newTemplate);
+        simpleBody.push(newTemplate);
         let newRow = ExpandableRow(
             layout,
             colCount,
