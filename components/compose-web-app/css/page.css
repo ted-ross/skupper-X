@@ -194,3 +194,25 @@ ul ul{
     text-decoration: none;
     cursor: pointer;
 }
+
+/* Multi-Select Checkbox */
+.multi-select-list {
+    display: table;
+    width: auto;
+    background-color: lightgray;
+    border-style: none;
+}
+.multi-select-row
+{
+    display: table-row;
+    width: auto;
+    border-style: none;
+}
+.multi-select-cell
+{
+    float: left;
+    display: table-column;
+    width: auto;
+    border-style: none;
+    padding-right: 5px;
+}

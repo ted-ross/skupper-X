@@ -18,5 +18,5 @@
 */
 
 export async function LibraryEditComposite(panel, block) {
-    panel.innerHTML = '';
+    panel.innerHTML = '<h3>Body Style: Composite</h3>';
 }

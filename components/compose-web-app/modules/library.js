@@ -28,7 +28,7 @@ import { TabSheet } from "./tabsheet.js";
 import { FormLayout, SetupTable, TextArea } from "./util.js";
 
 export async function BuildLibraryTable() {
-    const response = await fetch('compose/v1alpha1/library/blocks');
+    const response = await fetch('/compose/v1alpha1/library/blocks');
     const rawdata  = await response.json();
     let section    = document.getElementById("sectiondiv");
     let data = {};
@@ -52,7 +52,7 @@ export async function BuildLibraryTable() {
 
         // TODO - Add a create/upload button
     } else {
-        let table = SetupTable(['Name', 'Provider', 'Type', 'Rev', 'Composite', 'Created']);
+        let table = SetupTable(['Name', 'Provider', 'Type', 'Rev', 'Body Style', 'Created']);
         for (const item of Object.values(data)) {
             let row = table.insertRow();
             let anchor = document.createElement('a');
@@ -63,7 +63,7 @@ export async function BuildLibraryTable() {
             row.insertCell().textContent = item.provider || '-';
             row.insertCell().textContent = item.type.replace('skupperx.io/', '');
             row.insertCell().textContent = item.revision;
-            row.insertCell().textContent = item.iscomposite ? 'Y' : '';
+            row.insertCell().textContent = item.iscomposite ? 'Composite' : 'Simple';
             row.insertCell().textContent = item.created;
         }
         section.appendChild(table);
@@ -71,7 +71,7 @@ export async function BuildLibraryTable() {
 }
 
 async function BlockForm() {
-    const btresponse = await fetch('compose/v1alpha1/library/blocktypes');
+    const btresponse = await fetch('/compose/v1alpha1/library/blocktypes');
     const btdata     = await btresponse.json();
     let   section    = document.getElementById("sectiondiv");
 
@@ -125,7 +125,8 @@ async function BlockForm() {
         // Submit button behavior
         //
         async () => {
-            const response = await fetch('compose/v1alpha1/library/blocks', {
+            console.log('Submit Button!');
+            const response = await fetch('/compose/v1alpha1/library/blocks', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -137,6 +138,7 @@ async function BlockForm() {
                     composite : bodySelector.value,
                 }),
             });
+            console.log('   fetch completed');
         
             if (response.ok) {
                 let responsedata = await response.json();
@@ -173,33 +175,34 @@ async function LibTabSheet(lbid) {
     let tabsheet = await TabSheet([
         {
             title        : 'Block Summary',
-            selectAction : async (body) => { LibrarySummary(body, block); },
             enabled      : true,
+            selectAction : async (body) => { LibrarySummary(body, block); },
         },
         {
             title        : 'Configuration',
+            enabled      : true,
             selectAction : async (body) => { LibraryConfiguration(body, block); },
-            enabled      : true,
         },
         {
-            title        : 'Edit Interfaces',
+            title        : 'Interfaces',
+            enabled      : true,
             selectAction : async (body) => { LibraryEditInterfaces(body, block); },
+        },
+        {
+            title        : 'Body',
             enabled      : true,
-        },
-        {
-            title        : 'Edit Simple Body',
-            selectAction : async (body) => { LibraryEditSimple(body, block); },
-            enabled      : !block.iscomposite,
-        },
-        {
-            title        : 'Edit Composite Body',
-            selectAction : async (body) => { LibraryEditComposite(body, block); },
-            enabled      : block.iscomposite,
+            selectAction : async (body) => {
+                if (block.iscomposite) {
+                    LibraryEditComposite(body, block);
+                } else {
+                    LibraryEditSimple(body, block);
+                }
+            },
         },
         {
             title        : 'Test Build',
-            selectAction : async (panel) => { LibraryTestBuild(panel, block); },
             enabled      : block.iscomposite,
+            selectAction : async (panel) => { LibraryTestBuild(panel, block); },
         },
     ]);
 
@@ -207,7 +210,7 @@ async function LibTabSheet(lbid) {
 }
 
 export async function LibDetail(lbid) {
-    const response = await fetch(`compose/v1alpha1/library/blocks/${lbid}`);
+    const response = await fetch(`/compose/v1alpha1/library/blocks/${lbid}`);
     const data = await response.json();
     let section = document.getElementById("sectiondiv");
     section.innerHTML = `<h2>${data.name};${data.revision}</h2>`;

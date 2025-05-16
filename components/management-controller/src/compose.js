@@ -1466,6 +1466,26 @@ const getLibraryBlockSection = async function(blockid, section, req, res) {
     return returnStatus;
 }
 
+const putLibraryBlockSection = async function(blockid, section, req, res) {
+    var   returnStatus = 200;
+    const data   = yaml.dump(req.body);
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query(`UPDATE LibraryBlocks SET ${section} = $2 WHERE Id = $1`, [blockid, data]);
+        await client.query("COMMIT");
+        res.status(returnStatus).send('Updated');
+    } catch (error) {
+        Log(`Exception in putLibraryBlockSection(${section}): ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+}
+
 const deleteLibraryBlock = async function(blockid, req, res) {
     var   returnStatus = 200;
     const client = await db.ClientFromPool();
@@ -2005,6 +2025,27 @@ const getSiteData = async function(depid, siteid, req, res) {
     return returnStatus;
 }
 
+const getTargetPlatforms = async function(req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT * FROM TargetPlatforms");
+        res.setHeader('content-type', 'application/yaml');
+        res.status(returnStatus).send(result.rows);
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in getSiteData: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+
+}
+
 exports.ApiInit = function(app) {
     app.use(express.static('../compose-web-app'));
 
@@ -2112,6 +2153,24 @@ exports.ApiInit = function(app) {
     app.get(COMPOSE_PREFIX + 'deployments/:depid/site/:siteid/sitedata/:filename', async (req, res) => {
         await getSiteData(req.params.depid, req.params.siteid, req, res);
     });
+
+    app.get(COMPOSE_PREFIX + 'targetplatforms', async (req, res) => {
+        await getTargetPlatforms(req, res);
+    });
+
+    app.use(express.json());
+    app.put(COMPOSE_PREFIX + 'library/blocks/:blockid/config', async (req, res) => {
+        await putLibraryBlockSection(req.params.blockid, 'Config', req, res);
+    });
+
+    app.put(COMPOSE_PREFIX + 'library/blocks/:blockid/interfaces', async (req, res) => {
+        await putLibraryBlockSection(req.params.blockid, 'Interfaces', req, res);
+    });
+
+    app.put(COMPOSE_PREFIX + 'library/blocks/:blockid/body', async (req, res) => {
+        await putLibraryBlockSection(req.params.blockid, 'SpecBody', req, res);
+    });
+
 }
 
 exports.Start = async function() {

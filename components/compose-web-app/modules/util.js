@@ -34,8 +34,15 @@ export function SetupTable(headers) {
     return table;
 }
 
-function countLines(str) {
-    return !!str ? (str.match(/\r\n|\r|\n/g) || []).length + 1 : 1;
+export function countLines(str, minimum) {
+    if (!minimum) {
+        minimum = 0;
+    }
+    const count = !!str ? (str.match(/\r\n|\r|\n/g) || []).length + 1 : 1;
+    if (count < minimum) {
+        return minimum;
+    }
+    return count;
 }
 
 export function TextArea(item, title, section, cols=60) {
@@ -55,7 +62,7 @@ export function TextArea(item, title, section, cols=60) {
 // action: function
 // cancel: function
 //
-export async function FormLayout(items, action, cancel, submitText, cancelText) {
+export async function FormLayout(items, action, cancel, submitText, cancelText, stacked) {
     if (!submitText) {
         submitText = 'Submit';
     }
@@ -73,20 +80,22 @@ export async function FormLayout(items, action, cancel, submitText, cancelText) 
     for (const [caption, element] of items) {
         let row  = layout.insertRow();
         let cell = row.insertCell();
-        cell.style.textAlign = 'right';
+        cell.style.textAlign = stacked ? 'left' : 'right';
         cell.textContent = caption;
+        if (stacked) {
+            row = layout.insertRow();
+        }
         cell = row.insertCell();
         cell.appendChild(element);
     }
 
     if (action || cancel) {
         let row = layout.insertRow();
-        row.insertCell();
+        if (!stacked) {
+            row.insertCell();
+        }
         let cell = row.insertCell();
         if (action) {
-            //
-            // Put the Submit button in the right column
-            //
             let submit = document.createElement('button');
             submit.textContent = submitText;
             submit.addEventListener('click', action);
@@ -94,9 +103,6 @@ export async function FormLayout(items, action, cancel, submitText, cancelText) 
         }
 
         if (cancel) {
-            //
-            // Put the Cancel button in the right column
-            //
             let cancelButton = document.createElement('button');
             cancelButton.textContent = cancelText;
             cancelButton.addEventListener('click', cancel);
@@ -272,7 +278,8 @@ export function TimeAgo(date) {
     return `${interval} second${interval != 1 ? 's' : ''}`
 }
 
-export function ExpandableRow(layout, trackedObject, columnCount, expandAction, insertPoint) {
+export function ExpandableRow(layout, columnCount, expandAction, insertPoint) {
+    var trackedObject = {};
     if (!insertPoint) {
         insertPoint = -1;
     }
@@ -285,14 +292,14 @@ export function ExpandableRow(layout, trackedObject, columnCount, expandAction, 
     open.alt = 'open';
     open.setAttribute('width', '12');
     open.setAttribute('height', '12');
-    open.addEventListener('click', async () => {
+    open.onclick = async () => {
         trackedObject._expanded = !trackedObject._expanded;
         open.src = trackedObject._expanded ? 'images/angle-down.svg' : 'images/angle-right.svg';
         if (trackedObject._expanded) {
             let subrow  = layout.insertRow(trackedObject._row.rowIndex + 1);
             subrow.insertCell();
             let subcell = subrow.insertCell();
-            subcell.setAttribute('colspan', `${columnCount}`);
+            subcell.setAttribute('colspan', `${columnCount + 1}`);
 
             let subRowDiv = document.createElement('div');
             subRowDiv.className = 'subtable';
@@ -305,7 +312,38 @@ export function ExpandableRow(layout, trackedObject, columnCount, expandAction, 
         } else {
             layout.deleteRow(trackedObject._row.rowIndex + 1);
         }
-    });
+    };
     row.insertCell().appendChild(open);
     return row;
+}
+
+//
+// items: [ { id, text, selected } ]
+//
+export function MultiSelectWithCheckbox(items) {
+    let layout = document.createElement('div');
+    layout.className = 'multi-select-list';
+
+    for (const item of items) {
+        let row = document.createElement('div');
+        row.className = 'multi-select-row';
+        layout.appendChild(row);
+        let label = document.createElement('div');
+        label.className = 'multi-select-cell';
+        label.textContent = item.text;
+        label.id = item.id;
+        let cbCell = document.createElement('div');
+        cbCell.className = 'multi-select-cell';
+        row.appendChild(cbCell);
+        row.appendChild(label);
+        let cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = item.selected;
+        cb.onclick = () => {
+            item.selected = cb.checked;
+        };
+        cbCell.appendChild(cb);
+    }
+
+    return layout;
 }

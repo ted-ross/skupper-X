@@ -27,7 +27,10 @@ export async function LibraryConfiguration(panel, block) {
         return;
     }
 
-    const configmap = await result.json();
+    let configmap = await result.json();
+    if (!configmap) {
+      configmap = {};
+    }
     let layout = SetupTable(['', '', 'Attribute', 'Type', 'Default', 'Description']);
     for (const [name, config] of Object.entries(configmap)) {
         let row = layout.insertRow();

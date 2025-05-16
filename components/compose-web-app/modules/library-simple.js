@@ -17,10 +17,10 @@
  under the License.
 */
 
-import { ExpandableRow, FormLayout, SetupTable } from "./util.js";
+import { countLines, ExpandableRow, FormLayout, MultiSelectWithCheckbox, SetupTable } from "./util.js";
 
 export async function LibraryEditSimple(panel, block) {
-    panel.innerHTML = '';
+    panel.innerHTML = '<h3>Body Style: Simple</h3>';
     const result = await fetch(`/compose/v1alpha1/library/blocks/${block.id}/body`);
     if (!result.ok) {
         panel.innerHTML = `<h2>Fetch Error: ${result.message}</h2>`;
@@ -33,21 +33,27 @@ export async function LibraryEditSimple(panel, block) {
     const showAffinity    = !blockTypeData.allocatetosite;
 
     let columns  = ['', 'Platforms'];
-    let colCount = 3;
+    let colCount = 4;
     if (showAffinity) {
         columns.push('Affinity');
         colCount++;
     }
     columns.push('Description');
+    columns.push('');
+
+    if (!simpleBody) {
+        simpleBody = {
+            simple : [],
+        };
+    }
 
     let layout = SetupTable(columns);
     for (const template of simpleBody.simple) {
         let row = ExpandableRow(
             layout,
-            template,
             colCount,
             async (div, toDeleteRows, unexpandRow) => {
-                await TemplatePanel(div, template, toDeleteRows, unexpandRow, block, showAffinity);
+                await TemplatePanel(div, simpleBody, template, toDeleteRows, unexpandRow, block, showAffinity);
             }
         );
         row.insertCell().textContent = template.targetPlatforms;
@@ -66,17 +72,16 @@ export async function LibraryEditSimple(panel, block) {
     addCell.appendChild(addButton);
     addCell.onclick = async () => {
         let newTemplate = {
-            affinity        : [],
             targetPlatforms : [],
             description     : "",
             template        : "",
         };
         simpleBody.simple.push(newTemplate);
-        let newRow = ExpandableRow(layout,
-            newTemplate,
+        let newRow = ExpandableRow(
+            layout,
             colCount,
             async (div, toDeleteRows, unexpandRow) => {
-                await TemplatePanel(div, newTemplate, toDeleteRows, unexpandRow, block, showAffinity);
+                await TemplatePanel(div, simpleBody, newTemplate, toDeleteRows, unexpandRow, block, showAffinity);
             },
             addButtonRow.rowIndex
         );
@@ -90,21 +95,90 @@ export async function LibraryEditSimple(panel, block) {
     panel.appendChild(layout);
 }
 
-async function TemplatePanel(div, template, toDeleteRows, unexpandRow, block, showAffinity) {
+async function TemplatePanel(div, body, template, toDeleteRows, unexpandRow, block, showAffinity) {
+    let formFields = [];
+    var tplist;
+    var afflist;
+
+    // Set up the description box
+    let description = document.createElement('input');
+    description.type = 'text';
+    description.value = template.description || '';
+    description.size = 80;
+    formFields.push(['Description:', description]);
+
+    // Set up the target platform selector
+    let platformItems = [];
+    const result      = await fetch('/compose/v1alpha1/targetplatforms');
+    const platforms   = await result.json();
+    for (const platform of platforms) {
+        platformItems.push({
+            id       : platform.shortname,
+            text     : platform.longname,
+            selected : template.targetPlatforms.indexOf(platform.shortname) >= 0,
+        });
+    }
+    tplist = MultiSelectWithCheckbox(platformItems);
+    formFields.push(['Target Platforms:', tplist]);
+
+    // Set up the interface affinity selector
+    if (showAffinity) {
+        let affinityItems = [];
+        const result = await fetch(`/compose/v1alpha1/library/blocks/${block.id}/interfaces`);
+        const iflist = await result.json();
+        for (const iface of (iflist || [])) {
+            affinityItems.push({
+                id       : iface.name,
+                text     : `${iface.name} (${iface.role})`,
+                selected : template.affinity.indexOf(iface.name) >= 0,
+            });
+        }
+        afflist = MultiSelectWithCheckbox(affinityItems);
+        formFields.push(['Interface Affinity:', afflist]);
+    }
+
+    // Set up the template edit box
+    let templateText = document.createElement('textarea');
+    templateText.setAttribute('cols', `80`);
+    templateText.setAttribute('rows', `${countLines(template.template, 20) + 5}`);
+    templateText.textContent = template.template;
+    formFields.push(['Template:', templateText]);
+    
     const form = await FormLayout(
         //
         // Form fields
         //
-        [
-            //['Target Platforms:',    name],
-            //['Interface Affinity:',  claimAccess],
-            //['Template:',            memberAccess],
-        ],
+        formFields,
 
         //
         // Submit button behavior
         //
         async () => {
+            template.description = description.value;
+            template.targetPlatforms = [];
+            for (const item of platformItems) {
+                if (item.selected) {
+                    template.targetPlatforms.push(item.id);
+                }
+            }
+            if (showAffinity) {
+                template.affinity = [];
+                for (const item of affinityItems) {
+                    if (item.selected) {
+                        template.affinity.push(item.id);
+                    }
+                }
+            }
+            console.log(templateText.value);
+            template.template = templateText.value;
+
+            const result = await fetch(`/compose/v1alpha1/library/blocks/${block.id}/body`, {
+                method : 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(body),
+            });
             unexpandRow();
         },
 
@@ -116,7 +190,8 @@ async function TemplatePanel(div, template, toDeleteRows, unexpandRow, block, sh
         },
 
         'Accept Changes',
-        'Discard Changes'
+        'Discard Changes',
+        true
     );
 
     div.appendChild(form);
