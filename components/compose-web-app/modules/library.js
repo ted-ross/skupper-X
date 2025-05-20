@@ -21,6 +21,7 @@ import { toLibraryTab } from "../page.js";
 import { LibraryTestBuild } from "./library-build.js";
 import { LibraryEditComposite } from "./library-composite.js";
 import { LibraryConfiguration } from "./library-config.js";
+import { LibraryHistory } from "./library-history.js";
 import { LibraryEditInterfaces } from "./library-interfaces.js";
 import { LibraryEditSimple } from "./library-simple.js";
 import { LibrarySummary } from "./library-summary.js";
@@ -135,7 +136,7 @@ async function BlockForm() {
                     name      : lbName.value,
                     type      : btSelector.value,
                     provider  : provider.value,
-                    composite : bodySelector.value,
+                    bodystyle : bodySelector.value,
                 }),
             });
             console.log('   fetch completed');
@@ -203,6 +204,11 @@ async function LibTabSheet(lbid) {
             title        : 'Test Build',
             enabled      : block.bodystyle == 'composite',
             selectAction : async (panel) => { LibraryTestBuild(panel, block); },
+        },
+        {
+            title        : 'Revision History',
+            enabled      : true,
+            selectAction : async (panel) => { LibraryHistory(panel, block); },
         },
     ]);
 

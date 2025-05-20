@@ -42,9 +42,7 @@ export async function LibraryEditSimple(panel, block) {
     columns.push('');
 
     if (!simpleBody) {
-        simpleBody = {
-            simple : [],
-        };
+        simpleBody = [];
     }
 
     let layout = SetupTable(columns);
@@ -76,6 +74,9 @@ export async function LibraryEditSimple(panel, block) {
             description     : "",
             template        : "",
         };
+        if (showAffinity) {
+            newTemplate.affinity = [];
+        }
         simpleBody.push(newTemplate);
         let newRow = ExpandableRow(
             layout,
@@ -98,7 +99,7 @@ export async function LibraryEditSimple(panel, block) {
 async function TemplatePanel(div, body, template, toDeleteRows, unexpandRow, block, showAffinity) {
     let formFields = [];
     var tplist;
-    var afflist;
+    var affinityItems;
 
     // Set up the description box
     let description = document.createElement('input');
@@ -123,7 +124,7 @@ async function TemplatePanel(div, body, template, toDeleteRows, unexpandRow, blo
 
     // Set up the interface affinity selector
     if (showAffinity) {
-        let affinityItems = [];
+        affinityItems = [];
         const result = await fetch(`/compose/v1alpha1/library/blocks/${block.id}/interfaces`);
         const iflist = await result.json();
         for (const iface of (iflist || [])) {
@@ -133,7 +134,7 @@ async function TemplatePanel(div, body, template, toDeleteRows, unexpandRow, blo
                 selected : template.affinity.indexOf(iface.name) >= 0,
             });
         }
-        afflist = MultiSelectWithCheckbox(affinityItems);
+        let afflist = MultiSelectWithCheckbox(affinityItems);
         formFields.push(['Interface Affinity:', afflist]);
     }
 

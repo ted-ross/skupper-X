@@ -37,10 +37,10 @@ spec:
       description: "Distribution algorithm used in the network for service traffic"
       default: balanced
     priority:
-      type: integer
-      typeRange: [0, 7]
+      type: enum
+      typeValues: [lowest, "1", "2", "3", normal, "5", "6", "7", "8", "9", highest]
       description: "Priority used to forward service traffic through the network"
-      default: 4
+      default: normal
     protocol:
       type: string-name
       description: "Application protocol that runs over the transport"
@@ -66,6 +66,15 @@ spec:
       type: bool
       description: "Generate vanFlow protocol events"
       default: false
+    requiredAverageRate:
+      type: numeric
+      description: Expected average bandwidth usage
+    requiredPeakRate:
+      type: numeric
+      description: Expected peak bandwidth usage
+    requiredLatency:
+      type: numeric
+      description: Minimum expected network latency
   interfaces:
   - name: acceptor
     role: accept

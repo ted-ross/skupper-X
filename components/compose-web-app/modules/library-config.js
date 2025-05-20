@@ -17,7 +17,7 @@
  under the License.
 */
 
-import { SetupTable } from "./util.js";
+import { FormLayout, SetupTable } from "./util.js";
 
 export async function LibraryConfiguration(panel, block) {
     panel.innerHTML = '<h2>Configuration Template</h2>';
@@ -32,7 +32,9 @@ export async function LibraryConfiguration(panel, block) {
       configmap = {};
     }
     let layout = SetupTable(['', '', 'Attribute', 'Type', 'Default', 'Description']);
-    for (const [name, config] of Object.entries(configmap)) {
+    const entries = Object.entries(configmap);
+    entries.push(['New Attribute...', {type:'', default:'', description:''} ]);
+    for (const [name, config] of entries) {
         let row = layout.insertRow();
         row.className = 'list';
         config._row      = row;
@@ -54,7 +56,7 @@ export async function LibraryConfiguration(panel, block) {
                 let configDiv = document.createElement('div');
                 configDiv.className = 'subtable';
                 subcell.appendChild(configDiv);
-                await ConfigPanel(configDiv, config, [row, subrow]);
+                await ConfigPanel(configDiv, block.id, name, configmap, [row, subrow]);
             } else {
                 layout.deleteRow(config._row.rowIndex + 1);
             }
@@ -69,6 +71,131 @@ export async function LibraryConfiguration(panel, block) {
     panel.appendChild(layout);
 }
 
-async function ConfigPanel(panel, config, toRemoveOnDelete) {
+async function ConfigPanel(panel, blockid, name, configmap, toRemoveOnDelete) {
     panel.innerHTML = '';
+    var attribute;
+
+    if (name != 'New Attribute...') {
+        attribute = configmap[name];
+    } else {
+        attribute = {
+            type        : 'string-name',
+            description : '',
+        };
+    }
+
+    //
+    // Name Field
+    //
+    var nameField;
+    if (name != 'New Attribute...') {
+        nameField = document.createElement('pre');
+        nameField.textContent = name;
+    } else {
+        nameField = document.createElement('input');
+        nameField.type = 'text';
+    }
+
+    //
+    // Type Field
+    //
+    let typeField = document.createElement('div');
+    let typeSelect = document.createElement('select');
+    let typeSelectOption = document.createElement('option');
+    typeSelectOption.value = 'string-name';
+    typeSelectOption.textContent = 'string-name';
+    if (attribute.type == 'string-name') {
+        typeSelectOption.selected = true;
+    }
+    typeSelect.appendChild(typeSelectOption);
+
+    typeSelectOption = document.createElement('option');
+    typeSelectOption.value = 'numeric';
+    typeSelectOption.textContent = 'numeric';
+    if (attribute.type == 'numeric') {
+        typeSelectOption.selected = true;
+    }
+    typeSelect.appendChild(typeSelectOption);
+
+    typeSelectOption = document.createElement('option');
+    typeSelectOption.value = 'enum';
+    typeSelectOption.textContent = 'enumerated';
+    let typeEnumerations = document.createElement('input');
+    typeEnumerations.type = 'text';
+    typeEnumerations.size = 50;
+    typeEnumerations.style.marginLeft = '5px';
+    if (attribute.type == 'enum') {
+        typeSelectOption.selected = true;
+        typeEnumerations.value = attribute.typeValues.join(',');
+        typeEnumerations.hidden = false;
+    } else {
+        typeEnumerations.hidden = true;
+    }
+    typeSelect.appendChild(typeSelectOption);
+
+    typeSelectOption = document.createElement('option');
+    typeSelectOption.value = 'bool';
+    typeSelectOption.textContent = 'boolean';
+    if (attribute.type == 'bool') {
+        typeSelectOption.selected = true;
+    }
+    typeSelect.appendChild(typeSelectOption);
+    typeSelect.onclick = () => {
+        if (typeSelect.value == 'enum') {
+            if (!attribute.typeValues) {
+                attribute.typeValues = [];
+            }
+            typeEnumerations.value = attribute.typeValues.join(',');
+            typeEnumerations.hidden = false;
+        } else {
+            typeEnumerations.hidden = true;
+        }
+    };
+
+    typeField.appendChild(typeSelect);
+    typeField.appendChild(typeEnumerations);
+
+    //
+    // Default Field
+    //
+    let defaultField = document.createElement('input');
+    defaultField.type = 'text';
+    defaultField.value = attribute.default || '';
+
+    //
+    // Description Field
+    //
+    let descriptionField = document.createElement('input');
+    descriptionField.type = 'text'
+    descriptionField.size = 60;
+    descriptionField.value = attribute.description;
+
+    const form = await FormLayout(
+        //
+        // Form fields
+        //
+        [
+            ['Attribute Name:',     nameField],
+            ['Type:',               typeField],
+            ['Default (optional):', defaultField],
+            ['Description:',        descriptionField],
+        ],
+
+        //
+        // Submit button behavior
+        //
+        async () => {
+        },
+
+        //
+        // Cancel button behavior
+        //
+        async () => {
+
+        },
+        'Accept Changes',
+        'Discard Changes'
+    );
+
+    panel.appendChild(form);
 }
