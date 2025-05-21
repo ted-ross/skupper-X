@@ -32,7 +32,7 @@ export async function LibraryConfiguration(panel, block) {
     if (!configmap) {
       configmap = {};
     }
-    let layout = SetupTable(['', '', 'Attribute', 'Type', 'Default', 'Description']);
+    let layout = SetupTable(['', 'Attribute', 'Type', 'Default', 'Description', '']);
     const entries = Object.entries(configmap);
     entries.push([ADD_TEXT, {type:'', default:'', description:''} ]);
     for (const [name, config] of entries) {
@@ -63,30 +63,27 @@ export async function LibraryConfiguration(panel, block) {
             }
         });
 
-        let del = document.createElement('button');
-        del.textContent = 'delete';
-        del.onclick = async () => {
-            delete configmap[name];
-            await fetch(`/compose/v1alpha1/library/blocks/${block.id}/config`, {
-                method : 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(configmap),
-            });
-            await LibraryConfiguration(panel, block);
-        }
-
         row.insertCell().appendChild(open);
-        if (name != ADD_TEXT) {
-            row.insertCell().appendChild(del);
-        } else {
-            row.insertCell();
-        }
         row.insertCell().textContent = name;
         row.insertCell().textContent = config.type;
         row.insertCell().textContent = config.default;
         row.insertCell().textContent = config.description;
+        if (name != ADD_TEXT) {
+            let del = document.createElement('button');
+            del.textContent = 'delete';
+            del.onclick = async () => {
+                delete configmap[name];
+                await fetch(`/compose/v1alpha1/library/blocks/${block.id}/config`, {
+                    method : 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(configmap),
+                });
+                await LibraryConfiguration(panel, block);
+            }
+            row.insertCell().appendChild(del);
+        }
     }
     panel.appendChild(layout);
 }
@@ -109,7 +106,7 @@ async function ConfigPanel(panel, outerPanel, block, name, configmap, toRemoveOn
     //
     var nameField;
     if (name) {
-        nameField = document.createElement('pre');
+        nameField = document.createElement('div');
         nameField.textContent = name;
     } else {
         nameField = document.createElement('input');
@@ -235,4 +232,7 @@ async function ConfigPanel(panel, outerPanel, block, name, configmap, toRemoveOn
     );
 
     panel.appendChild(form);
+    if (name) {
+        nameField.focus();
+    }
 }
