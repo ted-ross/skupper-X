@@ -21,6 +21,7 @@ import { FormLayout, SetupTable } from "./util.js";
 
 export async function LibraryConfiguration(panel, block) {
     panel.innerHTML = '<h2>Configuration Template</h2>';
+    const ADD_TEXT  = 'New Attribute...';
 
     const result = await fetch(`/compose/v1alpha1/library/blocks/${block.id}/config`);
     if (!result.ok) {
@@ -33,7 +34,7 @@ export async function LibraryConfiguration(panel, block) {
     }
     let layout = SetupTable(['', '', 'Attribute', 'Type', 'Default', 'Description']);
     const entries = Object.entries(configmap);
-    entries.push(['New Attribute...', {type:'', default:'', description:''} ]);
+    entries.push([ADD_TEXT, {type:'', default:'', description:''} ]);
     for (const [name, config] of entries) {
         let row = layout.insertRow();
         row.className = 'list';
@@ -56,13 +57,32 @@ export async function LibraryConfiguration(panel, block) {
                 let configDiv = document.createElement('div');
                 configDiv.className = 'subtable';
                 subcell.appendChild(configDiv);
-                await ConfigPanel(configDiv, block.id, name, configmap, [row, subrow]);
+                await ConfigPanel(configDiv, panel, block, name == ADD_TEXT ? undefined : name, configmap, [row, subrow]);
             } else {
                 layout.deleteRow(config._row.rowIndex + 1);
             }
         });
+
+        let del = document.createElement('button');
+        del.textContent = 'delete';
+        del.onclick = async () => {
+            delete configmap[name];
+            await fetch(`/compose/v1alpha1/library/blocks/${block.id}/config`, {
+                method : 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(configmap),
+            });
+            await LibraryConfiguration(panel, block);
+        }
+
         row.insertCell().appendChild(open);
-        row.insertCell();
+        if (name != ADD_TEXT) {
+            row.insertCell().appendChild(del);
+        } else {
+            row.insertCell();
+        }
         row.insertCell().textContent = name;
         row.insertCell().textContent = config.type;
         row.insertCell().textContent = config.default;
@@ -71,11 +91,11 @@ export async function LibraryConfiguration(panel, block) {
     panel.appendChild(layout);
 }
 
-async function ConfigPanel(panel, blockid, name, configmap, toRemoveOnDelete) {
+async function ConfigPanel(panel, outerPanel, block, name, configmap, toRemoveOnDelete) {
     panel.innerHTML = '';
     var attribute;
 
-    if (name != 'New Attribute...') {
+    if (name) {
         attribute = configmap[name];
     } else {
         attribute = {
@@ -88,7 +108,7 @@ async function ConfigPanel(panel, blockid, name, configmap, toRemoveOnDelete) {
     // Name Field
     //
     var nameField;
-    if (name != 'New Attribute...') {
+    if (name) {
         nameField = document.createElement('pre');
         nameField.textContent = name;
     } else {
@@ -185,13 +205,30 @@ async function ConfigPanel(panel, blockid, name, configmap, toRemoveOnDelete) {
         // Submit button behavior
         //
         async () => {
+            if (!name) {
+                configmap[nameField.value] = attribute;
+            }
+            attribute.type = typeSelect.value;
+            if (attribute.type == 'enum') {
+                attribute.typeValues = typeEnumerations.value.split(',');
+            }
+            attribute.default = defaultField.value == '' ? undefined : defaultField.value;
+            attribute.description = descriptionField.value;
+            await fetch(`/compose/v1alpha1/library/blocks/${block.id}/config`, {
+                method : 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(configmap),
+            });
+            await LibraryConfiguration(outerPanel, block);
         },
 
         //
         // Cancel button behavior
         //
         async () => {
-
+            await LibraryConfiguration(outerPanel, block);
         },
         'Accept Changes',
         'Discard Changes'
