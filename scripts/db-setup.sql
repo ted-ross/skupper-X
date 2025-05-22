@@ -354,6 +354,7 @@ CREATE TABLE LibraryBlocks (
     Description text,
     BodyStyle   BlockBodyStyle,
     Revision    integer     DEFAULT 1,
+    RevisionComment text,
     Created     timestamptz DEFAULT CURRENT_TIMESTAMP,
     Format      text,
     Inherit     text,
@@ -427,9 +428,9 @@ INSERT INTO TargetPlatforms (ShortName, LongName) VALUES
     ('linux-sk2',  'Linux+SkupperV2');
 
 INSERT INTO BlockTypes (Name, AllowNorth, AllowSouth, AllocateToSite) VALUES
-    ('skupperx.io/container', false, false, false),
     ('skupperx.io/component', true,  false, true),
     ('skupperx.io/connector', false, true,  false),
+    ('skupperx.io/toplevel',  false, false, false),
     ('skupperx.io/mixed',     true,  true,  false),
     ('skupperx.io/ingress',   true,  false, true),
     ('skupperx.io/egress',    false, true,  false);

@@ -825,8 +825,11 @@ const importBlock = async function(client, block, blockRevisions) {
         }
     }
 
-    await client.query("INSERT INTO LibraryBlocks (Type, Name, Revision, BodyStyle, Format, Inherit, Config, Interfaces, SpecBody) VALUES ($1, $2, $3, $4, 'application/yaml', $5, $6, $7, $8)",
-                       [block.type, name, newRevision, block.spec.bodyStyle, inherit, config, ifObject, bodyObject]);
+    await client.query(
+        "INSERT INTO LibraryBlocks " +
+        "(Type, Name, Revision, RevisionComment, BodyStyle, Format, Inherit, Config, Interfaces, SpecBody) " +
+        "VALUES ($1, $2, $3, 'Imported via API', $4, 'application/yaml', $5, $6, $7, $8)",
+        [block.type, name, newRevision, block.spec.bodyStyle, inherit, config, ifObject, bodyObject]);
     return 1;
 }
 
@@ -1447,7 +1450,7 @@ const getLibraryBlockSection = async function(blockid, section, req, res) {
         const result = await client.query(`SELECT ${section} as data FROM LibraryBlocks WHERE Id = $1`, [blockid]);
         if (result.rowCount == 1) {
             const jdata = yaml.load(result.rows[0].data);
-            res.status(returnStatus).json(jdata);
+            res.status(returnStatus).json(jdata || []);
         } else {
             returnStatus = 404;
             res.status(returnStatus).send('Not Found');
@@ -2029,11 +2032,32 @@ const getTargetPlatforms = async function(req, res) {
     try {
         await client.query("BEGIN");
         const result = await client.query("SELECT * FROM TargetPlatforms");
-        res.setHeader('content-type', 'application/yaml');
+        res.setHeader('content-type', 'application/json');
         res.status(returnStatus).send(result.rows);
         await client.query("COMMIT");
     } catch (error) {
-        Log(`Exception in getSiteData: ${error.message}`);
+        Log(`Exception in getTargetPlatforms: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+
+}
+
+const getInterfaceRoles = async function(req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query("SELECT * FROM InterfaceRoles");
+        res.setHeader('content-type', 'application/json');
+        res.status(returnStatus).send(result.rows);
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in getInterfaceRoles: ${error.message}`);
         await client.query("ROLLBACK");
         returnStatus = 500;
         res.status(returnStatus).send(error.message);
@@ -2154,6 +2178,10 @@ exports.ApiInit = function(app) {
 
     app.get(COMPOSE_PREFIX + 'targetplatforms', async (req, res) => {
         await getTargetPlatforms(req, res);
+    });
+
+    app.get(COMPOSE_PREFIX + 'interfaceroles', async (req, res) => {
+        await getInterfaceRoles(req, res);
     });
 
     app.use(express.json());

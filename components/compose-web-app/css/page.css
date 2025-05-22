@@ -91,6 +91,9 @@ ul ul{
     display: flex;
     flex-direction: row;
 }
+.inlinecell {
+    margin-left: 20px;
+}
 
 /* Tabsheet Styles */
 .tabsheet {

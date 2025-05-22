@@ -19,18 +19,15 @@
 
 import { countLines, ExpandableRow, FormLayout, MultiSelectWithCheckbox, SetupTable } from "./util.js";
 
-export async function LibraryEditSimple(panel, block) {
-    panel.innerHTML = '<h3>Body Style: Simple</h3>';
+export async function LibraryEditSimple(panel, block, blockType) {
+    panel.innerHTML = '<h2>Body Templates</h2>';
     const result = await fetch(`/compose/v1alpha1/library/blocks/${block.id}/body`);
     if (!result.ok) {
         panel.innerHTML = `<h2>Fetch Error: ${result.message}</h2>`;
         return;
     }
     var simpleBody = await result.json();
-    const blockTypeResult = await fetch('/compose/v1alpha1/library/blocktypes');
-    const blockTypes      = await blockTypeResult.json();
-    const blockTypeData   = blockTypes[block.type];
-    const showAffinity    = !blockTypeData.allocatetosite;
+    const showAffinity = !blockType.allocatetosite;
 
     let columns  = ['', 'Platforms'];
     let colCount = 4;
@@ -41,17 +38,15 @@ export async function LibraryEditSimple(panel, block) {
     columns.push('Description');
     columns.push('');
 
-    if (!simpleBody) {
-        simpleBody = [];
-    }
-
     let layout = SetupTable(columns);
+    let index  = 0;
     for (const template of simpleBody) {
+        let thisIndex = index;
         let row = ExpandableRow(
             layout,
             colCount,
             async (div, toDeleteRows, unexpandRow) => {
-                await TemplatePanel(div, simpleBody, template, toDeleteRows, unexpandRow, block, showAffinity);
+                await TemplatePanel(div, simpleBody, template, toDeleteRows, unexpandRow, block, showAffinity, panel, blockType);
             }
         );
         row.insertCell().textContent = template.targetPlatforms;
@@ -59,6 +54,22 @@ export async function LibraryEditSimple(panel, block) {
             row.insertCell().textContent = template.affinity || '-';
         }
         row.insertCell().textContent = template.description;
+
+        let del = document.createElement('button');
+        del.textContent = 'delete';
+        del.onclick = async () => {
+            simpleBody.splice(thisIndex, 1);
+            await fetch(`/compose/v1alpha1/library/blocks/${block.id}/body`, {
+                method : 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(simpleBody),
+            });
+            await LibraryEditSimple(panel, block, blockType);
+        }
+        row.insertCell().appendChild(del);
+        index++;
     }
 
     let addButton = document.createElement('button');
@@ -82,7 +93,7 @@ export async function LibraryEditSimple(panel, block) {
             layout,
             colCount,
             async (div, toDeleteRows, unexpandRow) => {
-                await TemplatePanel(div, simpleBody, newTemplate, toDeleteRows, unexpandRow, block, showAffinity);
+                await TemplatePanel(div, simpleBody, newTemplate, toDeleteRows, unexpandRow, block, showAffinity, panel, blockType);
             },
             addButtonRow.rowIndex
         );
@@ -96,7 +107,7 @@ export async function LibraryEditSimple(panel, block) {
     panel.appendChild(layout);
 }
 
-async function TemplatePanel(div, body, template, toDeleteRows, unexpandRow, block, showAffinity) {
+async function TemplatePanel(div, body, template, toDeleteRows, unexpandRow, block, showAffinity, outerPanel, blockType) {
     let formFields = [];
     var tplist;
     var affinityItems;
@@ -180,7 +191,7 @@ async function TemplatePanel(div, body, template, toDeleteRows, unexpandRow, blo
                 },
                 body: JSON.stringify(body),
             });
-            unexpandRow();
+            await LibraryEditSimple(outerPanel, block, blockType);
         },
 
         //

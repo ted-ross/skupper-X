@@ -24,9 +24,8 @@ import { LibraryConfiguration } from "./library-config.js";
 import { LibraryHistory } from "./library-history.js";
 import { LibraryEditInterfaces } from "./library-interfaces.js";
 import { LibraryEditSimple } from "./library-simple.js";
-import { LibrarySummary } from "./library-summary.js";
 import { TabSheet } from "./tabsheet.js";
-import { FormLayout, SetupTable, TextArea } from "./util.js";
+import { FormLayout, LayoutRow, SetupTable, TextArea } from "./util.js";
 
 export async function BuildLibraryTable() {
     const response = await fetch('/compose/v1alpha1/library/blocks');
@@ -39,10 +38,16 @@ export async function BuildLibraryTable() {
         }
     }
 
+    const btresponse = await fetch('/compose/v1alpha1/library/blocktypes');
+    const blockTypes = await btresponse.json();
+
+    const irresponse     = await fetch('/compose/v1alpha1/interfaceroles');
+    const interfaceRoles = await irresponse.json();
+
     let addButton = document.createElement('button');
     addButton.textContent = 'Add Library Block...';
     addButton.style.marginBottom = '5px';
-    addButton.onclick     = async () => { await BlockForm(); }
+    addButton.onclick     = async () => { await BlockForm(blockTypes, interfaceRoles); }
     section.appendChild(addButton);
     section.appendChild(document.createElement('br'));
 
@@ -53,12 +58,12 @@ export async function BuildLibraryTable() {
 
         // TODO - Add a create/upload button
     } else {
-        let table = SetupTable(['Name', 'Provider', 'Type', 'Rev', 'Body Style', 'Created']);
+        let table = SetupTable(['Name', 'Provider', 'Type', 'Latest', 'Body Style', 'Created']);
         for (const item of Object.values(data)) {
             let row = table.insertRow();
             let anchor = document.createElement('a');
             anchor.setAttribute('href', '#');
-            anchor.onclick = async () => { await LibTabSheet(item.id); };
+            anchor.onclick = async () => { await LibTabSheet(item.id, blockTypes, interfaceRoles); };
             anchor.textContent = item.name;
             row.insertCell().appendChild(anchor);
             row.insertCell().textContent = item.provider || '-';
@@ -71,11 +76,8 @@ export async function BuildLibraryTable() {
     }
 }
 
-async function BlockForm() {
-    const btresponse = await fetch('/compose/v1alpha1/library/blocktypes');
-    const btdata     = await btresponse.json();
-    let   section    = document.getElementById("sectiondiv");
-
+async function BlockForm(blockTypes, interfaceRoles) {
+    let section = document.getElementById("sectiondiv");
     section.innerHTML = '<h2>Create a new library block</h2>';
 
     let errorbox = document.createElement('pre');
@@ -91,7 +93,7 @@ async function BlockForm() {
     //
     // Populate the block-type selector
     //
-    for (const btname of Object.keys(btdata)) {
+    for (const btname of Object.keys(blockTypes)) {
         let option = document.createElement('option');
         option.setAttribute('value', btname);
         option.textContent = btname;
@@ -143,7 +145,7 @@ async function BlockForm() {
         
             if (response.ok) {
                 let responsedata = await response.json();
-                await LibTabSheet(responsedata.id);
+                await LibTabSheet(responsedata.id, blockTypes, interfaceRoles);
             } else {
                 errorbox.textContent = await response.text();
             }
@@ -160,25 +162,39 @@ async function BlockForm() {
     lbName.focus();
 }
 
-async function LibTabSheet(lbid) {
+async function LibTabSheet(lbid, blockTypes, interfaceRoles) {
     const section  = document.getElementById("sectiondiv");
     let   panel    = document.createElement('div');
     section.innerHTML = '';
     section.appendChild(panel);
 
-    const result = await fetch(`/compose/v1alpha1/library/blocks/${lbid}`);
-    const block  = await result.json();
+    const result    = await fetch(`/compose/v1alpha1/library/blocks/${lbid}`);
+    const block     = await result.json();
+    const blockType = blockTypes[block.type];
 
-    let title = document.createElement('b');
-    title.textContent = `Library Block: ${block.name}`;
-    panel.appendChild(title);
+    let headerDiv  = document.createElement('div');
+    headerDiv.className = 'onerow'
+    let headerDiv1 = document.createElement('div');
+    let headerDiv2 = document.createElement('div');
+    headerDiv2.className = 'inlinecell';
+
+    let layout = document.createElement('table');
+    LayoutRow(layout, ['Block Name:',  block.name]);
+    LayoutRow(layout, ['Provider:',    block.provider]);
+    LayoutRow(layout, ['Block Type:',  block.type]);
+    LayoutRow(layout, ['Body Type:',   block.bodystyle]);
+    headerDiv1.appendChild(layout);
+
+    layout = document.createElement('table');
+    LayoutRow(layout, ['Revision:',    `${block.revision}`]);
+    LayoutRow(layout, ['Create Time:', block.created]);
+    headerDiv2.appendChild(layout);
+
+    headerDiv.appendChild(headerDiv1);
+    headerDiv.appendChild(headerDiv2);
+    panel.appendChild(headerDiv);
 
     let tabsheet = await TabSheet([
-        {
-            title        : 'Block Summary',
-            enabled      : true,
-            selectAction : async (body) => { LibrarySummary(body, block); },
-        },
         {
             title        : 'Configuration',
             enabled      : true,
@@ -186,8 +202,8 @@ async function LibTabSheet(lbid) {
         },
         {
             title        : 'Interfaces',
-            enabled      : true,
-            selectAction : async (body) => { LibraryEditInterfaces(body, block); },
+            enabled      : blockType.allownorth || blockType.allowsouth,
+            selectAction : async (body) => { LibraryEditInterfaces(body, block, blockType, interfaceRoles); },
         },
         {
             title        : 'Body',
@@ -196,7 +212,7 @@ async function LibTabSheet(lbid) {
                 if (block.bodystyle == 'composite') {
                     LibraryEditComposite(body, block);
                 } else {
-                    LibraryEditSimple(body, block);
+                    LibraryEditSimple(body, block, blockType);
                 }
             },
         },
