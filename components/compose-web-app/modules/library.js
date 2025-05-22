@@ -31,10 +31,10 @@ export async function BuildLibraryTable() {
     const response = await fetch('/compose/v1alpha1/library/blocks');
     const rawdata  = await response.json();
     let section    = document.getElementById("sectiondiv");
-    let data = {};
+    let libraryBlocks = {};
     for (const d of rawdata) {
-        if (!data[d.name] || d.revision > data[d.name].revision) {
-            data[d.name] = d;
+        if (!libraryBlocks[d.name] || d.revision > libraryBlocks[d.name].revision) {
+            libraryBlocks[d.name] = d;
         }
     }
 
@@ -59,11 +59,11 @@ export async function BuildLibraryTable() {
         // TODO - Add a create/upload button
     } else {
         let table = SetupTable(['Name', 'Provider', 'Type', 'Latest', 'Body Style', 'Created']);
-        for (const item of Object.values(data)) {
+        for (const item of Object.values(libraryBlocks)) {
             let row = table.insertRow();
             let anchor = document.createElement('a');
             anchor.setAttribute('href', '#');
-            anchor.onclick = async () => { await LibTabSheet(item.id, blockTypes, interfaceRoles); };
+            anchor.onclick = async () => { await LibTabSheet(item.id, blockTypes, interfaceRoles, libraryBlocks); };
             anchor.textContent = item.name;
             row.insertCell().appendChild(anchor);
             row.insertCell().textContent = item.provider || '-';
@@ -162,7 +162,7 @@ async function BlockForm(blockTypes, interfaceRoles) {
     lbName.focus();
 }
 
-async function LibTabSheet(lbid, blockTypes, interfaceRoles) {
+async function LibTabSheet(lbid, blockTypes, interfaceRoles, libraryBlocks) {
     const section  = document.getElementById("sectiondiv");
     let   panel    = document.createElement('div');
     section.innerHTML = '';
@@ -210,14 +210,14 @@ async function LibTabSheet(lbid, blockTypes, interfaceRoles) {
             enabled      : true,
             selectAction : async (body) => {
                 if (block.bodystyle == 'composite') {
-                    LibraryEditComposite(body, block);
+                    LibraryEditComposite(body, block, libraryBlocks);
                 } else {
                     LibraryEditSimple(body, block, blockType);
                 }
             },
         },
         {
-            title        : 'Test Build',
+            title        : 'Test',
             enabled      : block.bodystyle == 'composite',
             selectAction : async (panel) => { LibraryTestBuild(panel, block); },
         },

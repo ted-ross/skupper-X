@@ -1352,14 +1352,20 @@ const createLibraryBlock = async function(req, res) {
             'provider'  : {type: 'dnsname', optional: true, default: ''},
         });
 
-        const result = await client.query("INSERT INTO LibraryBlocks (Type, Name, Provider, BodyStyle) VALUES ($1, $2, $3, $4) RETURNING Id",
-                                          [norm.type, norm.name, norm.provider, norm.bodystyle]);
-        await client.query("COMMIT");
-        if (result.rowCount == 1) {
-            res.status(returnStatus).json(result.rows[0]);
-        } else {
+        const checkResult = await client.query("SELECT Id FROM LibraryBlocks WHERE Name = $1", [norm.name]);
+        if (checkResult.rowCount > 0) {
             returnStatus = 400;
-            res.status(returnStatus).send(result.error);
+            res.status(returnStatus).send(`Library block with name ${norm.name} already exists`);
+        } else {
+            const result = await client.query("INSERT INTO LibraryBlocks (Type, Name, Provider, BodyStyle) VALUES ($1, $2, $3, $4) RETURNING Id",
+                                            [norm.type, norm.name, norm.provider, norm.bodystyle]);
+            await client.query("COMMIT");
+            if (result.rowCount == 1) {
+                res.status(returnStatus).json(result.rows[0]);
+            } else {
+                returnStatus = 400;
+                res.status(returnStatus).send(result.error);
+            }
         }
     } catch (error) {
         returnStatus = 400;

@@ -219,3 +219,93 @@ ul ul{
     border-style: none;
     padding-right: 5px;
 }
+
+/* Composite Editor Components */
+.ceditOuter {
+    display: flex;
+    flex-direction: row;
+    background-color: darkgray;
+}
+.ceditBlocks {
+    display: flex;
+    flex-direction: column;
+    width: 25%;
+    background-color: lightblue;
+    margin: 5px;
+    align-items: center;
+    padding-bottom: 5px;
+}
+.ceditLibrary {
+    display: flex;
+    flex-direction: column;
+    width: 25%;
+    background-color: lightyellow;
+    margin: 5px;
+    align-items: center;
+    padding-bottom: 5px;
+}
+.ceditCenter {
+    display: flex;
+    flex-direction: column;
+    width: 50%;
+}
+.ceditCenterMiddle {
+    display: flex;
+    flex-grow: 1;
+}
+.ceditOperations {
+    height: 60px;
+    background-color: lightsteelblue;
+    margin-top: 5px;
+    margin-bottom: 5px;
+}
+.ceditCenterTop {
+    display: flex;
+    flex-direction: row;
+}
+.ceditInterfacesLeft {
+    display: flex;
+    flex-direction: column;
+    width: 50%;
+    height: 80%;
+    background-color: lightgreen;
+    margin-top: 5px;
+    margin-right: 10px;
+    padding-bottom: 5px;
+}
+.ceditInterfacesRight {
+    display: flex;
+    flex-direction: column;
+    width: 50%;
+    height: 80%;
+    background-color: lightgreen;
+    margin-top: 5px;
+    margin-left: 10px;
+    padding-bottom: 5px;
+}
+.ceditTitle {
+    text-align: center;
+    font-style: italic;
+    margin-top: 3px;
+}
+.ceditBlock {
+    width: 92%;
+    border-color: black;
+    border-radius: 2px;
+    border-width: 1px;
+    margin-top: 5px;
+    margin-left: 5px;
+    margin-right: 5px;
+    background-color: lightgray;
+    padding: 5px;
+    user-select: none;
+    font-family: monospace;
+    font-size: smaller;
+}
+.ceditBlock.Selected {
+    background-color: white;
+    font-weight: bold;
+}
+.ceditButton {
+    margin: 10px;
+}
