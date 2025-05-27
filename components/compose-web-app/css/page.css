@@ -132,6 +132,7 @@ ul ul{
     font-family: monospace;
     font-weight: bold;
     background-color: lightgrey;
+    user-select: none;
 }
 .tabsheetUnselected {
     padding-top: 2px;
@@ -144,6 +145,7 @@ ul ul{
     border-top-right-radius: 5px;
     border-top-left-radius: 5px;
     font-family: monospace;
+    user-select: none;
 }
 .tabsheetDisabled {
     padding-top: 2px;
@@ -157,6 +159,7 @@ ul ul{
     border-top-left-radius: 5px;
     font-family: monospace;
     color: lightslategray;
+    user-select: none;
 }
 
 /* The Modal (background) */
@@ -263,25 +266,21 @@ ul ul{
     display: flex;
     flex-direction: row;
 }
-.ceditInterfacesLeft {
+.ceditInterfaces {
     display: flex;
     flex-direction: column;
     width: 50%;
     height: 80%;
-    background-color: lightgreen;
     margin-top: 5px;
-    margin-right: 10px;
     padding-bottom: 5px;
 }
-.ceditInterfacesRight {
-    display: flex;
-    flex-direction: column;
-    width: 50%;
-    height: 80%;
-    background-color: lightgreen;
-    margin-top: 5px;
+.ceditInterfaces.Left {
+    background-color: cornflowerblue;
+    margin-right: 10px;
+ }
+.ceditInterfaces.Right {
+    background-color: orange;
     margin-left: 10px;
-    padding-bottom: 5px;
 }
 .ceditTitle {
     text-align: center;
@@ -296,14 +295,31 @@ ul ul{
     margin-top: 5px;
     margin-left: 5px;
     margin-right: 5px;
-    background-color: lightgray;
     padding: 5px;
     user-select: none;
     font-family: monospace;
     font-size: smaller;
 }
-.ceditBlock.Selected {
+.ceditBlock.Library {
+    background-color: lightgray;
+}
+.ceditBlock.Library.Selected {
     background-color: white;
+    font-weight: bold;
+}
+.ceditBlock.Instance {
+    background-color: lightgray;
+}
+.ceditBlock.Instance.Selected {
+    background-color: white;
+    font-weight: bold;
+}
+.ceditBlock.Instance.Selected.Left {
+    background-color: cornflowerblue;
+    font-weight: bold;
+}
+.ceditBlock.Instance.Selected.Right {
+    background-color: orange;
     font-weight: bold;
 }
 .ceditButton {

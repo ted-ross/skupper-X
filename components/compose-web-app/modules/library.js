@@ -210,7 +210,7 @@ async function LibTabSheet(lbid, blockTypes, interfaceRoles, libraryBlocks) {
             enabled      : true,
             selectAction : async (body) => {
                 if (block.bodystyle == 'composite') {
-                    LibraryEditComposite(body, block, libraryBlocks);
+                    LibraryEditComposite(body, block, libraryBlocks, blockTypes);
                 } else {
                     LibraryEditSimple(body, block, blockType);
                 }

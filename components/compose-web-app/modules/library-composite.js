@@ -33,9 +33,9 @@ function DivTitle(div, title) {
     div.appendChild(titleDiv);
 }
 
-function BlockDiv(name) {
+function BlockDiv(name, kind) {
     let div = document.createElement('div');
-    div.className = 'ceditBlock';
+    div.className = `ceditBlock ${kind}`;
     div.textContent = name;
     return div;
 }
@@ -50,10 +50,52 @@ function OpButton(div, text, onclick) {
     return button;
 }
 
-function ExpandComposite(spec, libraryBlocks) {
-    let composite = {};
+async function ExpandComposite(spec, libraryBlocks, blockTypes, superIf, superBlock) {
+    let composite = {
+        superInterfaces : {},
+        instances       : {},
+        bindings        : [],
+    };
 
-    // TODO
+    //
+    // Load up the super-interfaces
+    //
+    for (const sif of superIf) {
+        composite.superInterfaces[sif.name] = new Interface(sif, blockTypes[superBlock.type]);
+    }
+
+    //
+    // Pass 1 - Set up the instances
+    //
+    for (const instance of spec) {
+        let library = libraryBlocks[instance.block];
+        const result = await fetch(`/compose/v1alpha1/library/blocks/${library.id}/interfaces`);
+        library._interfaces = await result.json();
+        composite.instances[instance.name] = new Instance(library, instance, blockTypes[library.type]);
+    }
+
+    //
+    // Pass 2 - Resolve bindings
+    //
+    for (var instance of Object.values(composite.instances)) {
+        const bindingSpec = instance.getBindingsSpec();
+        for (const bspec of bindingSpec) {
+            let localInterface = instance.findInterface(bspec.interface);
+            var remoteInterface;
+            if (bspec.block) {
+                let remoteInstance = composite.instances[bspec.block];
+                remoteInterface = remoteInstance.findInterface(bspec.blockInterface);
+            } else {
+                if (bspec.super) {
+                    remoteInterface = composite.superInterfaces[bspec.super];
+                }
+            }
+
+            if (localInterface && remoteInterface) {
+                composite.bindings.push(new Binding(localInterface, remoteInterface));
+            }
+        }
+    }
 
     return composite;
 }
@@ -62,7 +104,73 @@ function RenderComposite(composite) {
     // TODO - Render the expanded composite as a body specification
 }
 
-export async function LibraryEditComposite(panel, block, libraryBlocks) {
+class Instance {
+    constructor(library, spec, blockType) {
+        this.library    = library;
+        this.name       = this.computeName(spec, library);
+        this.blockType  = blockType;
+        this.interfaces = {};
+        for (const iface of library._interfaces) {
+            this.interfaces[iface.name] = new Interface(iface, blockType);
+        }
+        this.configSpec  = library.config || {};
+        this.config      = (spec ? spec.config : undefined) || {};
+        this.bindingSpec = (spec ? spec.bindings : undefined) || [];
+    }
+
+    computeName(spec, library) {
+        if (spec) {
+            return spec.name;
+        }
+
+        if (!library._instanceNum) {
+            library._instanceNum = 0
+        }
+        library._instanceNum++;
+        return `${library.name}.${library._instanceNum}`;
+    }
+
+    findInterface(name) {
+        return this.interfaces[name];
+    }
+
+    getBindingsSpec() {
+        return this.bindingSpec;
+    }
+}
+
+class Interface {
+    constructor(library, blockType) {
+        this.name = library.name;
+        this.role = library.role;
+        if (blockType.allownorth && !blockType.allowsouth) {
+            this.polarity = 'north';
+        } else if (!blockType.allownorth && blockType.allowsouth) {
+            this.polarity = 'south';
+        } else {
+            this.polarity = library.polarity;
+        }
+        this.data = library.data || {};
+        this.bindings = [];
+    }
+
+    addBinding(binding) {
+        this.bindings.push(binding);
+    }
+}
+
+class Binding {
+    constructor(left, right, isSuper) {
+        this.left    = left;
+        this.right   = right;
+        this.isSuper = this.isSuper;
+
+        left.addBinding(this);
+        right.addBinding(this);
+    }
+}
+
+export async function LibraryEditComposite(panel, block, libraryBlocks, blockTypes) {
     panel.innerHTML = '';
     let selectedLibraryBlockNames  = [];
     let selectedInstanceBlockNames = [];
@@ -70,9 +178,11 @@ export async function LibraryEditComposite(panel, block, libraryBlocks) {
     //
     // Get the block body
     //
-    const result  = await fetch(`/compose/v1alpha1/library/blocks/${block.id}/body`);
-    const body    = await result.json();
-    let composite = ExpandComposite(body, libraryBlocks);
+    const result1 = await fetch(`/compose/v1alpha1/library/blocks/${block.id}/body`);
+    const body    = await result1.json();
+    const result2 = await fetch(`/compose/v1alpha1/library/blocks/${block.id}/interfaces`);
+    const superIf = await result2.json();
+    let composite = await ExpandComposite(body, libraryBlocks, blockTypes, superIf, block);
 
     //
     // Set up the editor layout
@@ -80,8 +190,8 @@ export async function LibraryEditComposite(panel, block, libraryBlocks) {
     let blocksDiv          = NewDiv('ceditBlocks');
     let libraryDiv         = NewDiv('ceditLibrary');
     let operationsDiv      = NewDiv('ceditOperations');
-    let interfacesLeftDiv  = NewDiv('ceditInterfacesLeft');
-    let interfacesRightDiv = NewDiv('ceditInterfacesRight');
+    let interfacesLeftDiv  = NewDiv('ceditInterfaces Left');
+    let interfacesRightDiv = NewDiv('ceditInterfaces Right');
     let centerMiddleDiv    = NewDiv('ceditCenterMiddle');
     let centerTopDiv       = NewDiv('ceditCenterTop', [interfacesLeftDiv, interfacesRightDiv]);
     let centerDiv          = NewDiv('ceditCenter', [centerTopDiv, centerMiddleDiv, operationsDiv]);
@@ -91,18 +201,6 @@ export async function LibraryEditComposite(panel, block, libraryBlocks) {
     DivTitle(operationsDiv,      'Context-Specific Operations');
     DivTitle(interfacesLeftDiv,  'Block Interfaces');
     DivTitle(interfacesRightDiv, 'Block Interfaces');
-
-    await SetupLibrary(libraryDiv, libraryBlocks, (libSelected) => {
-        //
-        // Invoked when the set of selected library blocks changes.
-        //
-        selectedLibraryBlockNames = libSelected;
-        instantiateButton.hidden = selectedLibraryBlockNames.length == 0;
-    });
-
-    await SetupInstanceBlocks(blocksDiv, composite, libraryBlocks, (selected) => {
-        // TODO
-    });
 
     //
     // Set up the context-specific operations in hidden state
@@ -127,13 +225,31 @@ export async function LibraryEditComposite(panel, block, libraryBlocks) {
         // TODO
     });
 
+    //
+    // Set up the library panel
+    //
+    await SetupLibrary(libraryDiv, libraryBlocks, (libSelected) => {
+        //
+        // Invoked when the set of selected library blocks changes.
+        //
+        selectedLibraryBlockNames = libSelected;
+        instantiateButton.hidden = selectedLibraryBlockNames.length == 0;
+    });
+
+    //
+    // Set up the instance panel
+    //
+    let instanceColumn = await SetupInstanceBlocks(blocksDiv, composite, libraryBlocks, (selected) => {
+        // TODO
+    });
+
     panel.appendChild(outerDiv);
 }
 
-async function SetupLibrary(libraryDiv, libraryBlocks, selectUpdate) {
+async function SetupLibrary(libraryDiv, libraryBlocks, onSelectChange) {
     let selectList = [];
     for (const name of Object.keys(libraryBlocks)) {
-        let blockDiv = BlockDiv(name);
+        let blockDiv = BlockDiv(name, 'Library');
         let selected = false;
         blockDiv.onclick = () => {
             selected = !selected;
@@ -142,13 +258,66 @@ async function SetupLibrary(libraryDiv, libraryBlocks, selectUpdate) {
             } else {
                 selectList.splice(selectList.indexOf(name), 1);
             }
-            blockDiv.className = selected ? 'ceditBlock Selected' : 'ceditBlock';
-            selectUpdate(selectList);
+            blockDiv.className = selected ? 'ceditBlock Library Selected' : 'ceditBlock Library';
+            onSelectChange(selectList);
         };
         libraryDiv.appendChild(blockDiv);
     }
 }
 
-async function SetupInstanceBlocks(blocksDiv, body, libraryBlocks, selectUpdate) {
-    // TODO
+const UNSELECTED     = 0;
+const SELECTED       = 1;
+const SELECTED_LEFT  = 2;
+const SELECTED_RIGHT = 3
+
+function UpdateInstanceDiv(entry, newState) {
+    entry.selectState = newState;
+    switch (newState) {
+        case UNSELECTED     : entry.div.className = 'ceditBlock Instance';                 break;
+        case SELECTED       : entry.div.className = 'ceditBlock Instance Selected';        break;
+        case SELECTED_LEFT  : entry.div.className = 'ceditBlock Instance Selected Left';   break;
+        case SELECTED_RIGHT : entry.div.className = 'ceditBlock Instance Selected Right';  break;
+    }
+}
+
+async function SetupInstanceBlocks(blocksDiv, composite, libraryBlocks, onSelectChange) {
+    let instanceDivs = [];
+    let blockDiv = BlockDiv('SUPER', 'Instance');
+    let superEntry = {
+        div         : blockDiv,
+        selectState : UNSELECTED,
+        isSuper     : true,
+    };
+    blockDiv.onclick = () => {
+        // TODO
+    };
+    instanceDivs.push(superEntry);
+    blocksDiv.appendChild(blockDiv);
+    for (const name of Object.keys(composite.instances)) {
+        blockDiv = BlockDiv(name, 'Instance');
+        let entry = {
+            div         : blockDiv,
+            selectState : UNSELECTED,
+            isSuper     : false,
+        };
+        blockDiv.onclick = () => {
+            if (entry.selectState == UNSELECTED) {
+                UpdateInstanceDiv(entry, SELECTED_LEFT);
+            } else {
+                UpdateInstanceDiv(entry, UNSELECTED);
+            }
+        };
+        blockDiv.oncontextmenu = (e) => {
+            e.preventDefault();
+            if (entry.selectState == UNSELECTED) {
+                UpdateInstanceDiv(entry, SELECTED_RIGHT);
+            } else {
+                UpdateInstanceDiv(entry, UNSELECTED);
+            }
+        }
+        instanceDivs.push(entry);
+        blocksDiv.appendChild(blockDiv);
+    }
+
+    return instanceDivs;
 }
