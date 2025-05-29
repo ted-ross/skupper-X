@@ -270,25 +270,29 @@ ul ul{
     display: flex;
     flex-direction: column;
     width: 50%;
-    height: 80%;
     margin-top: 5px;
-    padding-bottom: 5px;
+    padding-bottom: 10px;
+    border-radius: 10px;
 }
 .ceditInterfaces.Left {
     background-color: cornflowerblue;
     margin-right: 10px;
+    padding-right: 0;
  }
 .ceditInterfaces.Right {
     background-color: orange;
     margin-left: 10px;
+    padding-left: 0;
 }
 .ceditTitle {
     text-align: center;
     font-style: italic;
     margin-top: 3px;
+    user-select: none;
 }
 .ceditBlock {
     width: 92%;
+    border-style: solid;
     border-color: black;
     border-radius: 2px;
     border-width: 1px;
@@ -321,6 +325,50 @@ ul ul{
 .ceditBlock.Instance.Selected.Right {
     background-color: orange;
     font-weight: bold;
+}
+.ceditInterface {
+    background-color: lightgray;
+    border-style: solid;
+    border-color: black;
+    border-width: 1px;
+    margin-top: 5px;
+    margin-left: 5px;
+    margin-right: 5px;
+    padding: 5px;
+    user-select: none;
+    font-family: monospace;
+    font-size: smaller;
+}
+.ceditInterface.Left {
+    text-align: right;
+    margin-left: auto;
+    border-top-left-radius: 20px;
+    border-bottom-left-radius: 20px;
+    padding-left: 10px;
+    margin-right: 0;
+    border-right-style: none;
+}
+.ceditInterface.Right {
+    text-align: left;
+    margin-right: auto;
+    border-top-right-radius: 20px;
+    border-bottom-right-radius: 20px;
+    padding-right: 10px;
+    margin-left: 0;
+    border-left-style: none;
+}
+.ceditInterface.Super {
+    text-align: right;
+    margin-left: auto;
+    border-top-right-radius: 20px;
+    border-bottom-right-radius: 20px;
+    padding-left: 10px;
+    margin-right: 0;
+}
+.ceditInterface.Config {
+    display: flex;
+    flex-direction: row;
+    text-align: left;
 }
 .ceditButton {
     margin: 10px;

@@ -134,6 +134,10 @@ class Instance {
         return this.interfaces[name];
     }
 
+    getInterfaces() {
+        return this.interfaces;
+    }
+
     getBindingsSpec() {
         return this.bindingSpec;
     }
@@ -173,7 +177,6 @@ class Binding {
 export async function LibraryEditComposite(panel, block, libraryBlocks, blockTypes) {
     panel.innerHTML = '';
     let selectedLibraryBlockNames  = [];
-    let selectedInstanceBlockNames = [];
 
     //
     // Get the block body
@@ -199,8 +202,22 @@ export async function LibraryEditComposite(panel, block, libraryBlocks, blockTyp
     DivTitle(blocksDiv,          'InstanceBlocks');
     DivTitle(libraryDiv,         'Library');
     DivTitle(operationsDiv,      'Context-Specific Operations');
-    DivTitle(interfacesLeftDiv,  'Block Interfaces');
-    DivTitle(interfacesRightDiv, 'Block Interfaces');
+
+    //
+    // Create encompassing records for the interface panels
+    //
+    let interfacesLeft = {
+        side  : 'left',
+        div   : interfacesLeftDiv,
+        block : undefined,
+        iList : [], // { div, Interface, isSelected }
+    };
+    let interfacesRight = {
+        side  : 'right',
+        div   : interfacesRightDiv,
+        block : undefined,
+        iList : [], // { div, Interface, isSelected }
+    };
 
     //
     // Set up the context-specific operations in hidden state
@@ -239,11 +256,69 @@ export async function LibraryEditComposite(panel, block, libraryBlocks, blockTyp
     //
     // Set up the instance panel
     //
-    let instanceColumn = await SetupInstanceBlocks(blocksDiv, composite, libraryBlocks, (selected) => {
-        // TODO
+    let instanceColumn = await SetupInstanceBlocks(blocksDiv, composite, libraryBlocks, (entry) => {
+        if (entry.lastState == SELECTED_LEFT ) {
+            ClearInterfacePanel(interfacesLeft);
+        } else if (entry.lastState == SELECTED_RIGHT) {
+            ClearInterfacePanel(interfacesRight);
+        }
+        if (entry.selectState == SELECTED_LEFT) {
+            SetupInterfacePanel(interfacesLeft, entry, composite);
+        } else if (entry.selectState == SELECTED_RIGHT) {
+            SetupInterfacePanel(interfacesRight, entry, composite);
+        }
     });
 
     panel.appendChild(outerDiv);
+}
+
+function ClearInterfacePanel(ipanel) {
+    ipanel.div.innerHTML = '';
+    ipanel.block = undefined;
+    ipanel.iList = [];
+}
+
+function SetupInterfacePanel(ipanel, entry, composite) {
+    ipanel.div.innerHTML = '';
+    if (entry.isSuper) {
+        DivTitle(ipanel.div, 'Super Block');
+        for (const iface of Object.values(composite.superInterfaces)) {
+            // Assume we're driving the left panel
+            let idiv = document.createElement('div');
+            idiv.className = 'ceditInterface Super';
+            idiv.textContent = `${iface.name} [${iface.role}] (${iface.polarity == 'north' ? 'N' : 'S'})`;
+            ipanel.iList.push({
+                div        : idiv,
+                iface      : iface,
+                isSelected : false,
+            });
+            ipanel.div.appendChild(idiv);
+        }
+    } else {
+        const instance = composite.instances[entry.instanceName];
+        DivTitle(ipanel.div, entry.instanceName);
+        ipanel.block = instance;
+        const ifaces = instance.getInterfaces();
+        for (const iface of Object.values(ifaces)) {
+            let idiv = document.createElement('div');
+            if (ipanel.side == 'left') {
+                idiv.className = 'ceditInterface Left';
+                idiv.textContent = `${iface.name} [${iface.role}] (${iface.polarity == 'north' ? 'N' : 'S'})`;
+            } else {
+                idiv.className = 'ceditInterface Right';
+                idiv.textContent = `(${iface.polarity == 'north' ? 'N' : 'S'}) [${iface.role}] ${iface.name}`;
+            }
+            ipanel.iList.push({
+                div        : idiv,
+                iface      : iface,
+                isSelected : false,
+            });
+            idiv.onclick = () => {
+                // TODO
+            }
+            ipanel.div.appendChild(idiv);
+        }
+    }
 }
 
 async function SetupLibrary(libraryDiv, libraryBlocks, onSelectChange) {
@@ -270,7 +345,8 @@ const SELECTED       = 1;
 const SELECTED_LEFT  = 2;
 const SELECTED_RIGHT = 3
 
-function UpdateInstanceDiv(entry, newState) {
+function UpdateInstanceDiv(entry, newState, onChange, entryList) {
+    entry.lastState   = entry.selectState;
     entry.selectState = newState;
     switch (newState) {
         case UNSELECTED     : entry.div.className = 'ceditBlock Instance';                 break;
@@ -278,41 +354,66 @@ function UpdateInstanceDiv(entry, newState) {
         case SELECTED_LEFT  : entry.div.className = 'ceditBlock Instance Selected Left';   break;
         case SELECTED_RIGHT : entry.div.className = 'ceditBlock Instance Selected Right';  break;
     }
+
+    if (entryList) {
+        for (var other of entryList) {
+            if (other != entry && other.selectState == newState) {
+                UpdateInstanceDiv(other, UNSELECTED, onChange);
+            }
+        }
+    }
+
+    if (entry.lastState != entry.selectState) {
+        onChange(entry);
+    }
 }
 
 async function SetupInstanceBlocks(blocksDiv, composite, libraryBlocks, onSelectChange) {
     let instanceDivs = [];
     let blockDiv = BlockDiv('SUPER', 'Instance');
     let superEntry = {
-        div         : blockDiv,
-        selectState : UNSELECTED,
         isSuper     : true,
+        div         : blockDiv,
+        lastState   : UNSELECTED,
+        selectState : UNSELECTED,
     };
     blockDiv.onclick = () => {
-        // TODO
+        if (superEntry.selectState == UNSELECTED) {
+            UpdateInstanceDiv(superEntry, SELECTED_LEFT, onSelectChange, instanceDivs);
+        } else {
+            UpdateInstanceDiv(superEntry, UNSELECTED, onSelectChange);
+        }
+    };
+    blockDiv.oncontextmenu = (e) => {
+        e.preventDefault();
+        if (superEntry.selectState != UNSELECTED) {
+            UpdateInstanceDiv(superEntry, UNSELECTED, onSelectChange);
+        }
     };
     instanceDivs.push(superEntry);
     blocksDiv.appendChild(blockDiv);
     for (const name of Object.keys(composite.instances)) {
         blockDiv = BlockDiv(name, 'Instance');
         let entry = {
-            div         : blockDiv,
-            selectState : UNSELECTED,
-            isSuper     : false,
+            instanceName : name,
+            isSuper      : false,
+            div          : blockDiv,
+            lastState    : UNSELECTED,
+            selectState  : UNSELECTED,
         };
         blockDiv.onclick = () => {
             if (entry.selectState == UNSELECTED) {
-                UpdateInstanceDiv(entry, SELECTED_LEFT);
+                UpdateInstanceDiv(entry, SELECTED_LEFT, onSelectChange, instanceDivs);
             } else {
-                UpdateInstanceDiv(entry, UNSELECTED);
+                UpdateInstanceDiv(entry, UNSELECTED, onSelectChange);
             }
         };
         blockDiv.oncontextmenu = (e) => {
             e.preventDefault();
             if (entry.selectState == UNSELECTED) {
-                UpdateInstanceDiv(entry, SELECTED_RIGHT);
+                UpdateInstanceDiv(entry, SELECTED_RIGHT, onSelectChange, instanceDivs);
             } else {
-                UpdateInstanceDiv(entry, UNSELECTED);
+                UpdateInstanceDiv(entry, UNSELECTED, onSelectChange);
             }
         }
         instanceDivs.push(entry);
