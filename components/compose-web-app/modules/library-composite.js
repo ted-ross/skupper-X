@@ -17,6 +17,8 @@
  under the License.
 */
 
+import { FormLayout, LayoutRow } from "./util.js";
+
 function NewDiv(className, children) {
     let div = document.createElement('div');
     div.className = className;
@@ -69,8 +71,10 @@ async function ExpandComposite(spec, libraryBlocks, blockTypes, superIf, superBl
     //
     for (const instance of spec) {
         let library = libraryBlocks[instance.block];
-        const result = await fetch(`/compose/v1alpha1/library/blocks/${library.id}/interfaces`);
-        library._interfaces = await result.json();
+        const result1 = await fetch(`/compose/v1alpha1/library/blocks/${library.id}/interfaces`);
+        library._interfaces = await result1.json();
+        const result2 = await fetch(`/compose/v1alpha1/library/blocks/${library.id}/config`);
+        library._configuration = await result2.json();
         composite.instances[instance.name] = new Instance(library, instance, blockTypes[library.type]);
     }
 
@@ -113,7 +117,6 @@ class Instance {
         for (const iface of library._interfaces) {
             this.interfaces[iface.name] = new Interface(iface, blockType);
         }
-        this.configSpec  = library.config || {};
         this.config      = (spec ? spec.config : undefined) || {};
         this.bindingSpec = (spec ? spec.bindings : undefined) || [];
     }
@@ -128,6 +131,22 @@ class Instance {
         }
         library._instanceNum++;
         return `${library.name}.${library._instanceNum}`;
+    }
+
+    getName() {
+        return this.name;
+    }
+
+    getLibrary() {
+        return this.library;
+    }
+
+    getConfig() {
+        return this.config;
+    }
+
+    setConfig(newConfig) {
+        this.config = newConfig;
     }
 
     findInterface(name) {
@@ -202,6 +221,7 @@ export async function LibraryEditComposite(panel, block, libraryBlocks, blockTyp
     DivTitle(blocksDiv,          'InstanceBlocks');
     DivTitle(libraryDiv,         'Library');
     DivTitle(operationsDiv,      'Context-Specific Operations');
+    centerDiv.id = 'center-box';
 
     //
     // Create encompassing records for the interface panels
@@ -256,16 +276,16 @@ export async function LibraryEditComposite(panel, block, libraryBlocks, blockTyp
     //
     // Set up the instance panel
     //
-    let instanceColumn = await SetupInstanceBlocks(blocksDiv, composite, libraryBlocks, (entry) => {
+    let instanceColumn = await SetupInstanceBlocks(blocksDiv, composite, libraryBlocks, async (entry) => {
         if (entry.lastState == SELECTED_LEFT ) {
             ClearInterfacePanel(interfacesLeft);
         } else if (entry.lastState == SELECTED_RIGHT) {
             ClearInterfacePanel(interfacesRight);
         }
         if (entry.selectState == SELECTED_LEFT) {
-            SetupInterfacePanel(interfacesLeft, entry, composite);
+            await SetupInterfacePanel(interfacesLeft, entry, composite);
         } else if (entry.selectState == SELECTED_RIGHT) {
-            SetupInterfacePanel(interfacesRight, entry, composite);
+            await SetupInterfacePanel(interfacesRight, entry, composite);
         }
     });
 
@@ -278,7 +298,7 @@ function ClearInterfacePanel(ipanel) {
     ipanel.iList = [];
 }
 
-function SetupInterfacePanel(ipanel, entry, composite) {
+async function SetupInterfacePanel(ipanel, entry, composite) {
     ipanel.div.innerHTML = '';
     if (entry.isSuper) {
         DivTitle(ipanel.div, 'Super Block');
@@ -318,7 +338,168 @@ function SetupInterfacePanel(ipanel, entry, composite) {
             }
             ipanel.div.appendChild(idiv);
         }
+
+        //
+        // Set up the configuration display
+        //
+        let configReadOnly = document.createElement('table');
+        const config  = instance.getConfig();
+        for (const [name, value] of Object.entries(config)) {
+            let row = LayoutRow(configReadOnly, [`${name}:`, value]);
+        }
+        let configEdit = document.createElement('button');
+        configEdit.textContent = 'Edit Configuration...';
+        let row = configReadOnly.insertRow();
+        let cell = row.insertCell();
+        cell.setAttribute('colspan', '2');
+        cell.appendChild(configEdit);
+        configEdit.onclick = async () => {
+            await ConfigDialog(instance);
+        }
+        configReadOnly.hidden = true;
+
+        //
+        // Set up the configuration button
+        //
+        let configExpanded = false;
+        let configPanel = document.createElement('div');
+        let configDiv = document.createElement('div');
+        configDiv.className = 'ceditInterface Config';
+        let open = document.createElement('img');
+        open.className = 'treeExpand Closed';
+        let label = document.createElement('div');
+        label.textContent = 'Configuration';
+        configDiv.onclick = async () => {
+            configExpanded = !configExpanded;
+            open.className = configExpanded ? 'treeExpand Open' : 'treeExpand Closed';
+            configReadOnly.hidden = !configExpanded;
+        }
+        configDiv.appendChild(open);
+        configDiv.appendChild(label);
+        configPanel.appendChild(configDiv);
+        configPanel.appendChild(configReadOnly);
+        ipanel.div.appendChild(configPanel);
     }
+}
+
+async function ConfigDialog(instance) {
+    let panel = document.getElementById('center-box');
+    let dialog = document.createElement('div');
+    let content = document.createElement('div');
+    dialog.className = 'modal';
+    dialog.style.display = 'block';
+    content.className = 'modal-content Column';
+
+    let title = document.createElement('div');
+    title.className = 'dialog Title';
+    title.textContent = 'Edit Block Configuration';
+    content.appendChild(title);
+    for (const line of [
+        `Block: ${instance.getName()}`,
+        `Instance of: ${instance.getLibrary().name}`,
+    ]) {
+        let header = document.createElement('div');
+        header.className = 'dialog Info';
+        header.textContent = line;
+        content.appendChild(header);
+    }
+
+    let formElements = [];
+    let   config    = instance.getConfig();
+    const libConfig = instance.getLibrary()._configuration;
+    for (const [name, desc] of Object.entries(libConfig)) {
+        let caption;
+        let field;
+        switch (desc.type) {
+            case 'string':
+            case 'string-name':
+                field = document.createElement('input');
+                field.type = 'text'
+                if (config[name]) {
+                    field.value = config[name];
+                } else if (desc.default) {
+                    field.value = desc.default;
+                }
+                break;
+            case 'enum':
+                field = document.createElement('select');
+                for (const tv of desc.typeValues) {
+                    let option = document.createElement('option');
+                    option.value = tv;
+                    option.textContent = tv;
+                    if (config[name]) {
+                        if (config[name] == tv) {
+                            option.selected = true;
+                        }
+                    } else {
+                        if (desc.default == tv) {
+                            option.selected = true;
+                        }
+                    }
+                    field.appendChild(option);
+                }
+                break;
+            case 'numeric':
+                field = document.createElement('input');
+                field.type = 'text'
+                if (config[name]) {
+                    field.value = config[name];
+                } else if (desc.default) {
+                    field.value = desc.default;
+                }
+                break;
+            case 'bool':
+                field = document.createElement('select');
+                for (const tv of ['true', 'false']) {
+                    let option = document.createElement('option');
+                    option.value = tv;
+                    option.textContent = tv;
+                    if (config[name]) {
+                        if (config[name] == (tv == 'true')) {
+                            option.selected = true;
+                        }
+                    } else {
+                        if (desc.default == (tv == 'true')) {
+                            option.selected = true;
+                        }
+                    }
+                    field.appendChild(option);
+                }
+                break;
+            default:
+                console.log(`Unknown configuration type: ${desc.type}`);
+        }
+
+        caption = document.createElement('div');
+        caption.textContent = `${name}:`;
+        caption.className = (field.value == `${desc.default || ''}`) ? 'dialog Default' : 'dialog';
+
+        field.onchange = () => {
+            caption.className = (field.value == `${desc.default || ''}`) ? 'dialog Default' : 'dialog';
+        };
+
+        formElements.push([caption, field]);
+    }
+
+    let form = await FormLayout(
+        formElements,
+        async () => {
+            // TODO - Submit Action
+        },
+        async () => {
+            dialog.remove();
+        }
+    );
+    let rowSection = document.createElement('div');
+    rowSection.className = 'dialog-row';
+    let filler = document.createElement('div');
+    filler.className = 'dialog-fill';
+    rowSection.appendChild(form);
+    rowSection.appendChild(filler);
+    content.appendChild(rowSection);
+
+    dialog.appendChild(content);
+    panel.appendChild(dialog);
 }
 
 async function SetupLibrary(libraryDiv, libraryBlocks, onSelectChange) {

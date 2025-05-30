@@ -185,6 +185,10 @@ ul ul{
     border: 1px solid #888;
     width: 80%;
 }
+.modal-content.Column {
+    display: flex;
+    flex-direction: column;
+}
   
   /* The Close Button */
 .close {
@@ -221,6 +225,18 @@ ul ul{
     width: auto;
     border-style: none;
     padding-right: 5px;
+}
+.treeExpand {
+    border-style: none;
+    width: 15px;
+    height: 15px;
+    padding-right: 5px;
+}
+.treeExpand.Closed {
+    content: url('/images/angle-right.svg');
+}
+.treeExpand.Open {
+    content: url('/images/angle-down.svg');
 }
 
 /* Composite Editor Components */
@@ -365,11 +381,37 @@ ul ul{
     padding-left: 10px;
     margin-right: 0;
 }
+.ceditConfigPanel {
+    display: flex;
+    flex-direction: column;
+}
 .ceditInterface.Config {
     display: flex;
     flex-direction: row;
     text-align: left;
+    background-color: inherit;
+    border-style: none;
 }
 .ceditButton {
     margin: 10px;
+}
+.dialog {
+    user-select: none;
+    font-family: monospace;
+}
+.dialog.Title {
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+.dialog.Info {
+    margin-bottom: 5px;
+}
+.dialog-row {
+    flex-direction: row;
+}
+.dialog-fill {
+    flex-grow: 1;
+}
+.dialog.Default {
+    color: grey;
 }

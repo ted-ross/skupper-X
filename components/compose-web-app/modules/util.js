@@ -80,10 +80,14 @@ export async function FormLayout(items, action, cancel, submitText, cancelText, 
     for (const [caption, element] of items) {
         let row  = layout.insertRow();
         let cell = row.insertCell();
-        cell.style.textAlign = stacked ? 'left' : 'right';
-        cell.textContent = caption;
-        if (stacked) {
-            row = layout.insertRow();
+        if (typeof(caption) == 'string') {
+            cell.style.textAlign = stacked ? 'left' : 'right';
+            cell.textContent = caption;
+            if (stacked) {
+                row = layout.insertRow();
+            }
+        } else {
+            cell.appendChild(caption);
         }
         cell = row.insertCell();
         cell.appendChild(element);
@@ -122,10 +126,10 @@ export function LayoutRow(layout, cells) {
         let cell = row.insertCell();
         if (!obj) {
             cell.textContent = '-';
-        } else if (typeof(obj) == 'string') {
-            cell.textContent = obj;
+        } else if (typeof(obj) == 'object') {
+            cell.appendChild(obj);
         } else {
-            cell.appendChild(obj)
+            cell.textContent = `${obj}`;
         }
     }
 
