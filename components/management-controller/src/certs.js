@@ -604,7 +604,14 @@ exports.Start = async function() {
     setTimeout(processNewMemberSites, 1000);
     setTimeout(processNewCertificateRequests, 1000);
 
-    kube.WatchSecrets(onSecretWatch);
-    kube.WatchCertificates(onCertificateWatch);
+    // Skip Kubernetes watch operations in standalone mode
+    const STANDALONE_NS = process.env.SKX_STANDALONE_NAMESPACE;
+    if (!STANDALONE_NS) {
+        Log('[Certificate module] Setting up Kubernetes watches');
+        kube.WatchSecrets(onSecretWatch);
+        kube.WatchCertificates(onCertificateWatch);
+    } else {
+        Log('[Certificate module] Skipping Kubernetes watches in standalone mode');
+    }
 }
 

@@ -433,7 +433,8 @@ INSERT INTO BlockTypes (Name, AllowNorth, AllowSouth, AllocateToSite) VALUES
     ('skupperx.io/toplevel',  false, false, false),
     ('skupperx.io/mixed',     true,  true,  false),
     ('skupperx.io/ingress',   true,  false, true),
-    ('skupperx.io/egress',    false, true,  false);
+    ('skupperx.io/egress',    false, true,  false),
+    ('skupperx.io/container', true,  true,  true);
 
 INSERT INTO InterfaceRoles (Name) VALUES
     ('accept'),  ('connect'),
