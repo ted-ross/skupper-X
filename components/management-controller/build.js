@@ -25,14 +25,19 @@ const modules = [
   'certs',
   'config',
   'db',
-  'manage-sync',
+  'sync-management',
+  'sync-application',
   'mc-apiserver',
   'mc-main',
   'prune',
+  'compose',
+  'crd-templates',
+  'ident',
+  'claim-server',
 ];
 
 // List of common modules to copy to the application directory
-const commonModules = ['amqp', 'kube', 'log', 'protocol', 'util'];
+const commonModules = ['amqp', 'common', 'kube', 'log', 'protocol', 'router', 'state-sync', 'util'];
 
 // Function to clean up previous build, if present
 async function cleanupPreviousBuild() {

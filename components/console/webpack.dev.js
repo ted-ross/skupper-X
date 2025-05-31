@@ -13,7 +13,21 @@ const devConfig = {
   devServer: {
     port: 3000,
     historyApiFallback: true,
-    compress: true
+    compress: true,
+    proxy: [
+      {
+        context: ['/api'],
+        target: 'http://localhost:8085',
+        changeOrigin: true,
+        secure: false
+      },
+      {
+        context: ['/compose'],
+        target: 'http://localhost:8085',
+        changeOrigin: true,
+        secure: false
+      }
+    ]
   },
 
   plugins: [
