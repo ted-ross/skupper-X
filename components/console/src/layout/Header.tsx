@@ -4,7 +4,8 @@ import {
   MastheadLogo,
   MastheadContent,
   MastheadMain,
-  MastheadToggle, MastheadBrand,
+  MastheadToggle,
+  MastheadBrand,
   PageToggleButton,
   Toolbar,
   ToolbarContent,
@@ -39,7 +40,7 @@ const SkHeader = function () {
       <MastheadContent>
         <Toolbar isFullHeight>
           <ToolbarContent>
-            <ToolbarGroup align={{ default: "alignEnd" }} gap={{ default: "gapMd" }}>
+            <ToolbarGroup align={{ default: 'alignEnd' }} gap={{ default: 'gapMd' }}>
               {/* Add any future header actions here */}
             </ToolbarGroup>
           </ToolbarContent>

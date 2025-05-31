@@ -1,4 +1,4 @@
-import {  DefaultOptions } from '@tanstack/react-query';
+import { DefaultOptions } from '@tanstack/react-query';
 
 interface QueryClientConfig {
   defaultOptions: {

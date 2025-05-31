@@ -1,22 +1,19 @@
 import { useCallback, useState } from 'react';
 
 import {
-	Alert,
-	Button,
-	Icon,
-	OverflowMenu,
-	OverflowMenuContent,
-	OverflowMenuGroup,
-	OverflowMenuItem,
-	Toolbar,
-	ToolbarContent,
-	ToolbarGroup,
-	ToolbarItem
+  Alert,
+  Button,
+  Icon,
+  OverflowMenu,
+  OverflowMenuContent,
+  OverflowMenuGroup,
+  OverflowMenuItem,
+  Toolbar,
+  ToolbarContent,
+  ToolbarGroup,
+  ToolbarItem
 } from '@patternfly/react-core';
-import {
-	Modal,
-	ModalVariant
-} from '@patternfly/react-core/deprecated';
+import { Modal, ModalVariant } from '@patternfly/react-core/deprecated';
 import { CheckCircleIcon, InProgressIcon, SyncAltIcon } from '@patternfly/react-icons';
 import { useMutation, useSuspenseQuery } from '@tanstack/react-query';
 
@@ -103,7 +100,7 @@ const Backbones = function () {
 
           <Toolbar>
             <ToolbarContent>
-              <ToolbarGroup align={{ default: "alignEnd" }}>
+              <ToolbarGroup align={{ default: 'alignEnd' }}>
                 <ToolbarItem>
                   <Button onClick={handleOpenModal}>{BackboneLabels.CreateBackboneTitle}</Button>
                 </ToolbarItem>

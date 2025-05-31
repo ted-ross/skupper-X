@@ -33,7 +33,7 @@ const ErrorConsole: FC<ErrorConsoleProps> = function ({ error, resetErrorBoundar
 
   // It handles app errors
   return (
-    <PageSection hasBodyWrapper={false}  data-testid="sk-js-error-view">
+    <PageSection hasBodyWrapper={false} data-testid="sk-js-error-view">
       <Content>
         <Title headingLevel="h1">{ConsoleErrorLabels.ErrorTitle}</Title>
         <Content component={ContentVariants.h3}>{message}</Content>

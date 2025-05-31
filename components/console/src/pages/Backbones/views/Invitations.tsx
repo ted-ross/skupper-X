@@ -1,28 +1,25 @@
 import { FC, useCallback, useState } from 'react';
 
 import {
-	Alert,
-	Button,
-	Icon,
-	OverflowMenu,
-	OverflowMenuContent,
-	OverflowMenuGroup,
-	OverflowMenuItem,
-	PageSection,
-	Stack,
-	StackItem,
-	Timestamp,
-	TimestampFormat,
-	Title,
-	Toolbar,
-	ToolbarContent,
-	ToolbarGroup,
-	ToolbarItem,
+  Alert,
+  Button,
+  Icon,
+  OverflowMenu,
+  OverflowMenuContent,
+  OverflowMenuGroup,
+  OverflowMenuItem,
+  PageSection,
+  Stack,
+  StackItem,
+  Timestamp,
+  TimestampFormat,
+  Title,
+  Toolbar,
+  ToolbarContent,
+  ToolbarGroup,
+  ToolbarItem
 } from '@patternfly/react-core';
-import {
-	Modal,
-	ModalVariant
-} from '@patternfly/react-core/deprecated';
+import { Modal, ModalVariant } from '@patternfly/react-core/deprecated';
 import { InProgressIcon, SyncAltIcon } from '@patternfly/react-icons';
 import { useMutation, useSuspenseQueries } from '@tanstack/react-query';
 import { useParams } from 'react-router';
@@ -131,7 +128,7 @@ const Invitations: FC<{ vid: string }> = function ({ vid }) {
             <ToolbarItem>
               <Title headingLevel="h2">{BackboneLabels.Invitations}</Title>
             </ToolbarItem>
-            <ToolbarGroup align={{ default: "alignEnd" }}>
+            <ToolbarGroup align={{ default: 'alignEnd' }}>
               <ToolbarItem>
                 <Button onClick={handleOpenModal}>{InvitationLabels.CreateTitle}</Button>
               </ToolbarItem>

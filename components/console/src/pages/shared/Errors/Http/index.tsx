@@ -1,15 +1,6 @@
 import { FC, MouseEventHandler } from 'react';
 
-import {
-  Button,
-  Divider,
-  List,
-  ListItem,
-  PageSection,
-  Content,
-  ContentVariants,
-  Title
-} from '@patternfly/react-core';
+import { Button, Divider, List, ListItem, PageSection, Content, ContentVariants, Title } from '@patternfly/react-core';
 
 import { HttpErrorLabels } from './Http.enum';
 
@@ -19,7 +10,7 @@ const ErrorHttp: FC<{ code?: string; message?: string; onReset?: MouseEventHandl
   onReset
 }) {
   return (
-    <PageSection hasBodyWrapper={false} >
+    <PageSection hasBodyWrapper={false}>
       <Content>
         <Title headingLevel="h1">{message || HttpErrorLabels.ErrorTitle}</Title>
         <Title headingLevel="h2">{code || ''}</Title>

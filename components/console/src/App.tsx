@@ -30,7 +30,7 @@ const App = function () {
             <ToolbarItem>
               <SkBreadcrumb />
             </ToolbarItem>
-            <ToolbarGroup align={{ default: "alignEnd" }}>
+            <ToolbarGroup align={{ default: 'alignEnd' }}>
               <SkUpdateDataButton />
             </ToolbarGroup>
           </ToolbarContent>

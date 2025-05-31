@@ -1,11 +1,6 @@
 import { ComponentType, FC } from 'react';
 
-import {
-  Bullseye,
-  EmptyState,
-  EmptyStateBody,
-  EmptyStateVariant
-} from '@patternfly/react-core';
+import { Bullseye, EmptyState, EmptyStateBody, EmptyStateVariant } from '@patternfly/react-core';
 
 import { EmptyDataLabels } from './EmptyData.enum';
 

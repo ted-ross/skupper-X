@@ -10,8 +10,8 @@ import {
 
 import LoadingPage from '@pages/shared/Loading';
 
-import TransitionPage from '../core/components/TransitionPages/Fade';
 import Footer from './Footer';
+import TransitionPage from '../core/components/TransitionPages/Fade';
 
 import '@patternfly/patternfly/patternfly-addons.css';
 

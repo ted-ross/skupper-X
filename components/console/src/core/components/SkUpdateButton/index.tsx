@@ -119,9 +119,7 @@ const SkUpdateDataButton: FC<SkUpdateDataButtonProps> = function ({
         data-testid="update-data-click"
         onClick={() => revalidateLiveQueries()}
         style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}
-      >
-        
-      </Button>
+       />
     </>
   );
 };

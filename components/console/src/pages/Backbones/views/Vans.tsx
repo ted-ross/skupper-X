@@ -1,22 +1,19 @@
 import { useCallback, useState } from 'react';
 
 import {
-	Alert,
-	Button,
-	Icon,
-	OverflowMenu,
-	OverflowMenuContent,
-	OverflowMenuGroup,
-	OverflowMenuItem,
-	Toolbar,
-	ToolbarContent,
-	ToolbarGroup,
-	ToolbarItem
+  Alert,
+  Button,
+  Icon,
+  OverflowMenu,
+  OverflowMenuContent,
+  OverflowMenuGroup,
+  OverflowMenuItem,
+  Toolbar,
+  ToolbarContent,
+  ToolbarGroup,
+  ToolbarItem
 } from '@patternfly/react-core';
-import {
-	Modal,
-	ModalVariant
-} from '@patternfly/react-core/deprecated';
+import { Modal, ModalVariant } from '@patternfly/react-core/deprecated';
 import { InProgressIcon, SyncAltIcon } from '@patternfly/react-icons';
 import { useMutation, useSuspenseQuery } from '@tanstack/react-query';
 
@@ -84,7 +81,7 @@ const Vans = function () {
         <>
           <Toolbar>
             <ToolbarContent>
-              <ToolbarGroup align={{ default: "alignEnd" }}>
+              <ToolbarGroup align={{ default: 'alignEnd' }}>
                 <ToolbarItem>
                   <Button onClick={handleOpenVanModal}>{VanLabels.CreateVanTitle}</Button>
                 </ToolbarItem>
@@ -93,7 +90,7 @@ const Vans = function () {
           </Toolbar>
 
           {vanValidated && <Alert variant="danger" title={vanValidated} isInline timeout={ALERT_VISIBILITY_TIMEOUT} />}
-          
+
           <SkTable
             columns={VanColumns}
             rows={vans}

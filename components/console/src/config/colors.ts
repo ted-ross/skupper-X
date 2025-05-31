@@ -1,17 +1,17 @@
 export enum Colors {
-  White = "--pf-t--temp--dev--tbd"/* CODEMODS: original v5 color was --pf-v5-global--palette--white */,
-  Black900 = "--pf-t--temp--dev--tbd"/* CODEMODS: original v5 color was --pf-v5-global--palette--black-900 */,
-  Black600 = "--pf-t--temp--dev--tbd"/* CODEMODS: original v5 color was --pf-v5-global--palette--black-600 */,
-  Black500 = "--pf-t--temp--dev--tbd"/* CODEMODS: original v5 color was --pf-v5-global--palette--black-500 */,
-  Black400 = "--pf-t--temp--dev--tbd"/* CODEMODS: original v5 color was --pf-v5-global--palette--black-400 */,
-  Black100 = "--pf-t--temp--dev--tbd"/* CODEMODS: original v5 color was --pf-v5-global--palette--black-100 */,
-  Green500 = "--pf-t--temp--dev--tbd"/* CODEMODS: original v5 color was --pf-v5-global--palette--green-500 */,
-  Blue400 = "--pf-t--temp--dev--tbd"/* CODEMODS: original v5 color was --pf-v5-global--palette--blue-400 */,
-  Purple500 = "--pf-t--temp--dev--tbd"/* CODEMODS: original v5 color was --pf-v5-global--palette--purple-500 */,
-  Cyan300 = "--pf-t--temp--dev--tbd"/* CODEMODS: original v5 color was --pf-v5-global--palette--cyan-300 */,
-  Orange200 = "--pf-t--temp--dev--tbd"/* CODEMODS: original v5 color was --pf-v5-global--palette--orange-200 */,
-  Yellow300 = "--pf-t--temp--dev--tbd"/* CODEMODS: original v5 color was --pf-v5-global--palette--gold-300 */,
-  Red100 = "--pf-t--temp--dev--tbd"/* CODEMODS: original v5 color was --pf-v5-global--palette--red-100 */
+  White = '--pf-t--temp--dev--tbd' /* CODEMODS: original v5 color was --pf-v5-global--palette--white */,
+  Black900 = '--pf-t--temp--dev--tbd' /* CODEMODS: original v5 color was --pf-v5-global--palette--black-900 */,
+  Black600 = '--pf-t--temp--dev--tbd' /* CODEMODS: original v5 color was --pf-v5-global--palette--black-600 */,
+  Black500 = '--pf-t--temp--dev--tbd' /* CODEMODS: original v5 color was --pf-v5-global--palette--black-500 */,
+  Black400 = '--pf-t--temp--dev--tbd' /* CODEMODS: original v5 color was --pf-v5-global--palette--black-400 */,
+  Black100 = '--pf-t--temp--dev--tbd' /* CODEMODS: original v5 color was --pf-v5-global--palette--black-100 */,
+  Green500 = '--pf-t--temp--dev--tbd' /* CODEMODS: original v5 color was --pf-v5-global--palette--green-500 */,
+  Blue400 = '--pf-t--temp--dev--tbd' /* CODEMODS: original v5 color was --pf-v5-global--palette--blue-400 */,
+  Purple500 = '--pf-t--temp--dev--tbd' /* CODEMODS: original v5 color was --pf-v5-global--palette--purple-500 */,
+  Cyan300 = '--pf-t--temp--dev--tbd' /* CODEMODS: original v5 color was --pf-v5-global--palette--cyan-300 */,
+  Orange200 = '--pf-t--temp--dev--tbd' /* CODEMODS: original v5 color was --pf-v5-global--palette--orange-200 */,
+  Yellow300 = '--pf-t--temp--dev--tbd' /* CODEMODS: original v5 color was --pf-v5-global--palette--gold-300 */,
+  Red100 = '--pf-t--temp--dev--tbd' /* CODEMODS: original v5 color was --pf-v5-global--palette--red-100 */
 }
 
 export enum VarColors {

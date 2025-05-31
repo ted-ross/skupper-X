@@ -146,11 +146,10 @@ const Backbone = function () {
 
   const handleLinkDelete = useCallback(
     (siteId: string) => {
-      mutationDeleteLink.mutate(siteId)
+      mutationDeleteLink.mutate(siteId);
     },
     [mutationDeleteLink]
   );
-
 
 
   const handleSiteRefresh = useCallback(() => {
@@ -268,9 +267,10 @@ const Backbone = function () {
                             timeFormat={TimestampFormat.medium}
                           />
                         );
-                      } else {
-                        return '-';
-                      }
+                      } 
+                        
+return '-';
+                      
                     },
                     actions: ({ data }: { data: SiteResponse }) => (
                       <OverflowMenu breakpoint="lg">

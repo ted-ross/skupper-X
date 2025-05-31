@@ -21,9 +21,7 @@ const Footer: FC<FooterProps> = function ({ className = '' }) {
         justifyContent: 'center'
       }}
     >
-      <p style={{ margin: 0, fontSize: '14px' }}>
-        copyright &copy; Skupper-X
-      </p>
+      <p style={{ margin: 0, fontSize: '14px' }}>copyright &copy; Skupper-X</p>
     </PageSection>
   );
 };

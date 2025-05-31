@@ -15,7 +15,6 @@ import {
 	ToolbarFilter,
 	Button
 } from '@patternfly/react-core';
-
 import { FilterIcon } from '@patternfly/react-icons';
 
 import useDebounce from 'hooks/useDebounce';

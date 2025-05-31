@@ -4,7 +4,7 @@ import { NotFoundLabels } from './NotFound.enum';
 
 const NotFound = function () {
   return (
-    <PageSection hasBodyWrapper={false} >
+    <PageSection hasBodyWrapper={false}>
       <Bullseye data-testid="sk-not-found-view">
         <Content>
           <Content component={ContentVariants.h1}>{NotFoundLabels.ErrorTitle}</Content>
