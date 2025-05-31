@@ -1,15 +1,4 @@
 import {
-  BackboneResponse,
-  InvitationResponse,
-  LinkResponse,
-  MemberResponse,
-  SiteResponse,
-  VanResponse
-} from '@API/REST.interfaces';
-import { HexColors, VarColors } from '@config/colors';
-import { SKColumn } from '@core/components/SkTable/SkTable.interfaces';
-
-import {
   BackboneLabels,
   RoutesPaths,
   DeploymentStates,
@@ -19,6 +8,16 @@ import {
   SiteLabels,
   VanLabels
 } from './Backbones.enum';
+import {
+  BackboneResponse,
+  InvitationResponse,
+  LinkResponse,
+  MemberSiteResponse,
+  BackboneSiteResponse,
+  ApplicationNetworkResponse
+} from '../../API/REST.interfaces';
+import { hexColors } from '../../config/colors';
+import { SKColumn } from '../../core/components/SkTable/SkTable.interfaces';
 
 export const BackbonesPaths = {
   path: RoutesPaths.App,
@@ -48,7 +47,7 @@ export const backboneColumns: SKColumn<BackboneResponse>[] = [
   }
 ];
 
-export const siteColumns: SKColumn<SiteResponse>[] = [
+export const siteColumns: SKColumn<BackboneSiteResponse>[] = [
   {
     name: BackboneLabels.Name,
     prop: 'name',
@@ -60,9 +59,9 @@ export const siteColumns: SKColumn<SiteResponse>[] = [
     customCellName: 'lifecycleCell'
   },
   {
-    name: SiteLabels.FirstActiveTime,
-    prop: 'firstactivetime',
-    customCellName: 'DateCell'
+    name: SiteLabels.DeploymentState,
+    prop: 'deploymentstate',
+    customCellName: 'deploymentStateCell'
   },
   {
     name: SiteLabels.LastHeartBeat,
@@ -70,9 +69,9 @@ export const siteColumns: SKColumn<SiteResponse>[] = [
     customCellName: 'DateCell'
   },
   {
-    name: SiteLabels.DeploymentState,
-    prop: 'deploymentstate',
-    customCellName: 'deploymentStateCell'
+    name: SiteLabels.FirstActiveTime,
+    prop: 'firstactivetime',
+    customCellName: 'DateCell'
   },
   {
     name: '',
@@ -87,11 +86,7 @@ export const linkColumns: SKColumn<LinkResponse>[] = [
     prop: 'connectinginteriorsite',
     customCellName: 'linkCellConnectingSiteCell'
   },
-  {
-    name: LinkLabels.ListeningSite,
-    prop: 'listeninginteriorsite',
-    customCellName: 'linkCellListeningSiteCell'
-  },
+
   {
     name: LinkLabels.Cost,
     prop: 'cost',
@@ -105,7 +100,7 @@ export const linkColumns: SKColumn<LinkResponse>[] = [
   }
 ];
 
-export const VanColumns: SKColumn<VanResponse>[] = [
+export const VanColumns: SKColumn<ApplicationNetworkResponse>[] = [
   {
     name: VanLabels.Name,
     prop: 'name',
@@ -177,7 +172,7 @@ export const invitationColumns: SKColumn<InvitationResponse>[] = [
     customCellName: 'actions'
   }
 ];
-export const memberColumns: SKColumn<MemberResponse>[] = [
+export const memberColumns: SKColumn<MemberSiteResponse>[] = [
   {
     name: MemberLabels.Name,
     prop: 'name'
@@ -187,11 +182,7 @@ export const memberColumns: SKColumn<MemberResponse>[] = [
     prop: 'lifecycle',
     customCellName: 'lifecycleCell'
   },
-  {
-    name: MemberLabels.SiteClass,
-    prop: 'siteclass',
-    customCellName: 'emptyCell'
-  },
+
   {
     name: MemberLabels.FirstActiveTime,
     prop: 'firstactivetime',
@@ -209,16 +200,9 @@ export const memberColumns: SKColumn<MemberResponse>[] = [
   }
 ];
 
-export const DeploymentStatusColorMap = {
-  [DeploymentStates.NotReady]: VarColors.Red100,
-  [DeploymentStates.ReadyBootstrap]: VarColors.Orange200,
-  [DeploymentStates.ReadyAutomatic]: VarColors.Purple500,
-  [DeploymentStates.Deployed]: VarColors.Green500
-};
-
 export const DeploymentStatusColorHexMap = {
-  [DeploymentStates.NotReady]: HexColors.Red100,
-  [DeploymentStates.ReadyBootstrap]: HexColors.Orange200,
-  [DeploymentStates.ReadyAutomatic]: HexColors.Purple500,
-  [DeploymentStates.Deployed]: HexColors.Green500
+  [DeploymentStates.NotReady]: hexColors.Red500,
+  [DeploymentStates.ReadyBootstrap]: hexColors.Orange100,
+  [DeploymentStates.ReadyAutomatic]: hexColors.Purple500,
+  [DeploymentStates.Deployed]: hexColors.Green500
 };

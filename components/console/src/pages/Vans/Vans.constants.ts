@@ -1,4 +1,4 @@
-import { VanLabels } from '@pages/Backbones/Backbones.enum';
+import { VanLabels } from '../Backbones/Backbones.enum';
 
 export const VansPaths = {
   path: '/vans',

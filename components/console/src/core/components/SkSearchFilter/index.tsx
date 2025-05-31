@@ -1,25 +1,26 @@
 import { useState, MouseEvent as ReactMouseEvent, Ref, FC, FormEvent, useEffect, memo } from 'react';
 
 import {
-	Label, LabelGroup, Toolbar,
-	ToolbarItem,
-	ToolbarContent,
-	ToolbarToggleGroup,
-	ToolbarGroup,
-	MenuToggle,
-	MenuToggleElement,
-	SearchInput,
-	Select,
-	SelectList,
-	SelectOption,
-	ToolbarFilter,
-	Button
+  Label,
+  LabelGroup,
+  Toolbar,
+  ToolbarItem,
+  ToolbarContent,
+  ToolbarToggleGroup,
+  ToolbarGroup,
+  MenuToggle,
+  MenuToggleElement,
+  SearchInput,
+  Select,
+  SelectList,
+  SelectOption,
+  ToolbarFilter,
+  Button
 } from '@patternfly/react-core';
 import { FilterIcon } from '@patternfly/react-icons';
 
-import useDebounce from 'hooks/useDebounce';
-
 import './SkSearchFilter.css';
+import useDebounce from '../../../hooks/useDebounce';
 
 interface FilterValues {
   [key: string]: string | undefined;
@@ -113,7 +114,7 @@ const SkSearchFilter: FC<{ onSearch?: Function; selectOptions: { id: string; nam
           <SelectList>{statusMenuItems}</SelectList>
         </Select>
 
-        <ToolbarItem >
+        <ToolbarItem>
           <SearchInput
             className="sk-search-filter"
             placeholder={`${PLACEHOLDER_PREFIX_LABEL} ${filterNameSelected?.toLocaleLowerCase()}`}
@@ -132,7 +133,7 @@ const SkSearchFilter: FC<{ onSearch?: Function; selectOptions: { id: string; nam
     );
 
     const toolbarFilterItems = (
-      <ToolbarGroup >
+      <ToolbarGroup>
         {selectOptions.map(({ id, name }) => {
           const value = filterValues[id as keyof FilterValues];
           if (value) {

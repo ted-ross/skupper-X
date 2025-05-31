@@ -15,10 +15,9 @@ import {
   Tr
 } from '@patternfly/react-table';
 
-import { getValueFromNestedProperty } from '@core/utils/getValueFromNestedProperty';
-
 import SkPagination from './SkPagination';
 import { NonNullableValue, SKTableProps } from './SkTable.interfaces';
+import { getValueFromNestedProperty } from '../../utils/getValueFromNestedProperty';
 import EmptyData from '../EmptyData';
 
 const FIRST_PAGE_NUMBER = 1;
@@ -34,6 +33,8 @@ const SkTable = function <T>({
   alwaysShowPagination = true,
   paginationPageSize = PAGINATION_PAGE_SIZE,
   paginationTotalRows = rows.length,
+  emptyStateMessage,
+  emptyStateDescription,
   ...props
 }: SKTableProps<T>) {
   const [activeSortIndex, setActiveSortIndex] = useState<number>();
@@ -190,7 +191,7 @@ const SkTable = function <T>({
               {skRows.length === 0 && (
                 <Tr>
                   <Td colSpan={12}>
-                    <EmptyData icon={SearchIcon} />
+                    <EmptyData icon={SearchIcon} message={emptyStateMessage} description={emptyStateDescription} />
                   </Td>
                 </Tr>
               )}

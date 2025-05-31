@@ -1,5 +1,5 @@
-import { BackbonesPaths } from '@pages/Backbones/Backbones.constants';
-import { VansPaths } from '@pages/Vans/Vans.constants';
+import { BackbonesPaths } from '../pages/Backbones/Backbones.constants';
+import { VansPaths } from '../pages/Vans/Vans.constants';
 
 // Navigation config
 export const ROUTES = [BackbonesPaths, VansPaths];

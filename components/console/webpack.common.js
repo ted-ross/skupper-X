@@ -1,10 +1,11 @@
 const path = require('path');
-const ROOT = process.cwd();
 
-const webpack = require('webpack');
+const ROOT = process.cwd();
 
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const TsConfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
+const webpack = require('webpack');
+
 const { version } = require(path.join(ROOT, '/package.json'));
 
 module.exports = {

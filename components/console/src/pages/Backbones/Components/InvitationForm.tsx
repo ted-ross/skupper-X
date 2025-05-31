@@ -13,9 +13,8 @@ import {
 } from '@patternfly/react-core';
 import { useMutation, useQueries } from '@tanstack/react-query';
 
-import { RESTApi } from '@API/REST.api';
-import { InvitationRequest, HTTPError } from '@API/REST.interfaces';
-
+import { RESTApi } from '../../../API/REST.api';
+import { InvitationRequest, HTTPError } from '../../../API/REST.interfaces';
 import { BackboneLabels, InvitationLabels, QueriesBackbones } from '../Backbones.enum';
 
 const InvitationForm: FC<{
@@ -63,7 +62,7 @@ const InvitationForm: FC<{
   };
 
   const handleSubmit = () => {
-    if (!name) {
+    if (!name || !claimId || !memberId) {
       setValidated(BackboneLabels.ErrorMessageRequiredField);
 
       return;
@@ -72,7 +71,7 @@ const InvitationForm: FC<{
     const data = {
       name,
       claimaccess: claimId,
-      primaryaccess: memberId
+      memberaccess: memberId
     } as InvitationRequest;
 
     mutationCreate.mutate(data);

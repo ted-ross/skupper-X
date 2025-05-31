@@ -13,19 +13,18 @@ import {
 } from '@patternfly/react-core';
 import { useMutation, useSuspenseQuery } from '@tanstack/react-query';
 
-import { RESTApi } from '@API/REST.api';
-import { LinkRequest, HTTPError } from '@API/REST.interfaces';
-
+import { RESTApi } from '../../../API/REST.api';
+import { LinkRequest, HTTPError } from '../../../API/REST.interfaces';
 import { BackboneLabels, LinkLabels, QueriesBackbones } from '../Backbones.enum';
 
 const LinkForm: FC<{
   bid: string;
-  sid?: string;
+  sid: string;
   onSubmit: () => void;
   onCancel: () => void;
 }> = function ({ bid, sid, onSubmit, onCancel }) {
   const [validated, setValidated] = useState<string | undefined>();
-  const [listeningSite, setListeningSite] = useState<string | undefined>();
+  const [selectedAccessPoint, setSelectedAccessPoint] = useState<string | undefined>();
   const [connectingSite, setConnectingSite] = useState<string | undefined>();
   const [cost, setCost] = useState<string>('1');
 
@@ -34,16 +33,22 @@ const LinkForm: FC<{
     queryFn: () => RESTApi.fetchSites(bid)
   });
 
+  const { data: accessPoints } = useSuspenseQuery({
+    queryKey: ['accessPoints', sid],
+    queryFn: () => RESTApi.fetchAccessPointsForSite(sid)
+  });
+
   const mutationCreate = useMutation({
-    mutationFn: (data: LinkRequest) => RESTApi.createLink(bid, data),
+    mutationFn: ({ accessPointId, linkData }: { accessPointId: string; linkData: LinkRequest }) =>
+      RESTApi.createLink(accessPointId, linkData),
     onError: (data: HTTPError) => {
       setValidated(data.descriptionMessage);
     },
     onSuccess: onSubmit
   });
 
-  const handleListeningSiteChange = (_: FormEvent<HTMLSelectElement>, site: string) => {
-    setListeningSite(site);
+  const handleAccessPointChange = (_: FormEvent<HTMLSelectElement>, accessPoint: string) => {
+    setSelectedAccessPoint(accessPoint);
   };
 
   const handleConnectingSiteChange = (_: FormEvent<HTMLSelectElement>, site: string) => {
@@ -67,31 +72,40 @@ const LinkForm: FC<{
   };
 
   const handleSubmit = useCallback(() => {
-    if (!listeningSite || !connectingSite) {
+    if (!selectedAccessPoint || !connectingSite) {
       setValidated(BackboneLabels.ErrorMessageRequiredField);
 
       return;
     }
 
-    const data = {
-      listeningsite: listeningSite,
+    const linkData = {
       connectingsite: connectingSite,
-      cost: cost || '1'
+      cost: Number(cost || '1')
     } as LinkRequest;
 
-    mutationCreate.mutate(data);
-  }, [listeningSite, connectingSite, cost, mutationCreate]);
+    mutationCreate.mutate({ accessPointId: selectedAccessPoint, linkData });
+  }, [selectedAccessPoint, connectingSite, cost, mutationCreate]);
 
   const handleCancel = () => {
     onCancel();
   };
 
   useEffect(() => {
-    if (sites && sites.length > 0) {
-      setListeningSite(sid || sites[0].id);
-      setConnectingSite(sites[0].id);
+    if (accessPoints && accessPoints.length > 0) {
+      // Only select peer access points for link creation
+      const peerAccessPoints = accessPoints.filter((ap) => ap.kind === 'peer');
+      if (peerAccessPoints.length > 0) {
+        setSelectedAccessPoint(peerAccessPoints[0].id);
+      }
     }
-  }, [sid, sites]);
+    if (sites && sites.length > 0) {
+      // Filter out the current site from connecting sites
+      const otherSites = sites.filter((site) => site.id !== sid);
+      if (otherSites.length > 0) {
+        setConnectingSite(otherSites[0].id);
+      }
+    }
+  }, [sid, sites, accessPoints]);
 
   return (
     <Form isHorizontal>
@@ -101,21 +115,25 @@ const LinkForm: FC<{
         </FormAlert>
       )}
 
-      {!sid && (
-        <FormGroup label={LinkLabels.ListeningSite} fieldId="link-listening-site" isRequired>
-          <FormSelect id={`link-listening-site-select`} value={listeningSite} onChange={handleListeningSiteChange}>
-            {sites.map((site) => (
-              <FormSelectOption key={`listening-${site.id}`} value={site.id} label={site.name} />
+      <FormGroup label={LinkLabels.AccessPoint} fieldId="link-access-point" isRequired>
+        <FormSelect id={`link-access-point-select`} value={selectedAccessPoint} onChange={handleAccessPointChange}>
+          {accessPoints
+            ?.filter((accessPoint) => accessPoint.kind === 'peer')
+            .map((accessPoint) => (
+              <FormSelectOption
+                key={`access-point-${accessPoint.id}`}
+                value={accessPoint.id}
+                label={accessPoint.name}
+              />
             ))}
-          </FormSelect>
-        </FormGroup>
-      )}
+        </FormSelect>
+      </FormGroup>
 
       <FormGroup label={LinkLabels.ConnectingSite} fieldId="link-connecting-site" isRequired>
         <FormSelect id={`link-connecting-site-select`} value={connectingSite} onChange={handleConnectingSiteChange}>
-          {sites.map((site) => (
-            <FormSelectOption key={`connecting-${site.id}`} value={site.id} label={site.name} />
-          ))}
+          {sites
+            ?.filter((site) => site.id !== sid)
+            .map((site) => <FormSelectOption key={`connecting-${site.id}`} value={site.id} label={site.name} />)}
         </FormSelect>
       </FormGroup>
 

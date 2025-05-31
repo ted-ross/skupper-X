@@ -17,15 +17,14 @@ import { Modal, ModalVariant } from '@patternfly/react-core/deprecated';
 import { InProgressIcon, SyncAltIcon } from '@patternfly/react-icons';
 import { useMutation, useSuspenseQuery } from '@tanstack/react-query';
 
-import { RESTApi } from '@API/REST.api';
-import { HTTPError, VanResponse } from '@API/REST.interfaces';
-import { VarColors } from '@config/colors';
-import { ALERT_VISIBILITY_TIMEOUT, DEFAULT_PAGINATION_SIZE } from '@config/config';
-import LinkCell from '@core/components/LinkCell';
-import { LinkCellProps } from '@core/components/LinkCell/LinkCell.interfaces';
-import SkTable from '@core/components/SkTable';
-import MainContainer from '@layout/MainContainer';
-
+import { RESTApi } from '../../../API/REST.api';
+import { ApplicationNetworkResponse, HTTPError } from '../../../API/REST.interfaces';
+import { hexColors } from '../../../config/colors';
+import { ALERT_VISIBILITY_TIMEOUT, DEFAULT_PAGINATION_SIZE } from '../../../config/config';
+import LinkCell from '../../../core/components/LinkCell';
+import { LinkCellProps } from '../../../core/components/LinkCell/LinkCell.interfaces';
+import SkTable from '../../../core/components/SkTable';
+import MainContainer from '../../../layout/MainContainer';
 import { VanColumns } from '../Backbones.constants';
 import { BackboneLabels, RoutesPaths, QueriesBackbones, VanLabels } from '../Backbones.enum';
 import VanForm from '../Components/VanForm';
@@ -97,32 +96,32 @@ const Vans = function () {
             paginationPageSize={DEFAULT_PAGINATION_SIZE}
             pagination={true}
             customCells={{
-              linkCell: (props: LinkCellProps<VanResponse>) =>
+              linkCell: (props: LinkCellProps<ApplicationNetworkResponse>) =>
                 LinkCell({
                   ...props,
                   type: 'van',
                   link: `${RoutesPaths.App}/invitations/${props.data.name}@${props.data.id}`
                 }),
 
-              emptyCell: (props: LinkCellProps<VanResponse>) => props.value || '-',
+              emptyCell: (props: LinkCellProps<ApplicationNetworkResponse>) => props.value || '-',
 
-              lifecycleCell: (props: LinkCellProps<VanResponse>) => (
+              lifecycleCell: (props: LinkCellProps<ApplicationNetworkResponse>) => (
                 <div>
                   <Icon iconSize="md" isInline style={{ verticalAlign: 'middle' }}>
                     {props.data.lifecycle === 'ready' ? (
-                      <SyncAltIcon color={VarColors.Blue400} />
+                      <SyncAltIcon color={hexColors.Blue400} />
                     ) : (
-                      <InProgressIcon color={VarColors.Black400} />
+                      <InProgressIcon color={hexColors.Black300} />
                     )}
                   </Icon>{' '}
                   {props.data.lifecycle}
                 </div>
               ),
 
-              deleteDelayCell: (props: LinkCellProps<VanResponse>) =>
-                props.value && Object.keys(props.data).length ? props.data.deletedelay.minutes : '-',
+              deleteDelayCell: (props: LinkCellProps<ApplicationNetworkResponse>) =>
+                props.value && Object.keys(props.data).length && props.data.deletedelay ? props.data.deletedelay : '-',
 
-              actions: ({ data }: { data: VanResponse }) => (
+              actions: ({ data }: { data: ApplicationNetworkResponse }) => (
                 <OverflowMenu breakpoint="lg">
                   <OverflowMenuContent>
                     <OverflowMenuGroup groupType="button">

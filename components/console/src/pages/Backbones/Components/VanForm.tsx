@@ -13,9 +13,8 @@ import {
 } from '@patternfly/react-core';
 import { useMutation, useQuery } from '@tanstack/react-query';
 
-import { RESTApi } from '@API/REST.api';
-import { VanRequest, HTTPError } from '@API/REST.interfaces';
-
+import { RESTApi } from '../../../API/REST.api';
+import { ApplicationNetworkRequest, HTTPError } from '../../../API/REST.interfaces';
 import { BackboneLabels, QueriesBackbones } from '../Backbones.enum';
 
 const VanForm: FC<{
@@ -32,7 +31,7 @@ const VanForm: FC<{
   });
 
   const mutationCreate = useMutation({
-    mutationFn: (data: VanRequest) => RESTApi.createVan(data.bid, data),
+    mutationFn: (data: ApplicationNetworkRequest) => RESTApi.createVan(data.name, data),
     onError: (data: HTTPError) => {
       setValidated(data.descriptionMessage);
     },
@@ -57,7 +56,7 @@ const VanForm: FC<{
     const data = {
       bid,
       name
-    } as VanRequest;
+    } as ApplicationNetworkRequest;
 
     mutationCreate.mutate(data);
   };

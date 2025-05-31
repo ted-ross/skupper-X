@@ -1,8 +1,7 @@
 import { useMemo, useRef } from 'react';
 
-import { VarColors } from '@config/colors';
-
 import { HighlightValueCellProps } from './HighightValueCell.interfaces';
+import { hexColors } from '../../../config/colors';
 
 const HighlightValueCell = function <T>({ value, format }: HighlightValueCellProps<T>) {
   const prevValueRef = useRef<number>();
@@ -28,7 +27,7 @@ const HighlightValueCell = function <T>({ value, format }: HighlightValueCellPro
       data-testid="highlighted-value"
       style={{
         fontWeight: 900,
-        color: VarColors.Green500
+        color: hexColors.Green500
       }}
     >
       {format(value)}

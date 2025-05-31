@@ -24,15 +24,14 @@ import { InProgressIcon, SyncAltIcon } from '@patternfly/react-icons';
 import { useMutation, useSuspenseQueries } from '@tanstack/react-query';
 import { useParams } from 'react-router';
 
-import { RESTApi } from '@API/REST.api';
-import { HTTPError, InvitationResponse, MemberResponse } from '@API/REST.interfaces';
-import { VarColors } from '@config/colors';
-import { ALERT_VISIBILITY_TIMEOUT, DEFAULT_PAGINATION_SIZE } from '@config/config';
-import { LinkCellProps } from '@core/components/LinkCell/LinkCell.interfaces';
-import SkTable from '@core/components/SkTable';
-import { getIdAndNameFromUrlParams } from '@core/utils/getIdAndNameFromUrlParams';
-import MainContainer from '@layout/MainContainer';
-
+import { RESTApi } from '../../../API/REST.api';
+import { HTTPError, InvitationResponse, MemberSiteResponse } from '../../../API/REST.interfaces';
+import { hexColors } from '../../../config/colors';
+import { ALERT_VISIBILITY_TIMEOUT, DEFAULT_PAGINATION_SIZE } from '../../../config/config';
+import { LinkCellProps } from '../../../core/components/LinkCell/LinkCell.interfaces';
+import SkTable from '../../../core/components/SkTable';
+import { getIdAndNameFromUrlParams } from '../../../core/utils/getIdAndNameFromUrlParams';
+import MainContainer from '../../../layout/MainContainer';
 import { invitationColumns, memberColumns } from '../Backbones.constants';
 import { BackboneLabels, InvitationLabels, QueriesBackbones } from '../Backbones.enum';
 import InvitationForm from '../Components/InvitationForm';
@@ -149,9 +148,9 @@ const Invitations: FC<{ vid: string }> = function ({ vid }) {
               <span>
                 <Icon iconSize="md" isInline style={{ verticalAlign: 'middle' }}>
                   {props.data.lifecycle === 'ready' ? (
-                    <SyncAltIcon color={VarColors.Blue400} />
+                    <SyncAltIcon color={hexColors.Blue400} />
                   ) : (
-                    <InProgressIcon color={VarColors.Black400} />
+                    <InProgressIcon color={hexColors.Black300} />
                   )}
                 </Icon>{' '}
                 {props.data.lifecycle}
@@ -196,22 +195,22 @@ const Invitations: FC<{ vid: string }> = function ({ vid }) {
           paginationPageSize={DEFAULT_PAGINATION_SIZE}
           pagination={true}
           customCells={{
-            DateCell: (props: LinkCellProps<MemberResponse>) => (
+            DateCell: (props: LinkCellProps<MemberSiteResponse>) => (
               <Timestamp
                 date={new Date(props.value || '')}
                 dateFormat={TimestampFormat.medium}
                 timeFormat={TimestampFormat.medium}
               />
             ),
-            emptyCell: (props: LinkCellProps<MemberResponse>) => props.value || '-',
+            emptyCell: (props: LinkCellProps<MemberSiteResponse>) => props.value || '-',
 
-            lifecycleCell: (props: LinkCellProps<MemberResponse>) => (
+            lifecycleCell: (props: LinkCellProps<MemberSiteResponse>) => (
               <span>
                 <Icon iconSize="md" isInline style={{ verticalAlign: 'middle' }}>
                   {props.data.lifecycle === 'ready' ? (
-                    <SyncAltIcon color={VarColors.Blue400} />
+                    <SyncAltIcon color={hexColors.Blue400} />
                   ) : (
-                    <InProgressIcon color={VarColors.Black400} />
+                    <InProgressIcon color={hexColors.Black300} />
                   )}
                 </Icon>{' '}
                 {props.data.lifecycle}
@@ -227,7 +226,9 @@ const Invitations: FC<{ vid: string }> = function ({ vid }) {
         variant={ModalVariant.medium}
         onClose={handleCloseModal}
       >
-        <InvitationForm bid={van.backbone} vid={vid} onSubmit={handleRefresh} onCancel={handleCloseModal} />
+        {van.backbone && (
+          <InvitationForm bid={van.backbone} vid={vid} onSubmit={handleRefresh} onCancel={handleCloseModal} />
+        )}
       </Modal>
 
       <Modal

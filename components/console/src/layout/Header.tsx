@@ -13,7 +13,7 @@ import {
 } from '@patternfly/react-core';
 import { BarsIcon } from '@patternfly/react-icons';
 
-import { brandLogo } from '@config/config';
+import { brandLogo } from '../config/config';
 
 export enum HeaderLabels {
   Logout = 'Logout',

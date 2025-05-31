@@ -12,7 +12,6 @@ const Footer: FC<FooterProps> = function ({ className = '' }) {
       variant="secondary"
       className={`sk-footer ${className}`}
       style={{
-        backgroundColor: '#acb3b9',
         textAlign: 'center',
         padding: '5px',
         minHeight: '40px',

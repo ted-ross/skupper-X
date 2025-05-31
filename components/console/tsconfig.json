@@ -1,5 +1,4 @@
 {
-  "extends": "./tsconfig.paths.json",
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["dom", "es2022"],
@@ -26,8 +25,5 @@
     "strictPropertyInitialization": true
   },
   "include": ["src/**/*", "jest.config.ts", "mocks/*.ts"],
-  "exclude": [
-    "node_modules",
-    "build"
-  ]
+  "exclude": ["node_modules", "build"]
 }

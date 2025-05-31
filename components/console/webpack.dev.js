@@ -1,11 +1,11 @@
-const { merge } = require('webpack-merge');
-
 const CircularDependencyPlugin = require('circular-dependency-plugin');
+const { merge } = require('webpack-merge');
 
 const commonConfig = require('./webpack.common');
 
 const MAX_CYCLES = 5;
 let numCyclesDetected = 0;
+let numCyclesDisplayed = 0;
 
 const devConfig = {
   mode: 'development',

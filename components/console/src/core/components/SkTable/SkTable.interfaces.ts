@@ -17,6 +17,8 @@ export interface SKTableProps<T> {
   paginationPageSize?: number;
   paginationTotalRows?: number;
   onGetFilters?: Function;
+  emptyStateMessage?: string;
+  emptyStateDescription?: string;
 }
 
 export interface SKColumn<T> extends TdProps {

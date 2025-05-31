@@ -40,7 +40,8 @@ export enum BackboneLabels {
   Links = 'Links',
   Vans = 'Vans',
   Invitations = 'Invitations',
-  Members = 'Members'
+  Members = 'Members',
+  OutgoingInterRouterLinks = 'Outgoing Inter-Router Links'
 }
 
 export enum SiteLabels {
@@ -49,13 +50,19 @@ export enum SiteLabels {
   Member = 'Member',
   Manage = 'Manage',
   CreateSiteTitle = 'Create site',
+  EditSiteTitle = 'Edit site',
   FirstActiveTime = 'First Active Time',
   LastHeartBeat = 'Last Heartbeat',
-  DeploymentState = 'Deployment State'
+  DeploymentState = 'Deployment State',
+  Failure = 'Failure',
+  Platform = 'Platform',
+  TlsExpiration = 'TLS Expiration',
+  TlsRenewal = 'TLS Renewal'
 }
 
 export enum LinkLabels {
   CreateLinkTitle = 'Create link',
+  AccessPoint = 'Access Point',
   ListeningSite = 'To',
   ConnectingSite = 'From',
   Cost = 'Cost'

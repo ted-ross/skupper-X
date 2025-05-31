@@ -1,15 +1,14 @@
 import { FC, useCallback, useState } from 'react';
 
+const ALERT_VISIBILITY_TIMEOUT = 5000; // 5 seconds timeout for alerts
 import { Alert, Wizard, WizardFooter, WizardHeader, WizardStep, useWizardContext } from '@patternfly/react-core';
 import { useMutation } from '@tanstack/react-query';
-
-import { RESTApi } from '@API/REST.api';
-import { HTTPError } from '@API/REST.interfaces';
-import { ALERT_VISIBILITY_TIMEOUT } from '@config/config';
 
 import HostnamesForm from './HostnamesForm';
 import IncomingLinks from './IncomingLinks';
 import InitialDeploymentForm from './InitialDeploymentForm';
+import { RESTApi } from '../../../API/REST.api';
+import { HTTPError } from '../../../API/REST.interfaces';
 
 const DeployBootstrap: FC<{
   sid: string;
@@ -25,7 +24,7 @@ const DeployBootstrap: FC<{
   const CustomWizardFooter = function () {
     const { activeStep, goToNextStep, goToPrevStep, close } = useWizardContext();
     const mutationCreate = useMutation({
-      mutationFn: (data: string) => RESTApi.fetchIngress(sid, data),
+      mutationFn: (data: string) => RESTApi.createIngress(sid, data),
       onError: (data: HTTPError) => {
         setValidated(data.descriptionMessage);
       },

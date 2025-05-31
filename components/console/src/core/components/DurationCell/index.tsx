@@ -1,9 +1,8 @@
 import { Tooltip } from '@patternfly/react-core';
 import { TableText } from '@patternfly/react-table';
 
-import { formatTimeInterval } from '@core/utils/formatTimeInterval';
-
 import { DurationCellProps } from './DurationCell';
+import { formatTimeInterval } from '../../utils/formatTimeInterval';
 
 /**
  *  startTime and endTime are expected to be in microseconds

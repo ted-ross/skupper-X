@@ -1,8 +1,9 @@
 import { Breadcrumb, BreadcrumbHeading, BreadcrumbItem } from '@patternfly/react-core';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 
-import { getTestsIds } from '@config/testIds';
-import { getIdAndNameFromUrlParams } from '@core/utils/getIdAndNameFromUrlParams';
+import { isRoutingArtifact, getBreadcrumbDisplayName } from '../../../config/breadcrumbConfig';
+import { getTestsIds } from '../../../config/testIds';
+import { getIdAndNameFromUrlParams } from '../../utils/getIdAndNameFromUrlParams';
 
 const SkBreadcrumb = function () {
   const { pathname } = useLocation();
@@ -20,13 +21,20 @@ const SkBreadcrumb = function () {
 
   return (
     <Breadcrumb data-testid={getTestsIds.breadcrumbComponent()}>
-      {pathsNormalized.map((path, index) => (
-        <BreadcrumbItem key={path.name} className="sk-capitalize">
-          {path.name !== 'sites' && path.name !== 'invitations' && (
-            <Link to={`${[...paths].slice(0, index + 1).join('/')}${queryParams}`}>{path.name}</Link>
-          )}
-        </BreadcrumbItem>
-      ))}
+      {pathsNormalized.map((path, index) => {
+        // Use the general routing artifact detection instead of hardcoded segments
+        if (isRoutingArtifact(path.name)) {
+          return null;
+        }
+
+        const displayName = getBreadcrumbDisplayName(path.name);
+
+        return (
+          <BreadcrumbItem key={path.name} className="sk-capitalize">
+            <Link to={`${[...paths].slice(0, index + 1).join('/')}${queryParams}`}>{displayName}</Link>
+          </BreadcrumbItem>
+        );
+      })}
 
       <BreadcrumbHeading> &nbsp; {lastPath?.name}</BreadcrumbHeading>
     </Breadcrumb>

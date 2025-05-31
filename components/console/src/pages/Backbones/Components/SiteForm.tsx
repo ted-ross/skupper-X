@@ -1,28 +1,54 @@
 import { useState, FC, FormEvent } from 'react';
 
-import { Form, FormGroup, TextInput, ActionGroup, Button, FormAlert, Alert, Checkbox } from '@patternfly/react-core';
-import { useMutation } from '@tanstack/react-query';
+import {
+  Form,
+  FormGroup,
+  TextInput,
+  ActionGroup,
+  Button,
+  FormAlert,
+  Alert,
+  FormSelect,
+  FormSelectOption
+} from '@patternfly/react-core';
+import { useMutation, useSuspenseQuery } from '@tanstack/react-query';
 
-import { RESTApi } from '@API/REST.api';
-import { SiteRequest, HTTPError } from '@API/REST.interfaces';
-
-import { BackboneLabels, SiteLabels } from '../Backbones.enum';
+import { RESTApi } from '../../../API/REST.api';
+import {
+  BackboneSiteRequest,
+  BackboneSiteResponse,
+  HTTPError,
+  TargetPlatformResponse
+} from '../../../API/REST.interfaces';
+import { BackboneLabels } from '../Backbones.enum';
 
 const SiteForm: FC<{
   bid: string;
   position?: { x: number; y: number };
+  editingSite?: BackboneSiteResponse;
   onSubmit: () => void;
   onCancel: () => void;
-}> = function ({ bid, position, onSubmit, onCancel }) {
+}> = function ({ bid, position, editingSite, onSubmit, onCancel }) {
   const [validated, setValidated] = useState<string | undefined>();
-  const [name, setName] = useState<string | undefined>();
-  const [claim, setClaim] = useState<boolean>(true);
-  const [peer, setPeer] = useState<boolean>(false);
-  const [member, setMember] = useState<boolean>(true);
-  const [manage, setManage] = useState<boolean>(false);
+  const [name, setName] = useState<string | undefined>(editingSite?.name);
+  const [platform, setPlatform] = useState<string>(editingSite?.targetplatform || 'kube');
+
+  // Fetch available target platforms
+  const { data: platforms } = useSuspenseQuery({
+    queryKey: ['targetPlatforms'],
+    queryFn: () => RESTApi.fetchTargetPlatforms()
+  });
 
   const mutationCreate = useMutation({
-    mutationFn: (data: SiteRequest) => RESTApi.createSite(bid, data),
+    mutationFn: (data: BackboneSiteRequest) => RESTApi.createSite(bid, data),
+    onError: (data: HTTPError) => {
+      setValidated(data.descriptionMessage);
+    },
+    onSuccess: onSubmit
+  });
+
+  const mutationUpdate = useMutation({
+    mutationFn: (data: Partial<BackboneSiteRequest>) => RESTApi.updateSite(editingSite!.id, data),
     onError: (data: HTTPError) => {
       setValidated(data.descriptionMessage);
     },
@@ -31,52 +57,53 @@ const SiteForm: FC<{
 
   const handleNameChange = (_: FormEvent<HTMLInputElement>, newName: string) => {
     setName(newName);
-  };
-
-  const handleChangeKind = (event: FormEvent<HTMLInputElement>, checked: boolean) => {
-    const target = event.currentTarget;
-    const targetName = target.name;
-
-    switch (targetName) {
-      case 'claim':
-        setClaim(checked);
-        break;
-      case 'peer':
-        setPeer(checked);
-        break;
-      case 'member':
-        setMember(checked);
-        break;
-      case 'manage':
-        setManage(checked);
-        break;
-      default:
-        break;
+    // Clear validation error when user starts typing
+    if (validated) {
+      setValidated(undefined);
     }
   };
 
-  const handleSubmit = () => {
+  const handlePlatformChange = (_: FormEvent<HTMLSelectElement>, selectedPlatform: string) => {
+    setPlatform(selectedPlatform);
+  };
+
+  const handleSubmit = (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault(); // Prevent default form submission behavior
+
     if (!name) {
       setValidated(BackboneLabels.ErrorMessageRequiredField);
 
       return;
     }
 
-    const data = {
-      name,
-      claim: claim.toString(),
-      peer: peer.toString(),
-      member: member.toString(),
-      manage: manage.toString()
-    } as SiteRequest;
+    if (editingSite) {
+      // Edit mode - only send name and metadata (platform cannot be changed)
+      const updateData: Partial<BackboneSiteRequest> = {
+        name
+      };
 
-    if (position) {
-      data.metadata = JSON.stringify({
-        position
-      });
+      if (position) {
+        updateData.metadata = JSON.stringify({
+          position
+        });
+      }
+
+      mutationUpdate.mutate(updateData);
+    } else {
+      // Create mode - send all fields including platform
+      const createData: BackboneSiteRequest = {
+        name,
+        platform
+      };
+
+      if (position) {
+        createData.metadata = JSON.stringify({
+          position
+        });
+      }
+
+      mutationCreate.mutate(createData);
     }
-
-    mutationCreate.mutate(data);
   };
 
   const handleCancel = () => {
@@ -84,7 +111,7 @@ const SiteForm: FC<{
   };
 
   return (
-    <Form isHorizontal>
+    <Form isHorizontal onSubmit={handleSubmit}>
       {validated && (
         <FormAlert>
           <Alert variant="danger" title={validated} isInline />
@@ -95,33 +122,27 @@ const SiteForm: FC<{
         <TextInput isRequired type="text" id="site-name" name="site-name" value={name} onChange={handleNameChange} />
       </FormGroup>
 
-      <FormGroup fieldId="site-claim" isInline role="group">
-        <Checkbox
-          label={SiteLabels.Claim}
-          isChecked={claim}
-          onChange={handleChangeKind}
-          id="claim-check-"
-          name="claim"
-        />
-        <Checkbox label={SiteLabels.Peer} isChecked={peer} onChange={handleChangeKind} id="peer-check-" name="peer" />
-        <Checkbox
-          label={SiteLabels.Member}
-          isChecked={member}
-          onChange={handleChangeKind}
-          id="member-check-"
-          name="member"
-        />
-        <Checkbox
-          label={SiteLabels.Manage}
-          isChecked={manage}
-          onChange={handleChangeKind}
-          id="manage-check-"
-          name="manage"
-        />
+      <FormGroup label="Target Platform" fieldId="site-platform">
+        <FormSelect
+          value={platform}
+          onChange={handlePlatformChange}
+          id="site-platform"
+          name="site-platform"
+          aria-label="Target Platform"
+          isDisabled={!!editingSite}
+        >
+          {platforms.map((platformOption: TargetPlatformResponse) => (
+            <FormSelectOption
+              key={platformOption.shortname}
+              value={platformOption.shortname}
+              label={platformOption.longname}
+            />
+          ))}
+        </FormSelect>
       </FormGroup>
 
       <ActionGroup style={{ display: 'flex' }}>
-        <Button variant="primary" onClick={handleSubmit}>
+        <Button variant="primary" type="submit">
           {BackboneLabels.SubmitBackboneBtn}
         </Button>
         <Button variant="link" onClick={handleCancel}>

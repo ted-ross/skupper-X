@@ -1,58 +1,66 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
-	Alert,
-	Button,
-	Divider,
-	Icon,
-	OverflowMenu,
-	OverflowMenuContent,
-	OverflowMenuGroup,
-	OverflowMenuItem,
-	Stack,
-	StackItem,
-	Timestamp,
-	TimestampFormat,
-	Title,
-	ToggleGroup,
-	ToggleGroupItem,
-	Toolbar,
-	ToolbarContent,
-	ToolbarGroup,
-	ToolbarItem
+  Alert,
+  Button,
+  Divider,
+  Drawer,
+  DrawerContent,
+  DrawerContentBody,
+  DrawerPanelContent,
+  DrawerHead,
+  DrawerActions,
+  DrawerCloseButton,
+  DrawerPanelBody,
+  Icon,
+  OverflowMenu,
+  OverflowMenuContent,
+  OverflowMenuGroup,
+  OverflowMenuItem,
+  Stack,
+  StackItem,
+  Timestamp,
+  TimestampFormat,
+  Title,
+  Toolbar,
+  ToolbarContent,
+  ToolbarGroup,
+  ToolbarItem
 } from '@patternfly/react-core';
-import {
-	Modal,
-	ModalVariant
-} from '@patternfly/react-core/deprecated';
-import { InProgressIcon, SyncAltIcon, TableIcon, TopologyIcon } from '@patternfly/react-icons';
+import { Modal, ModalVariant } from '@patternfly/react-core/deprecated';
+import { EditIcon, InProgressIcon, PlusIcon, SyncAltIcon, TrashIcon } from '@patternfly/react-icons';
 import { useMutation, useSuspenseQueries } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 
-import { RESTApi } from '@API/REST.api';
-import { VarColors } from '@config/colors';
-import { ALERT_VISIBILITY_TIMEOUT, DEFAULT_PAGINATION_SIZE } from '@config/config';
-import { getTestsIds } from '@config/testIds';
-import LinkCell from '@core/components/LinkCell';
-import { LinkCellProps } from '@core/components/LinkCell/LinkCell.interfaces';
-import SkTable from '@core/components/SkTable';
-import { getIdAndNameFromUrlParams } from '@core/utils/getIdAndNameFromUrlParams';
-import MainContainer from '@layout/MainContainer';
-import { HTTPError, LinkResponse, SiteResponse } from 'API/REST.interfaces';
-
-import { DeploymentStatusColorMap, linkColumns, siteColumns } from '../Backbones.constants';
-import {
-  BackboneLabels,
-  RoutesPaths,
-  LinkLabels,
-  QueriesBackbones,
-  SiteLabels
-} from '../Backbones.enum';
-import DeployBootstrap from '../Components/DeployBootstrap';
-import InitialDeploymentForm from '../Components/InitialDeploymentForm';
-import LinkForm from '../Components/LinkForm';
+import { RESTApi } from '../../../API/REST.api';
+import { HTTPError, BackboneSiteResponse } from '../../../API/REST.interfaces';
+import { hexColors } from '../../../config/colors';
+import { ALERT_VISIBILITY_TIMEOUT, DEFAULT_PAGINATION_SIZE } from '../../../config/config';
+import { getTestsIds } from '../../../config/testIds';
+import ResourceIcon from '../../../core/components/ResourceIcon';
+import SkTable from '../../../core/components/SkTable';
+import { getIdAndNameFromUrlParams } from '../../../core/utils/getIdAndNameFromUrlParams';
+import MainContainer from '../../../layout/MainContainer';
+import { DeploymentStatusColorHexMap, siteColumns } from '../Backbones.constants';
+import { BackboneLabels, QueriesBackbones, SiteLabels } from '../Backbones.enum';
+import SiteDetailPanel from '../Components/SiteDetailPanel';
 import SiteForm from '../Components/SiteForm';
 
+// Type for the transformed site data that matches SiteDetailPanel expectations
+type TransformedSite = {
+  id: string;
+  name: string;
+  platformlong: string;
+  targetplatform: string;
+  lifecycle: string;
+  deploymentstate: string;
+  firstactivetime: string | null;
+  lastheartbeat: string | null;
+  tlsexpiration?: string | null;
+  tlsrenewal?: string | null;
+  failure?: string | null;
+  metadata?: string;
+};
 
 const Backbone = function () {
   const { id: urlId } = useParams() as { id: string };
@@ -61,26 +69,21 @@ const Backbone = function () {
   const sidSelected = useRef<string | undefined>();
   const sitePositionToSave = useRef<{ x: number; y: number }>();
 
-  const [view, setView] = useState<'table' | 'topology'>('table');
+  // const [view, setView] = useState<'table' | 'topology'>('table');
 
+  // Drawer state
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedSite, setSelectedSite] = useState<TransformedSite | undefined>();
 
   const [isSiteOpen, setSiteOpen] = useState(false);
   const [siteValidated, setSiteValidated] = useState<string | undefined>();
+  const [editingSite, setEditingSite] = useState<BackboneSiteResponse | undefined>();
 
-  const [isLinkOpen, setLinkOpen] = useState(false);
-  const [linkValidated, setLinkValidated] = useState<string | undefined>();
-
-  const [isEditorOpen, setIsEditorOpen] = useState<'automatic' | 'bootstrap' | boolean>(false);
-
-  const [{ data: sites, refetch: refetchSites }, { data: links, refetch: refetchLinks }] = useSuspenseQueries({
+  const [{ data: sites, refetch: refetchSites }] = useSuspenseQueries({
     queries: [
       {
         queryKey: [QueriesBackbones.GetSites, bid],
         queryFn: () => RESTApi.fetchSites(bid)
-      },
-      {
-        queryKey: [QueriesBackbones.GetLinks, bid],
-        queryFn: () => RESTApi.fetchLinks(bid)
       }
     ]
   });
@@ -93,19 +96,6 @@ const Backbone = function () {
     onSuccess: () => {
       setTimeout(() => {
         refetchSites();
-        refetchLinks();
-      }, 0);
-    }
-  });
-
-  const mutationDeleteLink = useMutation({
-    mutationFn: (linkId: string) => RESTApi.deleteLink(linkId),
-    onError: (data: HTTPError) => {
-      setLinkValidated(data.descriptionMessage);
-    },
-    onSuccess: () => {
-      setTimeout(() => {
-        refetchLinks();
       }, 0);
     }
   });
@@ -117,40 +107,45 @@ const Backbone = function () {
   const handleCloseSiteModal = useCallback(() => {
     setSiteOpen(false);
     sidSelected.current = undefined;
+    setEditingSite(undefined);
   }, []);
 
-  const handleOpenLinkModal = useCallback((idSelected?: string) => {
-    if (idSelected) {
-      sidSelected.current = idSelected;
-    }
-
-    setLinkOpen(true);
+  const handleSiteEdit = useCallback((site: BackboneSiteResponse) => {
+    setEditingSite(site);
+    setSiteOpen(true);
   }, []);
 
-  const handleCloseLinkModal = useCallback(() => {
-    setLinkOpen(false);
+  const handleCloseDrawer = useCallback(() => {
+    setIsDrawerOpen(false);
+    setSelectedSite(undefined);
   }, []);
 
-  const handleCloseEditorModal = useCallback(() => {
-    setIsEditorOpen(false);
+  const handleOpenDrawer = useCallback((site: BackboneSiteResponse) => {
+    // Transform the site data to match SiteDetailPanel expectations
+    const transformedSite: TransformedSite = {
+      id: site.id,
+      name: site.name,
+      platformlong: site.platformlong,
+      targetplatform: site.targetplatform,
+      lifecycle: site.lifecycle,
+      deploymentstate: site.deploymentstate,
+      firstactivetime: site.firstactivetime,
+      lastheartbeat: site.lastheartbeat,
+      tlsexpiration: site.tlsexpiration || undefined,
+      tlsrenewal: site.tlsrenewal || undefined,
+      failure: site.failure || undefined,
+      metadata: site.metadata
+    };
+    setSelectedSite(transformedSite);
+    setIsDrawerOpen(true);
   }, []);
-
 
   const handleSiteDelete = useCallback(
     (siteId: string) => {
       mutationDeleteSite.mutate(siteId);
-
     },
     [mutationDeleteSite]
   );
-
-  const handleLinkDelete = useCallback(
-    (siteId: string) => {
-      mutationDeleteLink.mutate(siteId);
-    },
-    [mutationDeleteLink]
-  );
-
 
   const handleSiteRefresh = useCallback(() => {
     setTimeout(() => {
@@ -160,25 +155,29 @@ const Backbone = function () {
     handleCloseSiteModal();
   }, [refetchSites, handleCloseSiteModal]);
 
-  const handleLinkRefresh = useCallback(() => {
-    setTimeout(() => {
-      refetchLinks();
-    }, 0);
-
-    handleCloseLinkModal();
-  }, [refetchLinks, handleCloseLinkModal]);
-
+  useEffect(() => {
+    if (selectedSite && !sites.find((s: TransformedSite) => s.id === selectedSite.id)) {
+      setIsDrawerOpen(false);
+      setSelectedSite(undefined);
+    }
+  }, [sites, selectedSite]);
 
   return (
     <MainContainer
       dataTestId={getTestsIds.sitesView()}
-      title={bname}
+      title={
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <ResourceIcon type="backbone" />
+          <span>{bname}</span>
+        </span>
+      }
       mainContentChildren={
         <>
           <Toolbar>
             <ToolbarContent>
-              <ToolbarGroup  align={{ default: "alignEnd" }}>
+              <ToolbarGroup align={{ default: 'alignEnd' }}>
                 <ToolbarItem>
+                  {/* ToggleGroup for topology/list view temporarily hidden as requested
                   <ToggleGroup>
                     <ToggleGroupItem
                       text={BackboneLabels.TableViewTitle}
@@ -197,6 +196,7 @@ const Backbone = function () {
                       icon={<TopologyIcon />}
                     />
                   </ToggleGroup>
+                  */}
                 </ToolbarItem>
               </ToolbarGroup>
             </ToolbarContent>
@@ -204,152 +204,145 @@ const Backbone = function () {
 
           <Divider />
 
-          {view === 'table' && (
-            <Stack hasGutter>
-              <StackItem>
-                <Toolbar>
-                  <ToolbarContent>
-                    <ToolbarItem>
-                      <Title headingLevel="h2">{BackboneLabels.Sites}</Title>
-                    </ToolbarItem>
-                    <ToolbarGroup align={{ default: "alignEnd" }}>
-                      <ToolbarItem>
-                        <Button onClick={handleOpenSiteModal}>{SiteLabels.CreateSiteTitle}</Button>
-                      </ToolbarItem>
-                    </ToolbarGroup>
-                  </ToolbarContent>
-                </Toolbar>
-
-                {siteValidated && (
-                  <Alert variant="danger" title={siteValidated} isInline timeout={ALERT_VISIBILITY_TIMEOUT} />
-                )}
-
-                <SkTable
-                  columns={siteColumns}
-                  rows={sites}
-                  paginationPageSize={DEFAULT_PAGINATION_SIZE}
-                  pagination={true}
-                  customCells={{
-                    emptyCell: (props: LinkCellProps<SiteResponse>) => props.value || '-',
-                    deploymentStateCell: (props: LinkCellProps<SiteResponse>) => (
-                      <div>
-                        <span
-                          className="color-box"
-                          style={{ backgroundColor: DeploymentStatusColorMap[props.data.deploymentstate] }}
-                        />{' '}
-                        {props.data.deploymentstate}
-                      </div>
-                    ),
-                    lifecycleCell: (props: LinkCellProps<SiteResponse>) => (
-                      <div>
-                        <Icon iconSize="md" isInline style={{ verticalAlign: 'middle' }}>
-                          {props.data.lifecycle === 'ready' ? (
-                            <SyncAltIcon color={VarColors.Blue400} />
-                          ) : (
-                            <InProgressIcon color={VarColors.Black400} />
-                          )}
-                        </Icon>{' '}
-                        {props.data.lifecycle}
-                      </div>
-                    ),
-                    linkCell: (props: LinkCellProps<SiteResponse>) =>
-                      LinkCell({
-                        ...props,
-                        type: 'site',
-                        link: `${RoutesPaths.App}/sites/${bname}@${bid}/${props.data.name}@${props.data.id}`
-                      }),
-                    DateCell: (props: LinkCellProps<SiteResponse>) => {
-                      if (props.value) {
-                        return (
-                          <Timestamp
-                            date={new Date(props.value)}
-                            dateFormat={TimestampFormat.medium}
-                            timeFormat={TimestampFormat.medium}
-                          />
-                        );
-                      } 
-                        
-return '-';
-                      
-                    },
-                    actions: ({ data }: { data: SiteResponse }) => (
-                      <OverflowMenu breakpoint="lg">
-                        <OverflowMenuContent>
-                          <OverflowMenuGroup groupType="button">
-                            <OverflowMenuItem>
-                              <Button onClick={() => handleSiteDelete(data.id)} variant="secondary">
-                                {BackboneLabels.DeleteBackboneBtn}
+          {true && (
+            <Drawer isExpanded={isDrawerOpen}>
+              <DrawerContent
+                panelContent={
+                  <DrawerPanelContent isResizable defaultSize="40%" maxSize="40%" minSize="30%">
+                    <DrawerHead>
+                      <Title headingLevel="h2" size="lg">
+                        Site Details
+                      </Title>
+                      <DrawerActions>
+                        <DrawerCloseButton onClick={handleCloseDrawer} />
+                      </DrawerActions>
+                    </DrawerHead>
+                    <DrawerPanelBody>
+                      {selectedSite ? (
+                        <SiteDetailPanel bid={bid} site={selectedSite} />
+                      ) : (
+                        <div style={{ minHeight: 200 }} />
+                      )}
+                    </DrawerPanelBody>
+                  </DrawerPanelContent>
+                }
+              >
+                <DrawerContentBody style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                  <Stack hasGutter style={{ flex: 1, minHeight: 0 }}>
+                    <StackItem>
+                      <Toolbar>
+                        <ToolbarContent>
+                          <ToolbarItem>
+                            <Title headingLevel="h2">{BackboneLabels.Sites}</Title>
+                          </ToolbarItem>
+                          <ToolbarGroup align={{ default: 'alignEnd' }}>
+                            <ToolbarItem>
+                              <Button variant="primary" icon={<PlusIcon />} onClick={handleOpenSiteModal}>
+                                {SiteLabels.CreateSiteTitle}
                               </Button>
-                            </OverflowMenuItem>
-                          </OverflowMenuGroup>
-                        </OverflowMenuContent>
-                      </OverflowMenu>
-                    )
-                  }}
-                />
-              </StackItem>
+                            </ToolbarItem>
+                          </ToolbarGroup>
+                        </ToolbarContent>
+                      </Toolbar>
+                      <div style={{ marginBottom: 12, marginTop: -8, color: '#666', fontSize: '0.95em' }}>
+                        Sites are locations in the backbone network where a backbone router is deployed.
+                      </div>
 
-              <StackItem>
-                <Toolbar>
-                  <ToolbarContent>
-                    <ToolbarItem>
-                      <Title headingLevel="h2">{BackboneLabels.Links}</Title>
-                    </ToolbarItem>
-                    <ToolbarGroup align={{ default: "alignEnd" }}>
-                      <ToolbarItem>
-                        <Button onClick={() => handleOpenLinkModal()}>{LinkLabels.CreateLinkTitle}</Button>
-                      </ToolbarItem>
-                    </ToolbarGroup>
-                  </ToolbarContent>
-                </Toolbar>
+                      {siteValidated && (
+                        <Alert variant="danger" title={siteValidated} isInline timeout={ALERT_VISIBILITY_TIMEOUT} />
+                      )}
 
-                {linkValidated && (
-                  <Alert variant="danger" title={linkValidated} isInline timeout={ALERT_VISIBILITY_TIMEOUT} />
-                )}
+                      <SkTable
+                        columns={siteColumns}
+                        rows={sites}
+                        paginationPageSize={DEFAULT_PAGINATION_SIZE}
+                        pagination={true}
+                        customCells={{
+                          emptyCell: (props: { value: string }) => props.value || '-',
+                          deploymentStateCell: (props: { data: BackboneSiteResponse }) => (
+                            <div>
+                              <span
+                                className="color-box"
+                                style={{
+                                  backgroundColor:
+                                    DeploymentStatusColorHexMap[
+                                      props.data.deploymentstate as keyof typeof DeploymentStatusColorHexMap
+                                    ]
+                                }}
+                              />{' '}
+                              {props.data.deploymentstate}
+                            </div>
+                          ),
+                          lifecycleCell: (props: { data: BackboneSiteResponse }) => (
+                            <div>
+                              <Icon iconSize="md" isInline style={{ verticalAlign: 'middle' }}>
+                                {props.data.lifecycle === 'ready' ? (
+                                  <SyncAltIcon color={hexColors.Blue400} />
+                                ) : (
+                                  <InProgressIcon color="#666666" />
+                                )}
+                              </Icon>{' '}
+                              {props.data.lifecycle}
+                            </div>
+                          ),
+                          linkCell: (props: { data: BackboneSiteResponse; value: string }) => (
+                            <Button
+                              variant="link"
+                              isInline
+                              onClick={() => handleOpenDrawer(props.data)}
+                              style={{ padding: 0, fontSize: 'inherit', display: 'flex', alignItems: 'center' }}
+                            >
+                              <ResourceIcon type="site" />
+                              {props.value}
+                            </Button>
+                          ),
+                          DateCell: (props: { value: string }) => {
+                            if (props.value) {
+                              return (
+                                <Timestamp
+                                  date={new Date(props.value)}
+                                  dateFormat={TimestampFormat.medium}
+                                  timeFormat={TimestampFormat.medium}
+                                />
+                              );
+                            }
 
-                <SkTable
-                  columns={linkColumns}
-                  rows={links}
-                  paginationPageSize={DEFAULT_PAGINATION_SIZE}
-                  pagination={true}
-                  customCells={{
-                    linkCellListeningSiteCell: (props: LinkCellProps<LinkResponse>) =>
-                      LinkCell({
-                        ...props,
-                        isDisabled: true,
-                        value: sites?.find((site) => site.id === props.data.listeninginteriorsite)?.name,
-                        type: 'link',
-                        link: ``
-                      }),
-                    linkCellConnectingSiteCell: (props: LinkCellProps<LinkResponse>) =>
-                      LinkCell({
-                        ...props,
-                        isDisabled: true,
-                        value: sites?.find((site) => site.id === props.data.connectinginteriorsite)?.name,
-                        type: 'link',
-                        link: ``
-                      }),
-                    actions: ({ data }: { data: LinkResponse }) => (
-                      <OverflowMenu breakpoint="lg">
-                        <OverflowMenuContent>
-                          <OverflowMenuGroup groupType="button">
-                            <OverflowMenuItem>
-                              <Button onClick={() => handleLinkDelete(data.id)} variant="secondary">
-                                {BackboneLabels.DeleteBackboneBtn}
-                              </Button>
-                            </OverflowMenuItem>
-                          </OverflowMenuGroup>
-                        </OverflowMenuContent>
-                      </OverflowMenu>
-                    )
-                  }}
-                />
-              </StackItem>
-            </Stack>
+                            return '-';
+                          },
+                          actions: ({ data }: { data: BackboneSiteResponse }) => (
+                            <OverflowMenu breakpoint="lg">
+                              <OverflowMenuContent>
+                                <OverflowMenuGroup groupType="button">
+                                  <OverflowMenuItem>
+                                    <Button variant="link" onClick={() => handleSiteEdit(data)} icon={<EditIcon />}>
+                                      Edit
+                                    </Button>
+                                  </OverflowMenuItem>
+                                  <OverflowMenuItem>
+                                    <Button
+                                      variant="link"
+                                      onClick={() => handleSiteDelete(data.id)}
+                                      icon={<TrashIcon />}
+                                      isDanger
+                                    >
+                                      Delete
+                                    </Button>
+                                  </OverflowMenuItem>
+                                </OverflowMenuGroup>
+                              </OverflowMenuContent>
+                            </OverflowMenu>
+                          )
+                        }}
+                      />
+                    </StackItem>
+                  </Stack>
+                </DrawerContentBody>
+              </DrawerContent>
+            </Drawer>
           )}
 
           <Modal
-            title={SiteLabels.CreateSiteTitle}
+            title={editingSite ? SiteLabels.EditSiteTitle : SiteLabels.CreateSiteTitle}
             isOpen={isSiteOpen}
             variant={ModalVariant.medium}
             onClose={handleCloseSiteModal}
@@ -357,51 +350,10 @@ return '-';
             <SiteForm
               bid={bid}
               position={sitePositionToSave.current}
+              editingSite={editingSite}
               onSubmit={handleSiteRefresh}
               onCancel={handleCloseSiteModal}
             />
-          </Modal>
-
-          <Modal
-            title={LinkLabels.CreateLinkTitle}
-            isOpen={isLinkOpen}
-            variant={ModalVariant.medium}
-            onClose={handleCloseLinkModal}
-          >
-            <LinkForm
-              bid={bid}
-              sid={sidSelected.current}
-              onSubmit={handleLinkRefresh}
-              onCancel={handleCloseLinkModal}
-            />
-          </Modal>
-
-          <Modal
-            title={''}
-            isOpen={!!isEditorOpen}
-            variant={ModalVariant.large}
-            onClose={handleCloseEditorModal}
-            actions={
-              isEditorOpen === 'automatic'
-                ? [
-                    <Button key="cancel" variant="link" onClick={handleCloseEditorModal}>
-                      {BackboneLabels.CancelBackboneBtn}
-                    </Button>
-                  ]
-                : []
-            }
-          >
-            {sidSelected.current && isEditorOpen === 'automatic' && (
-              <>
-                <InitialDeploymentForm sid={sidSelected.current} />
-                <Button className="pf-v5-u-mt-md" onClick={handleCloseEditorModal}>
-                  Done
-                </Button>
-              </>
-            )}
-            {sidSelected.current && isEditorOpen === 'bootstrap' && (
-              <DeployBootstrap sid={sidSelected.current} onClose={handleCloseEditorModal} />
-            )}
           </Modal>
         </>
       }

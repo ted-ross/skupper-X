@@ -1,9 +1,8 @@
 import { Truncate } from '@patternfly/react-core';
 import { Link } from 'react-router-dom';
 
-import ResourceIcon from '@core/components/ResourceIcon';
-
 import { LinkCellProps } from './LinkCell.interfaces';
+import ResourceIcon from '../ResourceIcon';
 
 // Renders the value of the cell, either truncated or not depending on the fitContent prop
 function renderValue(value: string, isDisabled: boolean, fitContent: boolean) {

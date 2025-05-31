@@ -3,9 +3,8 @@ import { useState, FC, FormEvent } from 'react';
 import { Form, FormGroup, TextInput, ActionGroup, Button, FormAlert, Alert, Checkbox } from '@patternfly/react-core';
 import { useMutation } from '@tanstack/react-query';
 
-import { RESTApi } from '@API/REST.api';
-import { BackboneRequest, HTTPError } from '@API/REST.interfaces';
-
+import { RESTApi } from '../../../API/REST.api';
+import { BackboneRequest, HTTPError } from '../../../API/REST.interfaces';
 import { BackboneLabels } from '../Backbones.enum';
 
 const BackboneForm: FC<{

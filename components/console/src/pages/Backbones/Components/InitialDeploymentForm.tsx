@@ -3,8 +3,7 @@ import { FC } from 'react';
 import { CodeEditor, Language } from '@patternfly/react-code-editor';
 import { useQuery } from '@tanstack/react-query';
 
-import { RESTApi } from '@API/REST.api';
-
+import { RESTApi } from '../../../API/REST.api';
 import { QueriesBackbones } from '../Backbones.enum';
 
 const InitialDeploymentForm: FC<{
@@ -12,7 +11,7 @@ const InitialDeploymentForm: FC<{
 }> = function ({ sid }) {
   const { data: code } = useQuery({
     queryKey: [QueriesBackbones.GetKubeInfo, sid],
-    queryFn: () => RESTApi.fetchInitialDeployment(sid)
+    queryFn: () => RESTApi.fetchSiteDeployment(sid, 'kube')
   });
 
   return (
