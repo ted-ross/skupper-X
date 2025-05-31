@@ -9,6 +9,7 @@ import SkUpdateDataButton from '@core/components/SkUpdateButton';
 import { getThemePreference, reflectThemePreference } from '@core/utils/isDarkTheme';
 import SkHeader from '@layout/Header';
 import RouteContainer from '@layout/RouteContainer';
+import SkSidebar from '@layout/SideBar';
 import ErrorConsole from '@pages/shared/Errors/Console';
 import LoadingPage from '@pages/shared/Loading';
 import { routes } from 'routes';
@@ -21,14 +22,15 @@ const App = function () {
 
   return (
     <Page
-      header={<SkHeader />}
+      masthead={<SkHeader />}
+      sidebar={<SkSidebar />}
       breadcrumb={
         <Toolbar style={{ padding: 0 }}>
           <ToolbarContent style={{ padding: 0 }}>
             <ToolbarItem>
               <SkBreadcrumb />
             </ToolbarItem>
-            <ToolbarGroup align={{ default: 'alignRight' }}>
+            <ToolbarGroup align={{ default: "alignEnd" }}>
               <SkUpdateDataButton />
             </ToolbarGroup>
           </ToolbarContent>

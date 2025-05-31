@@ -83,6 +83,8 @@ export enum ContextMenuLabels {
 }
 
 export enum VanLabels {
+  Section = 'VANs',
+  Description = 'Manage Virtual Application Networks (VANs) that enable secure application connectivity across distributed sites.',
   Name = 'Name',
   Lifecycle = 'Lifecycle',
   EndTime = 'End Time',

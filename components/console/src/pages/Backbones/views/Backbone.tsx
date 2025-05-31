@@ -1,34 +1,30 @@
 import { useCallback, useRef, useState } from 'react';
 
 import {
-  Alert,
-  Button,
-  Divider,
-  Icon,
-  Menu,
-  MenuContent,
-  MenuItem,
-  MenuList,
-  Modal,
-  ModalVariant,
-  OverflowMenu,
-  OverflowMenuContent,
-  OverflowMenuGroup,
-  OverflowMenuItem,
-  Stack,
-  StackItem,
-  Text,
-  TextContent,
-  Timestamp,
-  TimestampFormat,
-  Title,
-  ToggleGroup,
-  ToggleGroupItem,
-  Toolbar,
-  ToolbarContent,
-  ToolbarGroup,
-  ToolbarItem
+	Alert,
+	Button,
+	Divider,
+	Icon,
+	OverflowMenu,
+	OverflowMenuContent,
+	OverflowMenuGroup,
+	OverflowMenuItem,
+	Stack,
+	StackItem,
+	Timestamp,
+	TimestampFormat,
+	Title,
+	ToggleGroup,
+	ToggleGroupItem,
+	Toolbar,
+	ToolbarContent,
+	ToolbarGroup,
+	ToolbarItem
 } from '@patternfly/react-core';
+import {
+	Modal,
+	ModalVariant
+} from '@patternfly/react-core/deprecated';
 import { InProgressIcon, SyncAltIcon, TableIcon, TopologyIcon } from '@patternfly/react-icons';
 import { useMutation, useSuspenseQueries } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
@@ -37,7 +33,6 @@ import { RESTApi } from '@API/REST.api';
 import { VarColors } from '@config/colors';
 import { ALERT_VISIBILITY_TIMEOUT, DEFAULT_PAGINATION_SIZE } from '@config/config';
 import { getTestsIds } from '@config/testIds';
-import { GraphNode, GraphReactAdaptorExposedMethods } from '@core/components/Graph/Graph.interfaces';
 import LinkCell from '@core/components/LinkCell';
 import { LinkCellProps } from '@core/components/LinkCell/LinkCell.interfaces';
 import SkTable from '@core/components/SkTable';
@@ -49,8 +44,6 @@ import { DeploymentStatusColorMap, linkColumns, siteColumns } from '../Backbones
 import {
   BackboneLabels,
   RoutesPaths,
-  ContextMenuLabels,
-  DeploymentStates,
   LinkLabels,
   QueriesBackbones,
   SiteLabels
@@ -59,19 +52,17 @@ import DeployBootstrap from '../Components/DeployBootstrap';
 import InitialDeploymentForm from '../Components/InitialDeploymentForm';
 import LinkForm from '../Components/LinkForm';
 import SiteForm from '../Components/SiteForm';
-import Topology from '../Components/Topology';
+
 
 const Backbone = function () {
   const { id: urlId } = useParams() as { id: string };
   const { id: bid, name: bname } = getIdAndNameFromUrlParams(urlId);
 
-  const graphRef = useRef<GraphReactAdaptorExposedMethods>();
-
   const sidSelected = useRef<string | undefined>();
   const sitePositionToSave = useRef<{ x: number; y: number }>();
 
   const [view, setView] = useState<'table' | 'topology'>('table');
-  const [sid, setSid] = useState<string>();
+
 
   const [isSiteOpen, setSiteOpen] = useState(false);
   const [siteValidated, setSiteValidated] = useState<string | undefined>();
@@ -144,60 +135,23 @@ const Backbone = function () {
     setIsEditorOpen(false);
   }, []);
 
-  const handleOpenDetails = useCallback((id: string) => {
-    setSid(id);
-
-    if (graphRef.current?.closeContextMenu) {
-      graphRef.current?.closeContextMenu();
-    }
-  }, []);
-
-  const handleGetAutomatic = useCallback((id: string) => {
-    sidSelected.current = id;
-
-    setIsEditorOpen('automatic');
-
-    if (graphRef.current?.closeContextMenu) {
-      graphRef.current?.closeContextMenu();
-    }
-  }, []);
-
-  const handleGetBootstrap = useCallback((id: string) => {
-    sidSelected.current = id;
-
-    setIsEditorOpen('bootstrap');
-
-    if (graphRef.current?.closeContextMenu) {
-      graphRef.current?.closeContextMenu();
-    }
-  }, []);
 
   const handleSiteDelete = useCallback(
     (siteId: string) => {
       mutationDeleteSite.mutate(siteId);
 
-      if (graphRef.current?.closeContextMenu) {
-        graphRef.current?.closeContextMenu();
-      }
     },
     [mutationDeleteSite]
   );
 
   const handleLinkDelete = useCallback(
     (siteId: string) => {
-      mutationDeleteLink.mutate(siteId);
-
-      if (graphRef.current?.closeContextMenu) {
-        graphRef.current?.closeContextMenu();
-      }
+      mutationDeleteLink.mutate(siteId)
     },
     [mutationDeleteLink]
   );
 
-  const handleRemoveSelected = () => {
-    sidSelected.current = undefined;
-    setSid(undefined);
-  };
+
 
   const handleSiteRefresh = useCallback(() => {
     setTimeout(() => {
@@ -215,51 +169,6 @@ const Backbone = function () {
     handleCloseLinkModal();
   }, [refetchLinks, handleCloseLinkModal]);
 
-  const ContextMenu = function ({ item, target }: { item: GraphNode; target: 'edge' | 'node' | undefined }) {
-    const NodeMenu = function () {
-      const { id, data } = item;
-
-      return (
-        <MenuList>
-          <MenuItem itemId={0} onClick={() => handleOpenDetails(id)}>
-            {ContextMenuLabels.ViewDetails}
-          </MenuItem>
-          <MenuItem itemId={1} onClick={() => handleOpenLinkModal?.(id)}>
-            {ContextMenuLabels.AddLink}
-          </MenuItem>
-          <MenuItem itemId={2} onClick={() => handleSiteDelete(id)}>
-            {ContextMenuLabels.DeleteSite}
-          </MenuItem>
-          {data.deploymentstate === DeploymentStates.ReadyAutomatic && (
-            <MenuItem itemId={3} onClick={() => handleGetAutomatic(id)}>
-              {ContextMenuLabels.GetReadyAutomaticConfig}
-            </MenuItem>
-          )}
-          {data.deploymentstate === DeploymentStates.ReadyBootstrap && (
-            <MenuItem itemId={4} onClick={() => handleGetBootstrap(id)}>
-              {ContextMenuLabels.GetReadyBootstrapConfig}
-            </MenuItem>
-          )}
-        </MenuList>
-      );
-    };
-
-    const LinkMenu = function () {
-      return (
-        <MenuList>
-          <MenuItem itemId={1} onClick={() => handleLinkDelete(item.id)}>
-            {ContextMenuLabels.DeleteLink}
-          </MenuItem>
-        </MenuList>
-      );
-    };
-
-    return (
-      <Menu>
-        <MenuContent>{target === 'node' ? <NodeMenu /> : <LinkMenu />}</MenuContent>
-      </Menu>
-    );
-  };
 
   return (
     <MainContainer
@@ -269,7 +178,7 @@ const Backbone = function () {
         <>
           <Toolbar>
             <ToolbarContent>
-              <ToolbarGroup spaceItems={{ default: 'spaceItemsNone' }} align={{ default: 'alignRight' }}>
+              <ToolbarGroup  align={{ default: "alignEnd" }}>
                 <ToolbarItem>
                   <ToggleGroup>
                     <ToggleGroupItem
@@ -296,22 +205,6 @@ const Backbone = function () {
 
           <Divider />
 
-          {view === 'topology' && (
-            <Topology
-              sites={sites}
-              links={links}
-              sid={sid}
-              onClickNode={handleOpenLinkModal}
-              onClickPanel={({ x, y }) => {
-                sitePositionToSave.current = { x, y };
-                handleOpenSiteModal();
-              }}
-              ContextMenuComponent={ContextMenu}
-              ref={graphRef}
-              onCloseDrawer={handleRemoveSelected}
-            />
-          )}
-
           {view === 'table' && (
             <Stack hasGutter>
               <StackItem>
@@ -320,7 +213,7 @@ const Backbone = function () {
                     <ToolbarItem>
                       <Title headingLevel="h2">{BackboneLabels.Sites}</Title>
                     </ToolbarItem>
-                    <ToolbarGroup align={{ default: 'alignRight' }}>
+                    <ToolbarGroup align={{ default: "alignEnd" }}>
                       <ToolbarItem>
                         <Button onClick={handleOpenSiteModal}>{SiteLabels.CreateSiteTitle}</Button>
                       </ToolbarItem>
@@ -340,29 +233,25 @@ const Backbone = function () {
                   customCells={{
                     emptyCell: (props: LinkCellProps<SiteResponse>) => props.value || '-',
                     deploymentStateCell: (props: LinkCellProps<SiteResponse>) => (
-                      <TextContent>
-                        <Text component="p">
-                          <span
-                            className="color-box"
-                            style={{ backgroundColor: DeploymentStatusColorMap[props.data.deploymentstate] }}
-                          />{' '}
-                          {props.data.deploymentstate}
-                        </Text>
-                      </TextContent>
+                      <div>
+                        <span
+                          className="color-box"
+                          style={{ backgroundColor: DeploymentStatusColorMap[props.data.deploymentstate] }}
+                        />{' '}
+                        {props.data.deploymentstate}
+                      </div>
                     ),
                     lifecycleCell: (props: LinkCellProps<SiteResponse>) => (
-                      <TextContent>
-                        <Text component="p">
-                          <Icon iconSize="md" isInline style={{ verticalAlign: 'middle' }}>
-                            {props.data.lifecycle === 'ready' ? (
-                              <SyncAltIcon color={VarColors.Blue400} />
-                            ) : (
-                              <InProgressIcon color={VarColors.Black400} />
-                            )}
-                          </Icon>{' '}
-                          {props.data.lifecycle}
-                        </Text>
-                      </TextContent>
+                      <div>
+                        <Icon iconSize="md" isInline style={{ verticalAlign: 'middle' }}>
+                          {props.data.lifecycle === 'ready' ? (
+                            <SyncAltIcon color={VarColors.Blue400} />
+                          ) : (
+                            <InProgressIcon color={VarColors.Black400} />
+                          )}
+                        </Icon>{' '}
+                        {props.data.lifecycle}
+                      </div>
                     ),
                     linkCell: (props: LinkCellProps<SiteResponse>) =>
                       LinkCell({
@@ -406,7 +295,7 @@ const Backbone = function () {
                     <ToolbarItem>
                       <Title headingLevel="h2">{BackboneLabels.Links}</Title>
                     </ToolbarItem>
-                    <ToolbarGroup align={{ default: 'alignRight' }}>
+                    <ToolbarGroup align={{ default: "alignEnd" }}>
                       <ToolbarItem>
                         <Button onClick={() => handleOpenLinkModal()}>{LinkLabels.CreateLinkTitle}</Button>
                       </ToolbarItem>

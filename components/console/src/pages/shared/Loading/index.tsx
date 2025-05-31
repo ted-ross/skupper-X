@@ -1,6 +1,6 @@
 import { CSSProperties, FC } from 'react';
 
-import { Bullseye, Card, CardBody, CardHeader, PageSection, Text, TextContent } from '@patternfly/react-core';
+import { Bullseye, Card, CardBody, CardHeader, PageSection } from '@patternfly/react-core';
 import { CogIcon } from '@patternfly/react-icons';
 
 import { getTestsIds } from '@config/testIds';
@@ -19,9 +19,7 @@ const PleaseWait = function () {
         <CogIcon className="cog cog-secondary cog-lower spinning-clockwise--reverse" />
       </CardHeader>
       <CardBody>
-        <TextContent>
-          <Text>{LoadingLabels.LoadingMessage}</Text>
-        </TextContent>
+        <p>{LoadingLabels.LoadingMessage}</p>
       </CardBody>
     </Card>
   );
@@ -43,7 +41,7 @@ interface LoadingPageProps {
 const LoadingPage: FC<LoadingPageProps> = function ({ isFLoating = false }) {
   return (
     <TransitionPage delay={0.75} style={isFLoating ? floatLoader : undefined}>
-      <PageSection>
+      <PageSection hasBodyWrapper={false}>
         <Bullseye className="sk-loading-page" data-testid={getTestsIds.loadingView()}>
           <PleaseWait />
         </Bullseye>

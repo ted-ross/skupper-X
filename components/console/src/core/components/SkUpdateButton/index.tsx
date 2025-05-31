@@ -114,13 +114,13 @@ const SkUpdateDataButton: FC<SkUpdateDataButtonProps> = function ({
         <SelectList>{refreshIntervalOptions}</SelectList>
       </Select>
 
-      <Button
+      <Button icon={<SyncIcon />}
         key="split-action-primary"
         data-testid="update-data-click"
         onClick={() => revalidateLiveQueries()}
         style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}
       >
-        <SyncIcon />
+        
       </Button>
     </>
   );

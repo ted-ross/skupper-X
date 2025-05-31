@@ -1,25 +1,22 @@
 import { useCallback, useState } from 'react';
 
 import {
-  Alert,
-  Button,
-  Icon,
-  Modal,
-  ModalVariant,
-  OverflowMenu,
-  OverflowMenuContent,
-  OverflowMenuGroup,
-  OverflowMenuItem,
-  Stack,
-  StackItem,
-  Text,
-  TextContent,
-  Title,
-  Toolbar,
-  ToolbarContent,
-  ToolbarGroup,
-  ToolbarItem
+	Alert,
+	Button,
+	Icon,
+	OverflowMenu,
+	OverflowMenuContent,
+	OverflowMenuGroup,
+	OverflowMenuItem,
+	Toolbar,
+	ToolbarContent,
+	ToolbarGroup,
+	ToolbarItem
 } from '@patternfly/react-core';
+import {
+	Modal,
+	ModalVariant
+} from '@patternfly/react-core/deprecated';
 import { InProgressIcon, SyncAltIcon } from '@patternfly/react-icons';
 import { useMutation, useSuspenseQuery } from '@tanstack/react-query';
 
@@ -30,6 +27,7 @@ import { ALERT_VISIBILITY_TIMEOUT, DEFAULT_PAGINATION_SIZE } from '@config/confi
 import LinkCell from '@core/components/LinkCell';
 import { LinkCellProps } from '@core/components/LinkCell/LinkCell.interfaces';
 import SkTable from '@core/components/SkTable';
+import MainContainer from '@layout/MainContainer';
 
 import { VanColumns } from '../Backbones.constants';
 import { BackboneLabels, RoutesPaths, QueriesBackbones, VanLabels } from '../Backbones.enum';
@@ -79,40 +77,40 @@ const Vans = function () {
   );
 
   return (
-    <Stack hasGutter>
-      <StackItem>
-        <Toolbar>
-          <ToolbarContent>
-            <ToolbarItem>
-              <Title headingLevel="h2">{BackboneLabels.Vans}</Title>
-            </ToolbarItem>
-            <ToolbarGroup align={{ default: 'alignRight' }}>
-              <ToolbarItem>
-                <Button onClick={handleOpenVanModal}>{VanLabels.CreateVanTitle}</Button>
-              </ToolbarItem>
-            </ToolbarGroup>
-          </ToolbarContent>
-        </Toolbar>
+    <MainContainer
+      title={VanLabels.Section}
+      description={VanLabels.Description}
+      mainContentChildren={
+        <>
+          <Toolbar>
+            <ToolbarContent>
+              <ToolbarGroup align={{ default: "alignEnd" }}>
+                <ToolbarItem>
+                  <Button onClick={handleOpenVanModal}>{VanLabels.CreateVanTitle}</Button>
+                </ToolbarItem>
+              </ToolbarGroup>
+            </ToolbarContent>
+          </Toolbar>
 
-        {vanValidated && <Alert variant="danger" title={vanValidated} isInline timeout={ALERT_VISIBILITY_TIMEOUT} />}
-        <SkTable
-          columns={VanColumns}
-          rows={vans}
-          paginationPageSize={DEFAULT_PAGINATION_SIZE}
-          pagination={true}
-          customCells={{
-            linkCell: (props: LinkCellProps<VanResponse>) =>
-              LinkCell({
-                ...props,
-                type: 'van',
-                link: `${RoutesPaths.App}/invitations/${props.data.name}@${props.data.id}`
-              }),
+          {vanValidated && <Alert variant="danger" title={vanValidated} isInline timeout={ALERT_VISIBILITY_TIMEOUT} />}
+          
+          <SkTable
+            columns={VanColumns}
+            rows={vans}
+            paginationPageSize={DEFAULT_PAGINATION_SIZE}
+            pagination={true}
+            customCells={{
+              linkCell: (props: LinkCellProps<VanResponse>) =>
+                LinkCell({
+                  ...props,
+                  type: 'van',
+                  link: `${RoutesPaths.App}/invitations/${props.data.name}@${props.data.id}`
+                }),
 
-            emptyCell: (props: LinkCellProps<VanResponse>) => props.value || '-',
+              emptyCell: (props: LinkCellProps<VanResponse>) => props.value || '-',
 
-            lifecycleCell: (props: LinkCellProps<VanResponse>) => (
-              <TextContent>
-                <Text component="p">
+              lifecycleCell: (props: LinkCellProps<VanResponse>) => (
+                <div>
                   <Icon iconSize="md" isInline style={{ verticalAlign: 'middle' }}>
                     {props.data.lifecycle === 'ready' ? (
                       <SyncAltIcon color={VarColors.Blue400} />
@@ -121,39 +119,39 @@ const Vans = function () {
                     )}
                   </Icon>{' '}
                   {props.data.lifecycle}
-                </Text>
-              </TextContent>
-            ),
+                </div>
+              ),
 
-            deleteDelayCell: (props: LinkCellProps<VanResponse>) =>
-              props.value && Object.keys(props.data).length ? props.data.deletedelay.minutes : '-',
+              deleteDelayCell: (props: LinkCellProps<VanResponse>) =>
+                props.value && Object.keys(props.data).length ? props.data.deletedelay.minutes : '-',
 
-            actions: ({ data }: { data: VanResponse }) => (
-              <OverflowMenu breakpoint="lg">
-                <OverflowMenuContent>
-                  <OverflowMenuGroup groupType="button">
-                    <OverflowMenuItem>
-                      <Button onClick={() => handleVanDelete(data.id)} variant="secondary">
-                        {BackboneLabels.DeleteBackboneBtn}
-                      </Button>
-                    </OverflowMenuItem>
-                  </OverflowMenuGroup>
-                </OverflowMenuContent>
-              </OverflowMenu>
-            )
-          }}
-        />
-      </StackItem>
+              actions: ({ data }: { data: VanResponse }) => (
+                <OverflowMenu breakpoint="lg">
+                  <OverflowMenuContent>
+                    <OverflowMenuGroup groupType="button">
+                      <OverflowMenuItem>
+                        <Button onClick={() => handleVanDelete(data.id)} variant="secondary">
+                          {BackboneLabels.DeleteBackboneBtn}
+                        </Button>
+                      </OverflowMenuItem>
+                    </OverflowMenuGroup>
+                  </OverflowMenuContent>
+                </OverflowMenu>
+              )
+            }}
+          />
 
-      <Modal
-        title={VanLabels.CreateVanTitle}
-        isOpen={isVanOpen}
-        variant={ModalVariant.medium}
-        onClose={handleCloseVanModal}
-      >
-        <VanForm onSubmit={handleVanRefresh} onCancel={handleCloseVanModal} />
-      </Modal>
-    </Stack>
+          <Modal
+            title={VanLabels.CreateVanTitle}
+            isOpen={isVanOpen}
+            variant={ModalVariant.medium}
+            onClose={handleCloseVanModal}
+          >
+            <VanForm onSubmit={handleVanRefresh} onCancel={handleCloseVanModal} />
+          </Modal>
+        </>
+      }
+    />
   );
 };
 

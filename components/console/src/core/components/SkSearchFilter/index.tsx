@@ -1,22 +1,21 @@
 import { useState, MouseEvent as ReactMouseEvent, Ref, FC, FormEvent, useEffect, memo } from 'react';
 
 import {
-  Toolbar,
-  ToolbarItem,
-  ToolbarContent,
-  ToolbarToggleGroup,
-  ToolbarGroup,
-  MenuToggle,
-  MenuToggleElement,
-  SearchInput,
-  Select,
-  SelectList,
-  SelectOption,
-  ChipGroup,
-  Chip,
-  ToolbarFilter,
-  Button
+	Label, LabelGroup, Toolbar,
+	ToolbarItem,
+	ToolbarContent,
+	ToolbarToggleGroup,
+	ToolbarGroup,
+	MenuToggle,
+	MenuToggleElement,
+	SearchInput,
+	Select,
+	SelectList,
+	SelectOption,
+	ToolbarFilter,
+	Button
 } from '@patternfly/react-core';
+
 import { FilterIcon } from '@patternfly/react-icons';
 
 import useDebounce from 'hooks/useDebounce';
@@ -115,7 +114,7 @@ const SkSearchFilter: FC<{ onSearch?: Function; selectOptions: { id: string; nam
           <SelectList>{statusMenuItems}</SelectList>
         </Select>
 
-        <ToolbarItem variant="search-filter">
+        <ToolbarItem >
           <SearchInput
             className="sk-search-filter"
             placeholder={`${PLACEHOLDER_PREFIX_LABEL} ${filterNameSelected?.toLocaleLowerCase()}`}
@@ -134,17 +133,17 @@ const SkSearchFilter: FC<{ onSearch?: Function; selectOptions: { id: string; nam
     );
 
     const toolbarFilterItems = (
-      <ToolbarGroup spaceItems={{ default: 'spaceItemsSm' }}>
+      <ToolbarGroup >
         {selectOptions.map(({ id, name }) => {
           const value = filterValues[id as keyof FilterValues];
           if (value) {
             return (
               <ToolbarFilter key={id} categoryName={name}>
-                <ChipGroup categoryName={name}>
-                  <Chip key={value} onClick={() => handleDeleteFilter(id as string)}>
+                <LabelGroup categoryName={name}>
+                  <Label variant="outline" key={value} onClose={() => handleDeleteFilter(id as string)}>
                     {value}
-                  </Chip>
-                </ChipGroup>
+                  </Label>
+                </LabelGroup>
               </ToolbarFilter>
             );
           }

@@ -1,28 +1,21 @@
-import { FormEvent, useEffect, useState } from 'react';
-
 import {
   Brand,
   Masthead,
-  MastheadBrand,
+  MastheadLogo,
   MastheadContent,
   MastheadMain,
-  MastheadToggle,
+  MastheadToggle, MastheadBrand,
   PageToggleButton,
-  Switch,
   Toolbar,
   ToolbarContent,
-  ToolbarGroup,
-  ToolbarItem
+  ToolbarGroup
 } from '@patternfly/react-core';
 import { BarsIcon } from '@patternfly/react-icons';
 
-import { DARK_THEME_CLASS, brandLogo } from '@config/config';
-import { getThemePreference, removeThemePreference, setThemePreference } from '@core/utils/isDarkTheme';
+import { brandLogo } from '@config/config';
 
 export enum HeaderLabels {
   Logout = 'Logout',
-  DarkMode = ' Dark mode',
-  DarkModeTestId = 'dark-mode-testId',
   UserDropdownTestId = 'user-dropdown-testId',
   OpenShiftAuth = 'openshift'
 }
@@ -30,25 +23,24 @@ export enum HeaderLabels {
 const SkHeader = function () {
   return (
     <Masthead className="sk-header" data-testid="sk-header">
-      <MastheadToggle>
-        <PageToggleButton variant="plain">
-          <BarsIcon />
-        </PageToggleButton>
-      </MastheadToggle>
-
       <MastheadMain>
-        <MastheadBrand>
-          <Brand src={brandLogo} alt="logo" heights={{ default: '45px' }} />
+        <MastheadToggle>
+          <PageToggleButton variant="plain">
+            <BarsIcon />
+          </PageToggleButton>
+        </MastheadToggle>
+        <MastheadBrand data-codemods>
+          <MastheadLogo data-codemods>
+            <Brand src={brandLogo} alt="logo" heights={{ default: '45px' }} />
+          </MastheadLogo>
         </MastheadBrand>
       </MastheadMain>
 
       <MastheadContent>
         <Toolbar isFullHeight>
           <ToolbarContent>
-            <ToolbarGroup align={{ default: 'alignRight' }} spacer={{ default: 'spacerMd' }}>
-              <ToolbarItem>
-                <DarkModeSwitch />
-              </ToolbarItem>
+            <ToolbarGroup align={{ default: "alignEnd" }} gap={{ default: "gapMd" }}>
+              {/* Add any future header actions here */}
             </ToolbarGroup>
           </ToolbarContent>
         </Toolbar>
@@ -58,28 +50,3 @@ const SkHeader = function () {
 };
 
 export default SkHeader;
-
-export const DarkModeSwitch = function () {
-  const [isChecked, setIsChecked] = useState<boolean>(false);
-
-  const handleChange = (_event: FormEvent<HTMLInputElement>, checked: boolean) => {
-    setIsChecked(checked);
-
-    checked ? setThemePreference(DARK_THEME_CLASS) : removeThemePreference();
-  };
-
-  useEffect(() => {
-    const isDarkTheme = getThemePreference() ? true : false;
-    setIsChecked(isDarkTheme);
-  }, []);
-
-  return (
-    <Switch
-      label={HeaderLabels.DarkMode}
-      labelOff={HeaderLabels.DarkMode}
-      isChecked={isChecked}
-      onChange={handleChange}
-      data-testid={HeaderLabels.DarkModeTestId}
-    />
-  );
-};

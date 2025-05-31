@@ -9,7 +9,7 @@
     "typeRoots": ["node_modules/@types"],
     "baseUrl": "src",
     "sourceMap": true,
-    "allowJs": true,
+    "allowJs": false,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
@@ -21,11 +21,13 @@
     "strictNullChecks": true,
     "noImplicitReturns": true,
     "strictFunctionTypes": true,
-    "noUnusedParameters": false,
-    "noUnusedLocals": false,
+    "noUnusedParameters": true,
+    "noUnusedLocals": true,
     "strictPropertyInitialization": true
   },
-  "include": ["src", "jest.config.ts", "mocks/*.ts"],
-  // cypress.config.ts -> https://github.com/cypress-io/cypress/issues/22059
-  "exclude": ["node_modules", "build", "cypress.config.ts"]
+  "include": ["src/**/*", "jest.config.ts", "mocks/*.ts"],
+  "exclude": [
+    "node_modules",
+    "build"
+  ]
 }

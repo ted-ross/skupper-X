@@ -27,7 +27,7 @@ export const ALERT_VISIBILITY_TIMEOUT = 5000; // Time in milliseconds to display
 export const waitForElementToBeRemovedTimeout = 10000;
 
 export const DARK_THEME_CLASS = 'pf-v5-theme-dark';
-export const DEFAULT_FONT_VAR = 'var(--pf-v5-global--FontFamily--text)';
+export const DEFAULT_FONT_VAR = "var(--pf-t--global--font--family--body)";
 
 // number of nodes to start showing the aggregate nodes in the topology
 export const MAX_NODE_COUNT_WITHOUT_AGGREGATION = Number(process.env.MAX_NODE_COUNT_WITHOUT_AGGREGATION) || 26;

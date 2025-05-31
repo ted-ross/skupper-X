@@ -1,28 +1,28 @@
 import { FC, useCallback, useState } from 'react';
 
 import {
-  Alert,
-  Button,
-  Icon,
-  Modal,
-  ModalVariant,
-  OverflowMenu,
-  OverflowMenuContent,
-  OverflowMenuGroup,
-  OverflowMenuItem,
-  PageSection,
-  Stack,
-  StackItem,
-  Text,
-  TextContent,
-  Timestamp,
-  TimestampFormat,
-  Title,
-  Toolbar,
-  ToolbarContent,
-  ToolbarGroup,
-  ToolbarItem
+	Alert,
+	Button,
+	Icon,
+	OverflowMenu,
+	OverflowMenuContent,
+	OverflowMenuGroup,
+	OverflowMenuItem,
+	PageSection,
+	Stack,
+	StackItem,
+	Timestamp,
+	TimestampFormat,
+	Title,
+	Toolbar,
+	ToolbarContent,
+	ToolbarGroup,
+	ToolbarItem,
 } from '@patternfly/react-core';
+import {
+	Modal,
+	ModalVariant
+} from '@patternfly/react-core/deprecated';
 import { InProgressIcon, SyncAltIcon } from '@patternfly/react-icons';
 import { useMutation, useSuspenseQueries } from '@tanstack/react-query';
 import { useParams } from 'react-router';
@@ -49,7 +49,7 @@ const InvitationContainer = function () {
     <MainContainer
       title={InvitationLabels.Section}
       mainContentChildren={
-        <PageSection>
+        <PageSection hasBodyWrapper={false}>
           <Invitations vid={vid} />
         </PageSection>
       }
@@ -131,7 +131,7 @@ const Invitations: FC<{ vid: string }> = function ({ vid }) {
             <ToolbarItem>
               <Title headingLevel="h2">{BackboneLabels.Invitations}</Title>
             </ToolbarItem>
-            <ToolbarGroup align={{ default: 'alignRight' }}>
+            <ToolbarGroup align={{ default: "alignEnd" }}>
               <ToolbarItem>
                 <Button onClick={handleOpenModal}>{InvitationLabels.CreateTitle}</Button>
               </ToolbarItem>
@@ -149,18 +149,16 @@ const Invitations: FC<{ vid: string }> = function ({ vid }) {
             emptyCell: (props: LinkCellProps<InvitationResponse>) => props.value || '-',
 
             lifecycleCell: (props: LinkCellProps<InvitationResponse>) => (
-              <TextContent>
-                <Text component="p">
-                  <Icon iconSize="md" isInline style={{ verticalAlign: 'middle' }}>
-                    {props.data.lifecycle === 'ready' ? (
-                      <SyncAltIcon color={VarColors.Blue400} />
-                    ) : (
-                      <InProgressIcon color={VarColors.Black400} />
-                    )}
-                  </Icon>{' '}
-                  {props.data.lifecycle}
-                </Text>
-              </TextContent>
+              <span>
+                <Icon iconSize="md" isInline style={{ verticalAlign: 'middle' }}>
+                  {props.data.lifecycle === 'ready' ? (
+                    <SyncAltIcon color={VarColors.Blue400} />
+                  ) : (
+                    <InProgressIcon color={VarColors.Black400} />
+                  )}
+                </Icon>{' '}
+                {props.data.lifecycle}
+              </span>
             ),
 
             actions: ({ data }: { data: InvitationResponse }) => (
@@ -211,18 +209,16 @@ const Invitations: FC<{ vid: string }> = function ({ vid }) {
             emptyCell: (props: LinkCellProps<MemberResponse>) => props.value || '-',
 
             lifecycleCell: (props: LinkCellProps<MemberResponse>) => (
-              <TextContent>
-                <Text component="p">
-                  <Icon iconSize="md" isInline style={{ verticalAlign: 'middle' }}>
-                    {props.data.lifecycle === 'ready' ? (
-                      <SyncAltIcon color={VarColors.Blue400} />
-                    ) : (
-                      <InProgressIcon color={VarColors.Black400} />
-                    )}
-                  </Icon>{' '}
-                  {props.data.lifecycle}
-                </Text>
-              </TextContent>
+              <span>
+                <Icon iconSize="md" isInline style={{ verticalAlign: 'middle' }}>
+                  {props.data.lifecycle === 'ready' ? (
+                    <SyncAltIcon color={VarColors.Blue400} />
+                  ) : (
+                    <InProgressIcon color={VarColors.Black400} />
+                  )}
+                </Icon>{' '}
+                {props.data.lifecycle}
+              </span>
             )
           }}
         />
@@ -234,7 +230,7 @@ const Invitations: FC<{ vid: string }> = function ({ vid }) {
         variant={ModalVariant.medium}
         onClose={handleCloseModal}
       >
-        <InvitationForm bid={van.backboneid} vid={vid} onSubmit={handleRefresh} onCancel={handleCloseModal} />
+        <InvitationForm bid={van.backbone} vid={vid} onSubmit={handleRefresh} onCancel={handleCloseModal} />
       </Modal>
 
       <Modal

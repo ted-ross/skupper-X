@@ -4,21 +4,16 @@ import {
   Divider,
   Flex,
   PageGroup,
-  PageNavigation,
   PageSection,
-  PageSectionVariants,
-  Text,
-  TextContent,
-  TextVariants,
   Title
 } from '@patternfly/react-core';
 
 import LoadingPage from '@pages/shared/Loading';
 
 import TransitionPage from '../core/components/TransitionPages/Fade';
+import Footer from './Footer';
 
 import '@patternfly/patternfly/patternfly-addons.css';
-import '@patternfly/patternfly/patternfly-charts-theme-dark.css';
 
 interface MainContainerProps {
   dataTestId?: string;
@@ -30,45 +25,49 @@ interface MainContainerProps {
   hasMainContentPadding?: boolean;
   navigationComponent?: ReactElement;
   mainContentChildren?: ReactElement;
+  showFooter?: boolean;
 }
 
 const MainContainer: FC<MainContainerProps> = function ({
   dataTestId,
   title,
-
   description,
   hasMainContentPadding = false,
   navigationComponent,
-  mainContentChildren
+  mainContentChildren,
+  showFooter = true
 }) {
   return (
     <TransitionPage>
-      <PageGroup data-testid={dataTestId}>
-        {title && (
-          <PageSection role="sk-heading" variant={PageSectionVariants.light}>
-            <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }}>
-              <TextContent>
-                <Title headingLevel="h1">{title}</Title>
-                {description && <Text component={TextVariants.p}>{description}</Text>}
-              </TextContent>
-            </Flex>
-          </PageSection>
-        )}
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 120px)' }}>
+        <div style={{ flex: 1 }}>
+          <PageGroup data-testid={dataTestId}>
+            {title && (
+              <PageSection hasBodyWrapper={false} role="sk-heading" >
+                <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }}>
+                  <div>
+                    <Title headingLevel="h1">{title}</Title>
+                    {description && <p>{description}</p>}
+                  </div>
+                </Flex>
+              </PageSection>
+            )}
 
-        {navigationComponent && (
-          <>
-            <PageNavigation className="pf-v5-u-py-0 pf-v5-u-px-xl">
-              <Flex>{navigationComponent}</Flex>
-            </PageNavigation>
-            <Divider />
-          </>
-        )}
-        {mainContentChildren && (
-          <PageSection padding={{ default: hasMainContentPadding ? 'noPadding' : 'padding' }} isFilled={true}>
-            <Suspense fallback={<LoadingPage />}>{mainContentChildren} </Suspense>
-          </PageSection>
-        )}
-      </PageGroup>
+            {navigationComponent && (
+              <>
+                <Flex>{navigationComponent}</Flex>
+                <Divider />
+              </>
+            )}
+            {mainContentChildren && (
+              <PageSection hasBodyWrapper={false} padding={{ default: hasMainContentPadding ? 'noPadding' : 'padding' }} isFilled={true}>
+                <Suspense fallback={<LoadingPage />}>{mainContentChildren}</Suspense>
+              </PageSection>
+            )}
+          </PageGroup>
+        </div>
+        {showFooter && <Footer />}
+      </div>
     </TransitionPage>
   );
 };
