@@ -176,7 +176,9 @@ class InstanceBlock {
     _buildInterfaces(buildLog) {
         const ilist = this.libraryBlock.interfaces();
         if (ilist) {
-            for (const iface of ilist) {
+            // Handle both array and object formats for interfaces
+            const interfaceArray = Array.isArray(ilist) ? ilist : Object.values(ilist);
+            for (const iface of interfaceArray) {
                 this.interfaces[iface.name] = new BlockInterface(this, iface, iface.blockType || this.libraryBlock.nameNoRev(), buildLog);
             }
         }
@@ -842,6 +844,12 @@ const importBlock = async function(client, block, blockRevisions) {
 //               <blockname>;<rev>   - specified revision
 //
 const loadLibraryBlock = async function(client, library, blockName, buildLog) {
+    // Validate blockName parameter
+    if (!blockName || typeof blockName !== 'string') {
+        buildLog.error(`Invalid or missing library block name: ${blockName}`);
+        return;
+    }
+    
     const elements = blockName.split(';');
     const latest   = elements.length == 1;
 
@@ -894,6 +902,11 @@ const loadLibraryBlock = async function(client, library, blockName, buildLog) {
     const body = yaml.load(revisionBlock.specbody);
     if (body && revisionBlock.bodystyle == 'composite') {
         for (const subblock of body) {
+            // Validate subblock structure before recursive call
+            if (!subblock || !subblock.block || typeof subblock.block !== 'string') {
+                buildLog.error(`Malformed composite block specification: missing or invalid 'block' property in subblock of ${elements[0]}`);
+                continue;
+            }
             await loadLibraryBlock(client, library, subblock.block, buildLog)
         }
     }
@@ -1285,15 +1298,46 @@ const postLibraryBlocks = async function(req, res) {
 const createLibraryBlock = async function(req, res) {
     var returnStatus = 201;
     const client = await db.ClientFromPool();
-    const form = new formidable.IncomingForm();
     try {
         await client.query("BEGIN");
-        const [fields, files] = await form.parse(req);
-        const norm = util.ValidateAndNormalizeFields(fields, {
+        
+        let norm;
+        let fields;
+        
+        // Check if this is a JSON request or form data request
+        if (req.is('application/json')) {
+            // Convert JSON to formidable-style fields format for unified validation
+            fields = {};
+            
+            // Only add fields that are actually present in the request
+            if (req.body.name !== undefined) {
+                fields.name = req.body.name;
+            }
+            if (req.body.type !== undefined) {
+                fields.type = req.body.type;
+            }
+            if (req.body.bodystyle !== undefined) {
+                fields.bodystyle = req.body.bodystyle;
+            }
+            if (req.body.provider !== undefined && req.body.provider.trim() !== '') {
+                fields.provider = req.body.provider;
+            }
+        } else {
+            // Handle form data request (existing behavior)
+            const form = new formidable.IncomingForm();
+            const [parsedFields, files] = await form.parse(req);
+            fields = {};
+            // Extract first element from each formidable field array
+            for (const [key, valueArray] of Object.entries(parsedFields)) {
+                fields[key] = Array.isArray(valueArray) ? valueArray[0] || '' : valueArray;
+            }
+        }
+        // Use unified validation for both JSON and form data
+        norm = util.ValidateAndNormalizeFields(fields, {
             'name'      : {type: 'dnsname', optional: false},
             'type'      : {type: 'string',  optional: false},
             'bodystyle' : {type: 'string',  optional: false},
-            'provider'  : {type: 'dnsname', optional: true, default: ''},
+            'provider'  : {type: 'dnsname', optional: true},
         });
 
         const checkResult = await client.query("SELECT Id FROM LibraryBlocks WHERE Name = $1", [norm.name]);
@@ -1347,15 +1391,17 @@ const getBlockTypes = async function(req, res) {
     try {
         await client.query("BEGIN");
         const result = await client.query("SELECT * FROM BlockTypes");
-        let btmap = {};
+        let btArray = [];
         for (const row of result.rows) {
-            btmap[row.name] = {
-                allownorth     : row.allownorth,
-                allowsouth     : row.allowsouth,
-                allocatetosite : row.allocatetosite,
-            };
+            btArray.push({
+                type: row.name,
+                description: row.description || row.name,
+                allownorth: row.allownorth,
+                allowsouth: row.allowsouth,
+                allocatetosite: row.allocatetosite
+            });
         }
-        res.status(returnStatus).json(btmap);
+        res.status(returnStatus).json(btArray);
         await client.query("COMMIT");
     } catch (error) {
         Log(`Exception in getBlockTypes: ${error.message}`);
@@ -1464,16 +1510,41 @@ const deleteLibraryBlock = async function(blockid, req, res) {
 const postApplication = async function(req, res) {
     var returnStatus = 201;
     const client = await db.ClientFromPool();
-    const form = new formidable.IncomingForm();
     try {
         await client.query("BEGIN");
-        const [fields, files] = await form.parse(req);
+        
+        let fields;
+        
+        // Check if this is a JSON request or form data request
+        if (req.is('application/json')) {
+            // Handle JSON request
+            fields = {};
+            
+            // Only add fields that are actually present in the request
+            if (req.body.name !== undefined) {
+                fields.name = req.body.name;
+            }
+            if (req.body.rootblock !== undefined) {
+                fields.rootblock = req.body.rootblock;
+            }
+        } else {
+            // Handle form data request (existing behavior)
+            const form = new formidable.IncomingForm();
+            const [parsedFields, files] = await form.parse(req);
+            
+            // Extract first element from each formidable field array
+            fields = {};
+            for (const [key, valueArray] of Object.entries(parsedFields)) {
+                fields[key] = Array.isArray(valueArray) ? valueArray[0] || '' : valueArray;
+            }
+        }
+        
         const norm = util.ValidateAndNormalizeFields(fields, {
             'name'      : {type: 'dnsname', optional: false},
             'rootblock' : {type: 'uuid',    optional: false},
         });
 
-        const result = await client.query("INSERT INTO Applications (Name, RootBlock) VALUES ($1, $2) RETURNING Id",
+        const result = await client.query("INSERT INTO Applications (Name, RootBlock, Lifecycle) VALUES ($1, $2, 'created') RETURNING Id",
                                           [norm.name, norm.rootblock]);
         await client.query("COMMIT");
         if (result.rowCount == 1) {
@@ -1614,7 +1685,7 @@ const listApplications = async function(req, res) {
     try {
         await client.query("BEGIN");
         const result = await client.query(
-            "SELECT Applications.Id, Applications.Name, RootBlock, Lifecycle, LibraryBlocks.Name as rootname FROM Applications " +
+            "SELECT Applications.Id as id, Applications.Name as name, RootBlock as rootblock, Lifecycle as lifecycle, Applications.Created as created, LibraryBlocks.Name as rootname FROM Applications " +
             "JOIN LibraryBlocks ON LibraryBlocks.Id = RootBlock"
         );
         res.status(returnStatus).json(result.rows);
@@ -1636,7 +1707,7 @@ const getApplication = async function(apid, req, res) {
     try {
         await client.query("BEGIN");
         const result = await client.query(
-            "SELECT Applications.*, LibraryBlocks.Name as rootname FROM Applications " +
+            "SELECT Applications.Id as id, Applications.Name as name, RootBlock as rootblock, Lifecycle as lifecycle, Applications.Created as created, BuildLog as buildlog, LibraryBlocks.Name as rootname FROM Applications " +
             "JOIN LibraryBlocks ON LibraryBlocks.Id = RootBlock " +
             "WHERE Applications.Id = $1", [apid]
         );
@@ -2018,8 +2089,35 @@ const getInterfaceRoles = async function(req, res) {
 
 }
 
+const getBodyStyles = async function(req, res) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        // Query the enum values for BlockBodyStyle
+        const result = await client.query(
+            "SELECT enumlabel FROM pg_enum WHERE enumtypid = (SELECT oid FROM pg_type WHERE typname = 'blockbodystyle')"
+        );
+        let bodyStyles = [];
+        for (const row of result.rows) {
+            bodyStyles.push(row.enumlabel);
+        }
+        res.status(returnStatus).json(bodyStyles);
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in getBodyStyles: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+}
+
 exports.ApiInit = function(app) {
     app.use(express.static('../compose-web-app'));
+    app.use(express.json());
 
     app.post(COMPOSE_PREFIX + 'library/blocks/import', async (req, res) => {
         await postLibraryBlocks(req, res);
@@ -2029,12 +2127,20 @@ exports.ApiInit = function(app) {
         await createLibraryBlock(req, res);
     });
 
+    app.post(COMPOSE_PREFIX + 'library/blocks/json', async (req, res) => {
+        await createLibraryBlock(req, res);
+    });
+
     app.get(COMPOSE_PREFIX + 'library/blocks', async (req, res) => {
         await listLibraryBlocks(req, res);
     });
 
     app.get(COMPOSE_PREFIX + 'library/blocktypes', async (req, res) => {
         await getBlockTypes(req, res);
+    })
+
+    app.get(COMPOSE_PREFIX + 'library/bodystyles', async (req, res) => {
+        await getBodyStyles(req, res);
     })
 
     app.get(COMPOSE_PREFIX + 'library/blocks/:blockid', async (req, res) => {
@@ -2138,7 +2244,6 @@ exports.ApiInit = function(app) {
         await ExpandTemplate(req, res);
     })
 
-    app.use(express.json());
     app.put(COMPOSE_PREFIX + 'library/blocks/:blockid/config', async (req, res) => {
         await putLibraryBlockSection(req.params.blockid, 'Config', req, res);
     });

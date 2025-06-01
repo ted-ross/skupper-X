@@ -7,15 +7,24 @@ import {
   BackboneSiteRequest,
   LinkResponse,
   LinkRequest,
-  ApplicationNetworkResponse,
-  ApplicationNetworkRequest,
+  VanResponse,
+  VanRequest,
   InvitationResponse,
   InvitationRequest,
   MemberSiteResponse,
   AccessPointResponse,
   AccessPointRequest,
   TlsCertificateResponse,
-  TargetPlatformResponse
+  TargetPlatformResponse,
+  LibraryBlockResponse,
+  LibraryBlockRequest,
+  LibraryBlockUpdateRequest,
+  LibraryBlockTypeResponse,
+  LibraryBlockHistoryResponse,
+  IngressRequest,
+  ApplicationResponse,
+  ApplicationBlock,
+  CreateApplicationRequest
 } from './REST.interfaces';
 import {
   getBackbonesPATH,
@@ -49,7 +58,21 @@ import {
   getTlsCertificatePATH,
   getTargetPlatformsPATH,
   getSiteDeploymentPATH,
-  getIngressPATH
+  getIngressPATH,
+  getLibrariesPATH,
+  getLibraryPATH,
+  getLibraryConfigPATH,
+  getLibraryInterfacesPATH,
+  getLibraryBodyPATH,
+  getLibraryHistoryPATH,
+  getLibraryBlockTypesPATH,
+  getLibraryBodyStylesPATH,
+  getInterfaceRolesPATH,
+  getApplicationsPATH,
+  getApplicationPATH,
+  getApplicationBuildPATH,
+  getApplicationLogPATH,
+  getApplicationBlocksPATH
 } from './REST.paths';
 import { mapOptionsToQueryParams } from './REST.utils';
 
@@ -205,19 +228,19 @@ export const RESTApi = {
   },
 
   // VAN (APPLICATION NETWORK) APIs
-  fetchVans: async (): Promise<ApplicationNetworkResponse[]> => {
-    const data = await axiosFetch<ApplicationNetworkResponse[]>(getVansPATH());
+  fetchVans: async (): Promise<VanResponse[]> => {
+    const data = await axiosFetch<VanResponse[]>(getVansPATH());
 
     return data;
   },
 
-  fetchVansForBackbone: async (bid: string): Promise<ApplicationNetworkResponse[]> => {
-    const data = await axiosFetch<ApplicationNetworkResponse[]>(getVansForBackbonePATH(bid));
+  fetchVansForBackbone: async (bid: string): Promise<VanResponse[]> => {
+    const data = await axiosFetch<VanResponse[]>(getVansForBackbonePATH(bid));
 
     return data;
   },
 
-  createVan: async (bid: string, data: ApplicationNetworkRequest): Promise<string> => {
+  createVan: async (bid: string, data: VanRequest): Promise<string> => {
     const { id } = await axiosFetch<{ id: string }>(getCreateVanPATH(bid), {
       method: 'POST',
       data
@@ -226,8 +249,8 @@ export const RESTApi = {
     return id;
   },
 
-  searchVan: async (vid: string): Promise<ApplicationNetworkResponse> => {
-    const data = await axiosFetch<ApplicationNetworkResponse>(getVanPATH(vid));
+  searchVan: async (vid: string): Promise<VanResponse> => {
+    const data = await axiosFetch<VanResponse>(getVanPATH(vid));
 
     return data;
   },
@@ -344,10 +367,179 @@ export const RESTApi = {
   },
 
   // INGRESS APIs
-  createIngress: async (sid: string, data: any): Promise<void> => {
+  createIngress: async (sid: string, data: IngressRequest): Promise<void> => {
     await axiosFetch<void>(getIngressPATH(sid), {
       method: 'POST',
       data
     });
+  },
+
+  // LIBRARY BLOCK APIs
+  fetchLibraries: async (options?: RequestOptions): Promise<LibraryBlockResponse[]> => {
+    const data = await axiosFetch<LibraryBlockResponse[]>(getLibrariesPATH(), {
+      params: options ? mapOptionsToQueryParams(options) : null
+    });
+
+    return data;
+  },
+
+  fetchLibraryBlock: async (id: string): Promise<LibraryBlockResponse> => {
+    const data = await axiosFetch<LibraryBlockResponse>(getLibraryPATH(id));
+
+    return data;
+  },
+
+  fetchLibraryConfig: async (id: string): Promise<LibraryBlockUpdateRequest> => {
+    const data = await axiosFetch<LibraryBlockUpdateRequest>(getLibraryConfigPATH(id));
+
+    return data;
+  },
+
+  fetchLibraryInterfaces: async (id: string): Promise<LibraryBlockUpdateRequest> => {
+    const data = await axiosFetch<LibraryBlockUpdateRequest>(getLibraryInterfacesPATH(id));
+
+    return data;
+  },
+
+  fetchLibraryBody: async (id: string): Promise<LibraryBlockUpdateRequest> => {
+    const data = await axiosFetch<LibraryBlockUpdateRequest>(getLibraryBodyPATH(id));
+
+    return data;
+  },
+
+  deleteLibrary: async (id: string): Promise<void> => {
+    await axiosFetch<void>(getLibraryPATH(id), {
+      method: 'DELETE'
+    });
+  },
+
+  createLibrary: async (data: LibraryBlockRequest): Promise<{ id: string }> => {
+    const formData = new FormData();
+    formData.append('name', data.name);
+    formData.append('type', data.type);
+    formData.append('bodystyle', data.bodystyle);
+    if (data.provider) {
+      formData.append('provider', data.provider);
+    }
+
+    const response = await axiosFetch<{ id: string }>(getLibrariesPATH(), {
+      method: 'POST',
+      data: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+
+    return response;
+  },
+
+  createLibraryJson: async (data: LibraryBlockRequest): Promise<{ id: string }> => {
+    const response = await axiosFetch<{ id: string }>(getLibrariesPATH(), {
+      method: 'POST',
+      data,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    return response;
+  },
+
+  fetchLibraryBlockTypes: async (): Promise<LibraryBlockTypeResponse[]> => {
+    const data = await axiosFetch<LibraryBlockTypeResponse[]>(getLibraryBlockTypesPATH());
+
+    return data;
+  },
+
+  fetchLibraryBodyStyles: async (): Promise<string[]> => {
+    const data = await axiosFetch<string[]>(getLibraryBodyStylesPATH());
+
+    return data;
+  },
+
+  fetchInterfaceRoles: async (): Promise<{ name: string; description?: string }[]> => {
+    const data = await axiosFetch<{ name: string; description?: string }[]>(getInterfaceRolesPATH());
+
+    return data;
+  },
+
+  updateLibraryConfig: async (id: string, config: LibraryBlockUpdateRequest): Promise<void> => {
+    await axiosFetch<void>(getLibraryConfigPATH(id), {
+      method: 'PUT',
+      data: config
+    });
+  },
+
+  updateLibraryInterfaces: async (id: string, interfaces: LibraryBlockUpdateRequest): Promise<void> => {
+    await axiosFetch<void>(getLibraryInterfacesPATH(id), {
+      method: 'PUT',
+      data: interfaces
+    });
+  },
+
+  updateLibraryBody: async (id: string, body: LibraryBlockUpdateRequest): Promise<void> => {
+    await axiosFetch<void>(getLibraryBodyPATH(id), {
+      method: 'PUT',
+      data: body
+    });
+  },
+
+  fetchLibraryHistory: async (id: string): Promise<LibraryBlockHistoryResponse[]> => {
+    const data = await axiosFetch<LibraryBlockHistoryResponse[]>(getLibraryHistoryPATH(id));
+
+    return data;
+  },
+
+  // APPLICATION APIs
+  fetchApplications: async (options?: RequestOptions): Promise<ApplicationResponse[]> => {
+    console.log('API fetchApplications called with options:', options);
+    const data = await axiosFetch<ApplicationResponse[]>(getApplicationsPATH(), {
+      params: options ? mapOptionsToQueryParams(options) : null
+    });
+    console.log('API fetchApplications result:', data);
+    return data;
+  },
+
+  fetchApplicationDetail: async (id: string): Promise<ApplicationResponse> => {
+    const data = await axiosFetch<ApplicationResponse>(getApplicationPATH(id));
+
+    return data;
+  },
+
+  createApplication: async (data: CreateApplicationRequest): Promise<string> => {
+    const formData = new FormData();
+    formData.append('name', data.name);
+    formData.append('rootblock', data.rootblock);
+
+    const response = await axiosFetch<{ id: string }>(getApplicationsPATH(), {
+      method: 'POST',
+      data: formData
+    });
+
+    return response.id;
+  },
+
+  deleteApplication: async (id: string): Promise<void> => {
+    await axiosFetch<void>(getApplicationPATH(id), {
+      method: 'DELETE'
+    });
+  },
+
+  buildApplication: async (id: string): Promise<void> => {
+    await axiosFetch<void>(getApplicationBuildPATH(id), {
+      method: 'PUT'
+    });
+  },
+
+  fetchApplicationLog: async (id: string): Promise<string> => {
+    const data = await axiosFetch<string>(getApplicationLogPATH(id));
+
+    return data;
+  },
+
+  fetchApplicationBlocks: async (id: string): Promise<ApplicationBlock[]> => {
+    const data = await axiosFetch<ApplicationBlock[]>(getApplicationBlocksPATH(id));
+
+    return data;
   }
 };

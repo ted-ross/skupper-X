@@ -1,44 +1,40 @@
-import {
-  BackboneLabels,
-  RoutesPaths,
-  DeploymentStates,
-  InvitationLabels,
-  LinkLabels,
-  MemberLabels,
-  SiteLabels,
-  VanLabels
-} from './Backbones.enum';
+import { RoutesPaths, DeploymentStates } from './Backbones.enum';
+import labels from '../../core/config/labels';
 import {
   BackboneResponse,
   InvitationResponse,
   LinkResponse,
   MemberSiteResponse,
-  BackboneSiteResponse,
-  ApplicationNetworkResponse
+  BackboneSiteResponse
 } from '../../API/REST.interfaces';
 import { hexColors } from '../../config/colors';
 import { SKColumn } from '../../core/components/SkTable/SkTable.interfaces';
 
 export const BackbonesPaths = {
-  path: RoutesPaths.App,
-  name: BackboneLabels.Section
+  path: RoutesPaths.Backbones,
+  name: labels.navigation.backbones
 };
 
 export const backboneColumns: SKColumn<BackboneResponse>[] = [
   {
-    name: BackboneLabels.Name,
+    name: labels.forms.name,
     prop: 'name',
     customCellName: 'linkCell'
   },
   {
-    name: BackboneLabels.Lifecycle,
+    name: labels.forms.status,
     prop: 'lifecycle',
     customCellName: 'lifecycleCell'
   },
   {
-    name: BackboneLabels.Multitenant,
+    name: labels.forms.manage,
     prop: 'multitenant',
     customCellName: 'booleanCell'
+  },
+  {
+    name: labels.errors.generic,
+    prop: 'failure',
+    customCellName: 'failure'
   },
   {
     name: '',
@@ -49,27 +45,27 @@ export const backboneColumns: SKColumn<BackboneResponse>[] = [
 
 export const siteColumns: SKColumn<BackboneSiteResponse>[] = [
   {
-    name: BackboneLabels.Name,
+    name: labels.forms.name,
     prop: 'name',
     customCellName: 'linkCell'
   },
   {
-    name: BackboneLabels.Lifecycle,
+    name: labels.forms.status,
     prop: 'lifecycle',
     customCellName: 'lifecycleCell'
   },
   {
-    name: SiteLabels.DeploymentState,
+    name: labels.forms.type,
     prop: 'deploymentstate',
     customCellName: 'deploymentStateCell'
   },
   {
-    name: SiteLabels.LastHeartBeat,
+    name: labels.generic.lastHeartbeat,
     prop: 'lastheartbeat',
     customCellName: 'DateCell'
   },
   {
-    name: SiteLabels.FirstActiveTime,
+    name: labels.generic.firstActive,
     prop: 'firstactivetime',
     customCellName: 'DateCell'
   },
@@ -82,47 +78,14 @@ export const siteColumns: SKColumn<BackboneSiteResponse>[] = [
 
 export const linkColumns: SKColumn<LinkResponse>[] = [
   {
-    name: LinkLabels.ConnectingSite,
+    name: labels.forms.peer,
     prop: 'connectinginteriorsite',
     customCellName: 'linkCellConnectingSiteCell'
   },
-
   {
-    name: LinkLabels.Cost,
+    name: labels.forms.revision,
     prop: 'cost',
     modifier: 'fitContent'
-  },
-
-  {
-    name: '',
-    modifier: 'fitContent',
-    customCellName: 'actions'
-  }
-];
-
-export const VanColumns: SKColumn<ApplicationNetworkResponse>[] = [
-  {
-    name: VanLabels.Name,
-    prop: 'name',
-    customCellName: 'linkCell'
-  },
-  {
-    name: VanLabels.Lifecycle,
-    prop: 'lifecycle',
-    customCellName: 'lifecycleCell'
-  },
-  {
-    name: VanLabels.BackBone,
-    prop: 'backbonename'
-  },
-  {
-    name: VanLabels.EndTime,
-    prop: 'endtime'
-  },
-  {
-    name: VanLabels.DeleteDelay,
-    prop: 'deletedelay',
-    customCellName: 'deleteDelayCell'
   },
   {
     name: '',
@@ -133,36 +96,36 @@ export const VanColumns: SKColumn<ApplicationNetworkResponse>[] = [
 
 export const invitationColumns: SKColumn<InvitationResponse>[] = [
   {
-    name: InvitationLabels.Name,
+    name: labels.forms.name,
     prop: 'name'
   },
   {
-    name: InvitationLabels.Lifecycle,
+    name: labels.forms.status,
     prop: 'lifecycle',
     customCellName: 'lifecycleCell'
   },
   {
-    name: InvitationLabels.MemberClass,
-    prop: 'memberclass',
+    name: labels.forms.member,
+    prop: 'memberclasses',
     customCellName: 'emptyCell'
   },
   {
-    name: InvitationLabels.DeadLine,
+    name: labels.forms.revision,
     prop: 'joindeadline',
     customCellName: 'emptyCell'
   },
   {
-    name: InvitationLabels.Count,
+    name: labels.forms.revision,
     prop: 'instancecount',
     customCellName: 'emptyCell'
   },
   {
-    name: InvitationLabels.Limit,
+    name: labels.forms.revision,
     prop: 'instancelimit',
     customCellName: 'emptyCell'
   },
   {
-    name: InvitationLabels.Interactive,
+    name: labels.forms.manage,
     prop: 'interactive',
     customCellName: 'emptyCell'
   },
@@ -172,24 +135,24 @@ export const invitationColumns: SKColumn<InvitationResponse>[] = [
     customCellName: 'actions'
   }
 ];
+
 export const memberColumns: SKColumn<MemberSiteResponse>[] = [
   {
-    name: MemberLabels.Name,
+    name: labels.forms.name,
     prop: 'name'
   },
   {
-    name: MemberLabels.Lifecycle,
+    name: labels.forms.status,
     prop: 'lifecycle',
     customCellName: 'lifecycleCell'
   },
-
   {
-    name: MemberLabels.FirstActiveTime,
+    name: labels.forms.revision,
     prop: 'firstactivetime',
     customCellName: 'dateCell'
   },
   {
-    name: MemberLabels.LastHeartbeat,
+    name: labels.forms.revision,
     prop: 'lastheartbeat',
     customCellName: 'dateCell'
   },

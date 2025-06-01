@@ -1,28 +1,8 @@
 import { CSSProperties, FC } from 'react';
 
-import { Bullseye, Card, CardBody, CardHeader, PageSection } from '@patternfly/react-core';
-import { CogIcon } from '@patternfly/react-icons';
+import { Bullseye, PageSection, Spinner } from '@patternfly/react-core';
 
-import { LoadingLabels } from './Loading.enum';
 import { getTestsIds } from '../../../config/testIds';
-import TransitionPage from '../../../core/components/TransitionPages/Fade';
-
-import './Loading.css';
-
-const PleaseWait = function () {
-  return (
-    <Card isPlain>
-      <CardHeader className="cog-wrapper">
-        <CogIcon className="cog cog-main spinning-clockwise" />
-        <CogIcon className="cog cog-secondary cog-upper spinning-clockwise--reverse" />
-        <CogIcon className="cog cog-secondary cog-lower spinning-clockwise--reverse" />
-      </CardHeader>
-      <CardBody>
-        <p>{LoadingLabels.LoadingMessage}</p>
-      </CardBody>
-    </Card>
-  );
-};
 
 const floatLoader: CSSProperties = {
   top: 0,
@@ -39,13 +19,13 @@ interface LoadingPageProps {
 
 const LoadingPage: FC<LoadingPageProps> = function ({ isFLoating = false }) {
   return (
-    <TransitionPage delay={0.75} style={isFLoating ? floatLoader : undefined}>
+    <div style={isFLoating ? floatLoader : undefined}>
       <PageSection hasBodyWrapper={false}>
         <Bullseye className="sk-loading-page" data-testid={getTestsIds.loadingView()}>
-          <PleaseWait />
+          <Spinner size="xl" />
         </Bullseye>
       </PageSection>
-    </TransitionPage>
+    </div>
   );
 };
 

@@ -10,7 +10,7 @@ import {
   Title
 } from '@patternfly/react-core';
 
-import { ConsoleErrorLabels } from './Console.enum';
+import labels from '../../../../core/config/labels';
 import ErrorHttp from '../Http';
 
 interface ErrorConsoleProps {
@@ -35,12 +35,17 @@ const ErrorConsole: FC<ErrorConsoleProps> = function ({ error, resetErrorBoundar
   return (
     <PageSection hasBodyWrapper={false} data-testid="sk-js-error-view">
       <Content>
-        <Title headingLevel="h1">{ConsoleErrorLabels.ErrorTitle}</Title>
+        <Title headingLevel="h1">{labels.errors.consoleErrorTitle}</Title>
         <Content component={ContentVariants.h3}>{message}</Content>
 
         <Divider />
 
-        <ClipboardCopy isExpanded hoverTip="Copy" clickTip="Copied" variant={ClipboardCopyVariant.expansion}>
+        <ClipboardCopy
+          isExpanded
+          hoverTip={labels.errors.copy}
+          clickTip={labels.errors.copied}
+          variant={ClipboardCopyVariant.expansion}
+        >
           {error.stack || ''}
         </ClipboardCopy>
       </Content>

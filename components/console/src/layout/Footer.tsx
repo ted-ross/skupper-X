@@ -10,17 +10,9 @@ const Footer: FC<FooterProps> = function ({ className = '' }) {
   return (
     <PageSection
       variant="secondary"
-      className={`sk-footer ${className}`}
-      style={{
-        textAlign: 'center',
-        padding: '5px',
-        minHeight: '40px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}
+      className={`sk-footer ${className} pf-u-text-align-center pf-u-p-sm pf-u-min-height-50 pf-u-display-flex pf-u-align-items-center pf-u-justify-content-center`}
     >
-      <p style={{ margin: 0, fontSize: '14px' }}>copyright &copy; Skupper-X</p>
+      {/* Footer content removed */}
     </PageSection>
   );
 };

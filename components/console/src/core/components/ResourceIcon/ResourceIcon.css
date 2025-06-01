@@ -12,7 +12,7 @@
   line-height: 1;
   margin-right: 6px;
   background: var(--pf-v6-global--palette--black-500); /* fallback, overridden inline */
-  color: var(--pf-v5-global--palette--white);
+  color: var(--pf-t-global--palette--white);
   -webkit-font-smoothing: antialiased;
   user-select: none;
 }

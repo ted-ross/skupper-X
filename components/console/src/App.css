@@ -8,8 +8,36 @@ html {
   height: 100%;
 }
 
-.sk-capitalize {
-  text-transform: capitalize;
+/* Common utility classes using PatternFly v6 tokens */
+.sk-text-secondary {
+  font-size: var(--pf-t--global--FontSize--sm);
+  color: var(--pf-t--global--Color--200);
+}
+
+.sk-text-error {
+  font-size: var(--pf-t--global--FontSize--xs);
+  color: var(--pf-t--global--danger-color--100);
+  margin-top: var(--pf-t--global--spacer--xs);
+}
+
+.sk-text-small {
+  font-size: var(--pf-t--global--FontSize--sm);
+}
+
+.sk-margin-bottom-md {
+  margin-bottom: var(--pf-t--global--spacer--md);
+}
+
+.sk-margin-bottom-lg {
+  margin-bottom: var(--pf-t--global--spacer--lg);
+}
+
+.sk-margin-top-xs {
+  margin-top: var(--pf-t--global--spacer--xs);
+}
+
+.sk-margin-top-sm {
+  margin-top: var(--pf-t--global--spacer--sm);
 }
 
 .color-box {
@@ -18,7 +46,7 @@ html {
   justify-content: center;
   height: 18px;
   width: 18px;
-  border: var(--pf-v5-global--BorderWidth--sm) solid var(--pf-v5-global--BorderColor--200);
+  border: var(--pf-tv5-global--BorderWidth--sm) solid var(--pf-t-global--BorderColor--200);
   border-radius: 50%;
   vertical-align: middle;
   background: currentColor;

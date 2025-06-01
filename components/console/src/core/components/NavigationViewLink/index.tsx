@@ -16,7 +16,7 @@ const NavigationViewLink: FC<{ link: string; linkLabel: string; iconName?: 'topo
 }) {
   return (
     <Content>
-      <Link to={link} style={{ whiteSpace: 'nowrap' }}>
+      <Link to={link} className="pf-u-text-nowrap">
         <Content component={ContentVariants.p}>
           <Icon isInline>{icons[iconName]}</Icon> {linkLabel}
         </Content>

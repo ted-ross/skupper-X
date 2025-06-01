@@ -1,4 +1,4 @@
-import { COLLECTOR_URL } from '../config/config';
+import { BASE_URL_COLLECTOR, COLLECTOR_URL } from '../config/config';
 
 // Note: COLLECTOR_URL already includes /api/v1alpha1
 
@@ -71,3 +71,24 @@ export const getAccessPointDeploymentPATH = (siteId: string, target: 'sk2' | 'ku
 
 // Ingress paths
 export const getIngressPATH = (siteId: string) => `${COLLECTOR_URL}/backbonesite/${siteId}/ingress`;
+
+// Library Block paths
+const LIBRARIES_PATH = `${BASE_URL_COLLECTOR}/compose/v1alpha1/library/blocks`;
+export const getLibrariesPATH = () => LIBRARIES_PATH;
+export const getLibrariesJsonPATH = () => `${LIBRARIES_PATH}/json`;
+export const getLibraryPATH = (id: string) => `${LIBRARIES_PATH}/${id}`;
+export const getLibraryConfigPATH = (id: string) => `${LIBRARIES_PATH}/${id}/config`;
+export const getLibraryInterfacesPATH = (id: string) => `${LIBRARIES_PATH}/${id}/interfaces`;
+export const getLibraryBodyPATH = (id: string) => `${LIBRARIES_PATH}/${id}/body`;
+export const getLibraryHistoryPATH = (id: string) => `${LIBRARIES_PATH}/${id}/history`;
+export const getLibraryBlockTypesPATH = () => `${BASE_URL_COLLECTOR}/compose/v1alpha1/library/blocktypes`;
+export const getLibraryBodyStylesPATH = () => `${BASE_URL_COLLECTOR}/compose/v1alpha1/library/bodystyles`;
+export const getInterfaceRolesPATH = () => `${BASE_URL_COLLECTOR}/compose/v1alpha1/interfaceroles`;
+
+// Application paths
+const APPLICATIONS_PATH = `${BASE_URL_COLLECTOR}/compose/v1alpha1/applications`;
+export const getApplicationsPATH = () => APPLICATIONS_PATH;
+export const getApplicationPATH = (id: string) => `${APPLICATIONS_PATH}/${id}`;
+export const getApplicationBuildPATH = (id: string) => `${APPLICATIONS_PATH}/${id}/build`;
+export const getApplicationLogPATH = (id: string) => `${APPLICATIONS_PATH}/${id}/log`;
+export const getApplicationBlocksPATH = (id: string) => `${APPLICATIONS_PATH}/${id}/blocks`;

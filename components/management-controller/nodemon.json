@@ -1,0 +1,27 @@
+{
+  "watch": [
+    "src/",
+    "index.js"
+  ],
+  "ignore": [
+    "node_modules/",
+    "app/",
+    "build/",
+    "*.test.js",
+    "*.spec.js",
+    "logs/",
+    "tmp/"
+  ],
+  "ext": "js,json,yaml,yml",
+  "delay": 1000,
+  "env": {
+    "NODE_ENV": "development",
+    "SKX_STANDALONE_NAMESPACE": "default",
+    "PGUSER": "access",
+    "PGHOST": "localhost",
+    "PGPASSWORD": "password",
+    "PGDATABASE": "studiodb",
+    "PGPORT": "5432",
+    "SKX_CONTROLLER_NAME": "dev-controller"
+  }
+}

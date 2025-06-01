@@ -1,271 +1,153 @@
-# Skupper-X Development Scripts
+# Development Scripts
 
-This directory contains scripts to set up and run Skupper-X in various development and standalone modes.
+This folder contains various scripts to help with development, testing, and deployment of the Skupper-X project.
+
+## Quick Start
+
+### Full Development Environment
+```bash
+./start-dev.sh
+```
+This launches the complete development stack with hot reload capabilities:
+- **PostgreSQL Database**: Docker container with pre-populated mock data
+- **Console UI**: http://localhost:3000 (React development server)
+- **Prototype UI**: http://localhost:8085 (Backend with static files)
+
+### Console Only (Frontend)
+```bash
+./start-dev-console-only.sh
+```
+Starts only the React development server (assumes backend is already running).
+
+**Remote Backend Support:**
+```bash
+BACKEND_URL=http://remote-server:8085 ./start-dev-console-only.sh
+```
+Connect to a remote backend by setting the `BACKEND_URL` environment variable.
+
+### Database Only
+```bash
+./start-dev-database-only.sh
+```
+Starts only the PostgreSQL database container.
 
 ## Available Scripts
 
-### 🔧 `check-dependencies.sh`
-**Dependency management** - Comprehensive check and installation of all project dependencies.
+### Development Scripts
+
+- **`start-dev.sh`** - Main development script
+  - Starts PostgreSQL database in Docker container
+  - Loads predefined mock data for development
+  - Launches management controller backend (port 8085)
+  - Starts React console frontend (port 3000)
+  - Enables hot reload for both backend and frontend
+  - Use `--skip-package-check` to skip dependency updates
+
+- **`start-dev-console-only.sh`** - Frontend only development
+  - Starts React development server with hot reload
+  - Proxies API calls to backend at port 8085
+  - Supports remote backend via `BACKEND_URL` environment variable
+  - Example: `BACKEND_URL=http://remote-server:8085 ./start-dev-console-only.sh`
+
+- **`start-dev-database-only.sh`** - Database only
+  - Starts PostgreSQL container in Docker
+  - Initializes database with mock data for development
+
+### Production Scripts
+
+- **`start-prod.sh`** - Production deployment
+  - Builds and serves the complete application
+  - Single port deployment
+
+### Database Scripts
+
+- **`setup-database.sh`** - Database initialization
+  - Creates PostgreSQL Docker container
+  - Sets up database schema and tables
+  - Loads predefined mock data for development and testing
+
+- **`db-setup.sql`** - Database schema definitions
+- **`mock-datas.sql`** - Predefined sample data for development and testing
+  - Contains realistic test data for all database tables
+  - Automatically loaded when running development scripts
+- **`drop.sql`** - Database cleanup script
+
+### Utility Scripts
+
+- **`check-dependencies.sh`** - Dependency management
+  - Checks for outdated packages
+  - Suggests updates
+
+- **`update-packages.sh`** - Package updates
+  - Updates all project dependencies
+
+## Development Workflow
+
+1. **Initial Setup**:
+   ```bash
+   ./setup-database.sh
+   ./start-dev.sh
+   ```
+
+2. **Daily Development**:
+   ```bash
+   ./start-dev.sh --skip-package-check
+   ```
+
+3. **Frontend Only Development**:
+   ```bash
+   ./start-dev-console-only.sh
+   ```
+
+4. **Remote Backend Development**:
+   ```bash
+   BACKEND_URL=http://your-remote-server:8085 ./start-dev-console-only.sh
+   ```
+
+## Ports and Services
+
+- **Port 3000**: React development server (modern console UI)
+- **Port 8085**: Backend API + prototype UI (compose-web-app)
+- **Port 5432**: PostgreSQL database
+
+## Hot Reload Features
+
+When using `start-dev.sh`:
+- **Backend**: Automatic restart on file changes (via nodemon)
+- **Frontend**: Hot module replacement for instant updates
+- **No manual restarts needed** - just save your files and see changes instantly
+
+## Environment Requirements
+
+- Node.js 18+
+- Docker (for PostgreSQL)
+- Yarn package manager
+- Unix-like environment (Linux/macOS)
+- curl (for backend health checks)
+
+## Remote Backend Configuration
+
+The console can connect to remote backends using the `BACKEND_URL` environment variable:
 
 ```bash
-# Check all dependencies
-./scripts/check-dependencies.sh
+# Connect to local backend (default)
+./start-dev-console-only.sh
 
-# Check with security audit
-./scripts/check-dependencies.sh --security
+# Connect to remote backend
+BACKEND_URL=http://192.168.1.100:8085 ./start-dev-console-only.sh
 
-# Force reinstall all dependencies
-./scripts/check-dependencies.sh --force
-
-# Show help
-./scripts/check-dependencies.sh --help
+# Connect to remote backend with HTTPS
+BACKEND_URL=https://skupper-backend.example.com ./start-dev-console-only.sh
 ```
 
-**What it does:**
-- Verifies system dependencies (Node.js, npm, yarn, Docker, curl)
-- Checks and installs/updates npm/yarn dependencies for all components
-- Validates dependency versions and compatibility
-- Optional security vulnerability scanning
-- Smart dependency caching (only updates when needed)
-
-**Best for:** Initial setup, troubleshooting dependency issues
-
----
-
-### 🚀 `start-dev-mode.sh`
-**Complete development environment** - Starts both backend and frontend with hot reload.
-
-```bash
-./scripts/start-dev-mode.sh
-```
-
-**What it does:**
-- Sets up PostgreSQL database (Docker)
-- Starts backend in background
-- Starts frontend with hot reload in foreground
-- Configures proxy for API calls
-- Provides cleanup on Ctrl+C
-
-**Best for:** Active development with immediate feedback
-
----
-
-### 🖥️ `start-skupper-standalone.sh`
-**Backend-only standalone mode** - Runs complete Skupper-X backend with integrated web console.
-
-```bash
-./scripts/start-skupper-standalone.sh
-```
-
-**What it does:**
-- Sets up PostgreSQL database (Docker)
-- Builds and integrates web console
-- Starts management controller with built console
-- Single process serving both API and UI
-
-**Best for:** Testing, demos, production-like setup
-
----
-
-### 🎨 `start-console-dev.sh`
-**Frontend-only development** - Starts just the React development server.
-
-```bash
-./scripts/start-console-dev.sh
-```
-
-**Prerequisites:** Backend must be running (port 8085)
-
-**What it does:**
-- Checks if backend is responding
-- Starts React dev server with hot reload
-- Proxies API calls to backend
-
-**Best for:** Frontend-only development
-
----
-
-### 🗄️ `start-database.sh`
-**Database management** - Comprehensive PostgreSQL setup and management.
-
-```bash
-# Setup database
-./scripts/start-database.sh setup
-
-# Check status
-./scripts/start-database.sh status
-
-# Start existing database
-./scripts/start-database.sh start
-
-# Stop database
-./scripts/start-database.sh stop
-
-# View logs
-./scripts/start-database.sh logs
-
-# Connect to database
-./scripts/start-database.sh connect
-
-# Remove database
-./scripts/start-database.sh remove
-```
-
-**Best for:** Database-only operations, troubleshooting
-
-## Development Workflows
-
-### 🔄 Full Development Cycle
-For active development with both frontend and backend changes:
-
-```bash
-# Start complete development environment
-./scripts/start-dev-mode.sh
-
-# Services available:
-# - Frontend: http://localhost:3000 (with hot reload)
-# - Backend:  http://localhost:8085
-# - Database: localhost:5432
-
-# Press Ctrl+C to stop all services
-```
-
-### 🎯 Frontend-Only Development
-When working only on React components:
-
-```bash
-# Terminal 1: Start backend
-./scripts/start-skupper-standalone.sh
-
-# Terminal 2: Start frontend dev server
-./scripts/start-console-dev.sh
-```
-
-### 🔧 Backend-Only Development
-When working on API or business logic:
-
-```bash
-# Setup database once
-./scripts/start-database.sh setup
-
-# Start backend with built console
-./scripts/start-skupper-standalone.sh
-```
-
-### 🚢 Production-Like Testing
-To test the complete integrated system:
-
-```bash
-# This mimics production deployment
-./scripts/start-skupper-standalone.sh
-
-# Access at: http://localhost:8085
-```
-
-## Environment Variables
-
-All scripts automatically set these variables for standalone mode:
-
-- `SKX_STANDALONE_NAMESPACE="skupper-system"`
-- `POSTGRES_HOST="localhost"`
-- `POSTGRES_PORT="5432"`
-- `POSTGRES_DB="studiodb"`
-- `POSTGRES_USER="access"`
-- `POSTGRES_PASSWORD="password"`
-
-## Database Configuration
-
-PostgreSQL runs in Docker with these settings:
-- **Container name:** `skupper-postgres`
-- **Port:** 5432
-- **Database:** studiodb
-- **User:** access
-- **Password:** password
-- **Persistent volume:** `skupper-postgres-data`
-
-## Ports Used
-
-| Service | Port | Description |
-|---------|------|-------------|
-| Backend API | 8085 | Management controller REST API |
-| Frontend Dev | 3000 | React development server |
-| PostgreSQL | 5432 | Database server |
+**Note**: Make sure the remote backend is accessible and CORS is properly configured.
 
 ## Troubleshooting
 
-### Backend won't start
-```bash
-# Check logs
-tail -f /tmp/skupper-backend.log
-
-# Check database
-./scripts/start-database.sh status
-
-# Restart database
-./scripts/start-database.sh stop
-./scripts/start-database.sh start
-```
-
-### Frontend can't connect to backend
-```bash
-# Check if backend is responding
-curl http://localhost:8085/healthz
-
-# Check proxy configuration in webpack.dev.js
-```
-
-### Database issues
-```bash
-# Check container status
-docker ps | grep skupper-postgres
-
-# View database logs
-./scripts/start-database.sh logs
-
-# Connect to database directly
-./scripts/start-database.sh connect
-
-# Reset database
-./scripts/start-database.sh remove
-./scripts/start-database.sh setup
-```
-
-### Port conflicts
-```bash
-# Check what's using ports
-lsof -i :8085
-lsof -i :3000
-lsof -i :5432
-
-# Stop conflicting processes or use different ports
-```
-
-## Script Dependencies
-
-All scripts require:
-- **Docker** (for PostgreSQL)
-- **Node.js** (for backend and frontend)
-- **Yarn** (for frontend dependencies)
-- **curl** (for health checks)
-
-Install on Ubuntu/Debian:
-```bash
-sudo apt update
-sudo apt install docker.io nodejs yarn curl
-```
-
-## Files Created
-
-The scripts create these temporary files:
-- `/tmp/skupper-backend.log` - Backend logs
-- `/tmp/skupper-backend.pid` - Backend process ID
-- Docker volume `skupper-postgres-data` - Database persistence
-
-Clean up with:
-```bash
-# Remove temporary files
-rm -f /tmp/skupper-backend.*
-
-# Remove Docker volume (loses data!)
-docker volume rm skupper-postgres-data
-```
+- If ports are busy, check for existing processes: `lsof -i :3000` or `lsof -i :8085`
+- Database issues: Run `./setup-database.sh` to reinitialize
+- Dependency conflicts: Run `./update-packages.sh` to sync all packages
+- Remote backend connection issues:
+  - Check network connectivity: `curl http://remote-backend:8085/healthz`
+  - Verify CORS configuration on remote backend
+  - Ensure firewall allows connections to remote backend port

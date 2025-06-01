@@ -20,7 +20,7 @@ import {
 import { FilterIcon } from '@patternfly/react-icons';
 
 import './SkSearchFilter.css';
-import useDebounce from '../../../hooks/useDebounce';
+import useDebounce from '../../utils/useDebounce';
 
 interface FilterValues {
   [key: string]: string | undefined;

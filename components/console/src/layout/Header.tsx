@@ -18,7 +18,8 @@ import { brandLogo } from '../config/config';
 export enum HeaderLabels {
   Logout = 'Logout',
   UserDropdownTestId = 'user-dropdown-testId',
-  OpenShiftAuth = 'openshift'
+  OpenShiftAuth = 'openshift',
+  LogoAlt = 'Skupper-X Logo'
 }
 
 const SkHeader = function () {
@@ -32,7 +33,7 @@ const SkHeader = function () {
         </MastheadToggle>
         <MastheadBrand data-codemods>
           <MastheadLogo data-codemods>
-            <Brand src={brandLogo} alt="logo" heights={{ default: '45px' }} />
+            <Brand src={brandLogo} alt={HeaderLabels.LogoAlt} heights={{ default: '45px' }} />
           </MastheadLogo>
         </MastheadBrand>
       </MastheadMain>

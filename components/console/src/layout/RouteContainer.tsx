@@ -1,4 +1,3 @@
-import { AnimatePresence } from 'framer-motion';
 import { useRoutes, RouteObject } from 'react-router-dom';
 
 interface RouteProps {
@@ -12,7 +11,7 @@ const RouteContainer = function ({ children: routes }: RouteProps) {
     return null;
   }
 
-  return <AnimatePresence mode="wait">{appRoutes}</AnimatePresence>;
+  return appRoutes;
 };
 
 export default RouteContainer;

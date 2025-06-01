@@ -8,7 +8,7 @@ import { hexColors } from '../../../config/colors';
 import './ResourceIcon.css';
 
 interface ResourceIconProps {
-  type: 'site' | 'backbone' | 'link' | 'van' | 'invitation' | 'accessPoint';
+  type: 'site' | 'backbone' | 'link' | 'van' | 'invitation' | 'accessPoint' | 'library' | 'application';
 }
 
 const RESOURCE_MAP = {
@@ -35,12 +35,22 @@ const RESOURCE_MAP = {
   link: {
     class: 'sk-resource-link',
     symbol: 'L',
-    style: { background: hexColors.Purple500, color: hexColors.White }
+    style: { background: hexColors.Purple300, color: hexColors.Black900 }
   },
   invitation: {
     class: 'sk-resource-invitation',
     symbol: 'I',
     style: { background: hexColors.Green500, color: hexColors.White }
+  },
+  library: {
+    class: 'sk-resource-library',
+    symbol: 'LIB',
+    style: { background: hexColors.Purple700, color: hexColors.White }
+  },
+  application: {
+    class: 'sk-resource-applcation',
+    symbol: 'A',
+    style: { background: hexColors.Blue100, color: hexColors.Black900 }
   }
 };
 

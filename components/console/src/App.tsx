@@ -8,7 +8,6 @@ import '@patternfly/react-core/dist/styles/base.css';
 import './App.css';
 import SkBreadcrumb from './core/components/SkBreadcrumb';
 import SkUpdateDataButton from './core/components/SkUpdateButton';
-import Footer from './layout/Footer';
 import SkHeader from './layout/Header';
 import RouteContainer from './layout/RouteContainer';
 import SkSidebar from './layout/SideBar';
@@ -22,8 +21,8 @@ const App = function () {
       masthead={<SkHeader />}
       sidebar={<SkSidebar />}
       breadcrumb={
-        <Toolbar style={{ padding: 0 }}>
-          <ToolbarContent style={{ padding: 0 }}>
+        <Toolbar>
+          <ToolbarContent>
             <ToolbarItem>
               <SkBreadcrumb />
             </ToolbarItem>
@@ -42,7 +41,6 @@ const App = function () {
             <ErrorBoundary onReset={reset} FallbackComponent={ErrorConsole}>
               <Suspense fallback={<LoadingPage />}>
                 <RouteContainer>{routes}</RouteContainer>
-                <Footer />
               </Suspense>
             </ErrorBoundary>
           )}

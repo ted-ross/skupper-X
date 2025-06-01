@@ -537,30 +537,30 @@ const deleteBackboneSite = async function (req, res) {
     }
 
     const result = await client.query(
-      "SELECT ClaimAccess, PeerAccess, MemberAccess, ManageAccess, Certificate from InteriorSites WHERE Id = $1",
+      "SELECT certificate from InteriorSites WHERE Id = $1",
       [sid]
     );
     if (result.rowCount == 1) {
       const row = result.rows[0];
 
       //
-      // Delete all of the site's access points
+      // FIXED: Delete all of the site's access points using correct foreign key relationship
+      // Previously this function tried to access non-existent columns (ClaimAccess, PeerAccess, etc.)
+      // from InteriorSites table. Now we correctly delete all BackboneAccessPoints that belong
+      // to this site using the InteriorSite foreign key.
       //
-      for (const ingress of INGRESS_LIST) {
-        const colName = `${ingress}access`;
-        if (row[colName]) {
-          const apResult = await client.query(
-            "DELETE FROM BackboneAccessPoints WHERE Id = $1 Returning Certificate",
-            [row[colName]]
-          );
-          if (apResult.rowCount == 1) {
-            const row = apResult.rows[0];
-            if (row.certificate) {
-              await client.query("DELETE FROM TlsCertificates WHERE Id = $1", [
-                row.certificate,
-              ]);
-            }
-          }
+      const apResult = await client.query(
+        "DELETE FROM BackboneAccessPoints WHERE InteriorSite = $1 RETURNING Certificate",
+        [sid]
+      );
+
+      // IMPROVED: Properly handle certificates for all deleted access points
+      // This ensures all TLS certificates associated with access points are cleaned up
+      for (const apRow of apResult.rows) {
+        if (apRow.certificate) {
+          await client.query("DELETE FROM TlsCertificates WHERE Id = $1", [
+            apRow.certificate,
+          ]);
         }
       }
 
@@ -952,27 +952,23 @@ const listSiteIngresses = async function (sid, res) {
       throw Error("Site-Id is not a valid uuid");
     }
 
-    const sites = await client.query(
-      "SELECT ClaimAccess, PeerAccess, MemberAccess, ManageAccess FROM InteriorSites WHERE Id = $1",
+    // FIXED: Completely rewritten to use correct database schema
+    // Previously this function tried to query non-existent columns (claimaccess, peeraccess,
+    // memberaccess, manageaccess) from the InteriorSites table, which caused PostgreSQL
+    // error "column 'claimaccess' does not exist".
+    //
+    // SOLUTION: Access points (ingresses) are stored in BackboneAccessPoints table with
+    // a foreign key reference to InteriorSites. We now directly query this table to get
+    // all access points that belong to the specified interior site.
+    const result = await client.query(
+      "SELECT Id, Name, Lifecycle, Failure, Kind, Hostname, Port FROM BackboneAccessPoints WHERE InteriorSite = $1",
       [sid]
     );
     var list = [];
-    if (sites.rowCount == 1) {
-      const site = sites.rows[0];
-      const result = await client.query(
-        "SELECT Id, Name, Lifecycle, Failure, Kind, Hostname, Port FROM BackboneAccessPoints WHERE Id = $1 OR Id = $2 OR Id = $3 OR Id = $4",
-        [
-          site.claimaccess,
-          site.peeraccess,
-          site.memberaccess,
-          site.manageaccess,
-        ]
-      );
+    result.rows.forEach((row) => {
+      list.push(row);
+    });
 
-      result.rows.forEach((row) => {
-        list.push(row);
-      });
-    }
     res.json(list);
     res.status(returnStatus).end();
   } catch (error) {

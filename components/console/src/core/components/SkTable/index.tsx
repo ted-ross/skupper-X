@@ -166,7 +166,7 @@ const SkTable = function <T>({
                 {skColumns.map(({ name, prop, columnDescription, isStickyColumn, modifier }, index) => (
                   <Th
                     colSpan={1}
-                    key={name}
+                    key={name || `column-${index}`}
                     modifier={modifier}
                     isStickyColumn={isStickyColumn}
                     sort={(prop && shouldSort && getSortParams(index)) || undefined}
@@ -180,6 +180,7 @@ const SkTable = function <T>({
                           }
                         : undefined
                     }
+                    screenReaderText={!name ? 'Actions' : undefined}
                   >
                     {name}
                   </Th>
@@ -216,7 +217,7 @@ const SkTable = function <T>({
                             )}
                             {!Component && (
                               <TableText wrapModifier={modifier === 'nowrap' ? 'fitContent' : 'truncate'}>
-                                {(format && format(value)) || value}
+                                {String((format && format(value)) || value || '-')}
                               </TableText>
                             )}
                           </Td>

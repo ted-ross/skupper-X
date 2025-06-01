@@ -1,4 +1,4 @@
-import { FC, useMemo, MouseEvent as ReactMouseEvent, useState, useCallback, Ref, useRef } from 'react';
+import { FC, useMemo, MouseEvent as ReactMouseEvent, useState, useCallback, Ref, useRef, useEffect } from 'react';
 
 import { Button, MenuToggle, MenuToggleElement, Select, SelectList, SelectOption } from '@patternfly/react-core';
 import { SyncIcon } from '@patternfly/react-icons';
@@ -48,7 +48,7 @@ const SkUpdateDataButton: FC<SkUpdateDataButtonProps> = function ({
     findRefreshDataIntervalLabelFromValue(refreshIntervalDefault)
   );
 
-  const refreshIntervalId = useRef<number>();
+  const refreshIntervalId = useRef<number | undefined>(undefined);
 
   const refreshIntervalOptions = useMemo(
     () =>
@@ -92,6 +92,12 @@ const SkUpdateDataButton: FC<SkUpdateDataButtonProps> = function ({
     },
     [onRefreshIntervalSelected, revalidateLiveQueries]
   );
+
+  useEffect(() => {
+    return () => {
+      clearInterval(refreshIntervalId.current);
+    };
+  }, []);
 
   return (
     <>

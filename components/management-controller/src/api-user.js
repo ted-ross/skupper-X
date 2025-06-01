@@ -441,9 +441,19 @@ const listClaimAccessPoints = async function(res, bid, ref) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT BackboneAccessPoints.Name as accessname, BackboneAccessPoints.Id as accessid FROM InteriorSites " +
-                                          `JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = InteriorSites.${ref} ` +
-                                          "WHERE InteriorSites.Backbone = $1", [bid]);
+        // Determine the kind of access point to filter by
+        let kindFilter = '';
+        if (ref === 'claimaccess') {
+            kindFilter = 'claim';
+        } else if (ref === 'memberaccess') {
+            kindFilter = 'member';
+        } else {
+            throw new Error(`Invalid access point reference: ${ref}`);
+        }
+
+        const result = await client.query("SELECT BackboneAccessPoints.Name as accessname, BackboneAccessPoints.Id as accessid FROM BackboneAccessPoints " +
+                                          "JOIN InteriorSites ON BackboneAccessPoints.InteriorSite = InteriorSites.Id " +
+                                          "WHERE InteriorSites.Backbone = $1 AND BackboneAccessPoints.Kind = $2 AND BackboneAccessPoints.Lifecycle = 'ready'", [bid, kindFilter]);
         let data = [];
         for (const row of result.rows) {
             data.push({
@@ -559,11 +569,11 @@ exports.Initialize = async function(api, keycloak) {
 
     // Claim Access Points
     api.get(API_PREFIX + 'backbones/:bid/access/claim', keycloak.protect('realm:van-owner'), async (req, res) => {
-        await listClaimAccessPoints(res, req.params.bid, 'ClaimAccess');
+        await listClaimAccessPoints(res, req.params.bid, 'claimaccess');
     });
 
     // Member Access Points
     api.get(API_PREFIX + 'backbones/:bid/access/member', keycloak.protect('realm:van-owner'), async (req, res) => {
-        await listClaimAccessPoints(res, req.params.bid, 'MemberAccess');
+        await listClaimAccessPoints(res, req.params.bid, 'memberaccess');
     });
 }

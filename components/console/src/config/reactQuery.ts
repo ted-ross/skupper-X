@@ -14,8 +14,11 @@ export const queryClientConfig: QueryClientConfig = {
       retry: 3,
       retryDelay: (attemptIndex: number) => Math.min(1000 * 2 ** attemptIndex, 30000),
       refetchOnWindowFocus: false,
-      refetchIntervalInBackground: true,
-      throwOnError: true
+      refetchOnReconnect: false,
+      refetchIntervalInBackground: false,
+      throwOnError: true,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      gcTime: 10 * 60 * 1000 // 10 minutes - prevents memory buildup
     },
     // If you need suspense, add it at the root level
     suspense: false

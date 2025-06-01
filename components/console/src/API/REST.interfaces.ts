@@ -2,6 +2,65 @@ import { AxiosError, AxiosRequestConfig } from 'axios';
 
 import { DeploymentStates } from '../pages/Backbones/Backbones.enum';
 
+// Canonical lifecycle type for member sites (keep in sync with backend)
+export type MemberLifeCycleStatus =
+  | 'partial'
+  | 'new'
+  | 'skx_cr_created'
+  | 'cm_cert_created'
+  | 'cm_issuer_created'
+  | 'ready'
+  | 'active'
+  | 'expired'
+  | 'failed';
+
+// Canonical lifecycle type for backbone and van
+export type NetworkLifeCycleStatus =
+  | 'partial'
+  | 'new'
+  | 'initializing'
+  | 'skx_cr_created'
+  | 'creating_resources'
+  | 'cm_cert_created'
+  | 'generating_certificates'
+  | 'cm_issuer_created'
+  | 'configuring_issuer'
+  | 'deploying'
+  | 'starting'
+  | 'ready'
+  | 'active'
+  | 'expired'
+  | 'failed'
+  | 'error'
+  | 'terminating'
+  | 'deleting';
+
+// Canonical lifecycle type for invitation
+export type InvitationLifeCycleStatus =
+  | 'partial'
+  | 'new'
+  | 'skx_cr_created'
+  | 'cm_cert_created'
+  | 'cm_issuer_created'
+  | 'ready'
+  | 'active'
+  | 'expired'
+  | 'failed';
+
+// Canonical lifecycle type for management controller
+export type ManagementControllerLifeCycleStatus = 'partial' | 'new' | 'ready';
+
+// Canonical lifecycle type for applications (keep in sync with backend)
+export type ApplicationLifeCycleStatus =
+  | 'created'
+  | 'build-complete'
+  | 'build-warnings'
+  | 'build-errors'
+  | 'deploy-complete'
+  | 'deploy-warnings'
+  | 'deploy-errors'
+  | 'deployed';
+
 export type FetchWithOptions = AxiosRequestConfig;
 
 export interface RequestOptions extends Record<string, string | string[] | number | 'asc' | 'desc' | undefined> {
@@ -47,7 +106,7 @@ export interface BackboneResponse {
   id: string;
   name: string;
   multitenant: boolean;
-  lifecycle: 'partial' | 'new' | 'ready';
+  lifecycle: NetworkLifeCycleStatus;
   failure: string | null;
 }
 
@@ -60,7 +119,7 @@ export interface BackboneSiteRequest {
 export interface BackboneSiteResponse {
   id: string;
   name: string;
-  lifecycle: string;
+  lifecycle: NetworkLifeCycleStatus;
   failure: string | null;
   metadata?: string;
   deploymentstate: DeploymentStates;
@@ -70,6 +129,7 @@ export interface BackboneSiteResponse {
   lastheartbeat: string | null;
   tlsexpiration?: string | null;
   tlsrenewal?: string | null;
+  backboneid: string;
 }
 
 export interface LinkRequest {
@@ -84,45 +144,50 @@ export interface LinkResponse {
   cost: number;
 }
 
-export interface ApplicationNetworkRequest {
+export interface VanRequest {
   name: string;
   starttime?: string;
   endtime?: string;
   deletedelay?: string;
 }
 
-export interface ApplicationNetworkResponse {
+export interface VanResponse {
   id: string;
   name: string;
-  backbone?: string;
-  backbonename?: string;
-  lifecycle: 'partial' | 'new' | 'ready';
+  backboneid: string;
+  backbonename: string;
+  lifecycle: NetworkLifeCycleStatus;
   failure: string | null;
   starttime: string | null;
   endtime: string | null;
   deletedelay: string | null;
+  certificate?: string | null;
+  tlsexpiration?: string | null;
+  tlsrenewal?: string | null;
 }
 
 export interface InvitationRequest {
   name: string;
   claimaccess: string;
-  memberaccess: string;
+  primaryaccess: string;
   secondaryaccess?: string;
   joindeadline?: string;
-  memberclass?: string;
+  siteclass?: string;
+  prefix?: string;
   instancelimit?: number;
-  interactive?: boolean;
+  interactive?: 'true' | 'false';
 }
 
 export interface InvitationResponse {
   id: string;
   name: string;
-  lifecycle: 'partial' | 'new' | 'ready';
+  lifecycle: InvitationLifeCycleStatus;
   failure: string | null;
   joindeadline: string | null;
-  memberclass: string | null;
+  memberclasses: string[] | null;
   instancelimit: number | null;
   instancecount: number;
+  fetchcount: number;
   interactive: boolean;
   vanname?: string;
 }
@@ -130,7 +195,7 @@ export interface InvitationResponse {
 export interface MemberSiteResponse {
   id: string;
   name: string;
-  lifecycle: 'partial' | 'new' | 'ready';
+  lifecycle: MemberLifeCycleStatus;
   failure: string | null;
   lastheartbeat: string | null;
   firstactivetime: string | null;
@@ -138,6 +203,8 @@ export interface MemberSiteResponse {
   invitation: string;
   invitationname?: string;
   vanname?: string;
+  joindeadline?: string | null; // Added for join-deadline
+  interactive?: boolean; // Added for interactive
 }
 
 export interface AccessPointRequest {
@@ -188,13 +255,32 @@ export interface ApplicationRequest {
 export interface ApplicationResponse {
   id: string;
   name: string;
-  lifecycle: string;
+  rootblock: string;
+  rootname: string;
+  lifecycle: ApplicationLifeCycleStatus;
+  created: string;
   buildlog?: string;
 }
 
 export interface LibraryBlockResponse {
   id: string;
+  type: string;
   name: string;
+  provider: string;
+  bodystyle: 'simple' | 'composite';
+  revision: number;
+  created: string;
+}
+
+export interface LibraryBlockRequest {
+  name: string;
+  type: string;
+  bodystyle: 'simple' | 'composite';
+  provider?: string;
+}
+
+export interface LibraryBlockUpdateRequest {
+  [key: string]: unknown;
 }
 
 export interface DeploymentRequest {
@@ -239,7 +325,7 @@ export interface CertificateRequestResponse {
 export interface ManagementControllerResponse {
   id: string;
   name: string;
-  lifecycle: 'partial' | 'new' | 'ready';
+  lifecycle: ManagementControllerLifeCycleStatus;
   failure: string | null;
   certificate: string | null;
 }
@@ -270,8 +356,46 @@ export interface HeartbeatRequest {
   firstactivetime?: string;
 }
 
+export interface LibraryBlockTypeResponse {
+  type: string;
+  description?: string;
+  allownorth: boolean;
+  allowsouth: boolean;
+  allocatetosite: boolean;
+}
+
+export interface LibraryBlockHistoryResponse {
+  revision: number;
+  created: string;
+  author: string;
+  message: string;
+  changes: {
+    configuration?: boolean;
+    interfaces?: boolean;
+    body?: boolean;
+  };
+  data?: {
+    configuration?: Record<string, unknown>;
+    interfaces?: unknown[];
+    body?: unknown;
+  };
+}
+
 export interface ErrorResponse {
   error: string;
   message: string;
   httpStatus?: number;
+}
+
+// Application Block interface
+export interface ApplicationBlock {
+  instancename: string;
+  libraryblock: string;
+  libname: string;
+  revision: string;
+}
+
+export interface CreateApplicationRequest {
+  name: string;
+  rootblock: string;
 }
