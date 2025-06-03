@@ -26,6 +26,7 @@ const db         = require('./db.js');
 const formidable = require('formidable');
 const util       = require('./common/util.js');
 const ident      = require('./ident.js');
+const gotemplate = require('./gotemplate.js');
 
 const COMPOSE_PREFIX = '/compose/v1alpha1/';
 const API_VERSION    = 'skupperx.io/compose/v1alpha1';
@@ -322,6 +323,10 @@ class InstanceBlock {
         return this.libraryBlock;
     }
 
+    getBodyStyle() {
+        return this.libraryBlock.getBodyStyle();
+    }
+
     libraryBlockDatabaseId() {
         return this.libraryBlock.databaseId();
     }
@@ -354,7 +359,7 @@ class LibraryBlock {
                 revision : dbRecord.revision,
             },
             spec : {
-                inherit    : yaml.load(dbRecord.inherit),
+                bodyStyle  : dbRecord.bodystyle,
                 config     : yaml.load(dbRecord.config),
                 interfaces : yaml.load(dbRecord.interfaces),
                 body       : yaml.load(dbRecord.specbody),
@@ -398,16 +403,16 @@ class LibraryBlock {
         this.item.spec = updated;
     }
 
-    expandFrom() {
-        return this.item.spec.inherit ? this.item.spec.inherit.base : undefined;
-    }
-
     config() {
         return this.item.spec.config;
     }
 
     interfaces() {
         return this.item.spec.interfaces;
+    }
+
+    getBodyStyle() {
+        return this.item.spec.bodyStyle;
     }
 
     body() {
@@ -599,12 +604,12 @@ class Application {
     // Recursive component instantiation function.
     //
     instantiateSubComponents(path, libraryBlock, instanceName, buildLog) {
-        const body = libraryBlock.body();
-        if (body.composite) {
+        if (libraryBlock.getBodyStyle() == 'composite') {
+            const body = libraryBlock.body();
             //
             // This is a composite block.  Begin by creating instances of all of the block's children.
             //
-            for (const child of body.composite.blocks) {
+            for (const child of body) {
                 if (!child.name || !child.block) {
                     buildLog.error(`Invalid item in composite blocks for ${instanceName}`)
                 }
@@ -632,7 +637,7 @@ class Application {
             //
             // Iterate again through the children and look for bindings.
             //
-            for (const child of body.composite.blocks) {
+            for (const child of body) {
                 if (child.bindings) {
                     const childPath = path + child.name;
                     for (const binding of child.bindings) {
@@ -672,7 +677,7 @@ class Application {
 
     //
     // Locate and return a reference to the base interface in an instance block by the interface's name.
-    // If the instance block is composite, it may be necessary to recurse downward until a monolithic block is found.
+    // If the instance block is composite, it may be necessary to recurse downward until a simple block is found.
     // Throw an error if the interface cannot be found.
     //
     findBaseInterface(instanceBlock, interfaceName, buildLog) {
@@ -685,12 +690,12 @@ class Application {
                     // If this is a monolithic block, return the interface instance for this interface, otherwise
                     // find the sub-block that binds this interface and recurse down into it.
                     //
-                    if (spec.body && typeof(spec.body) == 'object' && spec.body.composite) {
+                    if (spec.body && typeof(spec.body) == 'object' && instanceBlock.getBodyStyle() == 'composite') {
                         //
                         // The referenced block is a composite.  We must find a sub-block that binds to this interface.
                         // Note that the name of the sub-block interface may differ from the interface on this block.
                         //
-                        for (const cblock of spec.body.composite.blocks) {
+                        for (const cblock of spec.body) {
                             if (cblock.bindings) {
                                 for (const cbinding of cblock.bindings) {
                                     if (cbinding.super == interfaceName) {
@@ -805,7 +810,6 @@ const validateBlock = async function(block, validTypes, validRoles, blockRevisio
 const importBlock = async function(client, block, blockRevisions) {
     const name        = block.metadata.name;
     const newRevision = blockRevisions[name] ? blockRevisions[name].revision + 1 : 1;
-    const inherit     = yaml.dump(block.spec.inherit);
     const config      = yaml.dump(block.spec.config);
     const ifObject    = yaml.dump(block.spec.interfaces);
     const bodyObject  = yaml.dump(block.spec.body);
@@ -815,9 +819,8 @@ const importBlock = async function(client, block, blockRevisions) {
     // Only insert a new revision into the database if it is different from the current revision.
     //
     if (newRevision > 1) {
-        const mostRecent = await client.query("SELECT Inherit, Config, Interfaces, SpecBody FROM LibraryBlocks WHERE Name = $1 AND Revision = $2", [name, newRevision - 1]);
+        const mostRecent = await client.query("SELECT Config, Interfaces, SpecBody FROM LibraryBlocks WHERE Name = $1 AND Revision = $2", [name, newRevision - 1]);
         if (mostRecent.rowCount == 1
-            && inherit    == mostRecent.rows[0].inherit
             && config     == mostRecent.rows[0].config
             && ifObject   == mostRecent.rows[0].interfaces
             && bodyObject == mostRecent.rows[0].specbody) {
@@ -827,9 +830,9 @@ const importBlock = async function(client, block, blockRevisions) {
 
     await client.query(
         "INSERT INTO LibraryBlocks " +
-        "(Type, Name, Revision, RevisionComment, BodyStyle, Format, Inherit, Config, Interfaces, SpecBody) " +
-        "VALUES ($1, $2, $3, 'Imported via API', $4, 'application/yaml', $5, $6, $7, $8)",
-        [block.type, name, newRevision, block.spec.bodyStyle, inherit, config, ifObject, bodyObject]);
+        "(Type, Name, Revision, RevisionComment, BodyStyle, Format, Config, Interfaces, SpecBody) " +
+        "VALUES ($1, $2, $3, 'Imported via API', $4, 'application/yaml', $5, $6, $7)",
+        [block.type, name, newRevision, block.spec.bodyStyle, config, ifObject, bodyObject]);
     return 1;
 }
 
@@ -890,91 +893,18 @@ const loadLibraryBlock = async function(client, library, blockName, buildLog) {
     //
     const body = yaml.load(revisionBlock.specbody);
     if (body && revisionBlock.bodystyle == 'composite') {
-        for (const subblock of body.blocks) {
+        for (const subblock of body) {
             await loadLibraryBlock(client, library, subblock.block, buildLog)
-        }
-    }
-
-    const inherit = yaml.load(revisionBlock.inherit);
-    if (inherit && inherit.base) {
-        await loadLibraryBlock(client, library, inherit.base, buildLog);
-    }
-}
-
-//
-// Recursive block expander
-//
-const expandBlock = function(library, blockName, buildLog) {
-    const block         = library[blockName];
-    const baseBlockName = block.expandFrom();
-    if (!!baseBlockName) {
-        if (block.isFlagSet()) {
-            buildLog.error(`Circular dependencies detected in inheritance hierarchy for block ${blockName}`);
-        }
-        block.setFlag(true);
-
-        //
-        // If the base block is unexpanded, recursively expand it before using it as a base.
-        //
-        const baseBlock = library[baseBlockName];
-        if (!!baseBlock.expandFrom()) {
-            expandBlock(library, baseBlock.name(), buildLog);
-        }
-
-        // TODO - Inherit the entire spec, but expand only the config
-
-        //
-        // Do the expansion from the base.
-        //
-        let   expanded   = block.object();
-        const transform  = deepCopy(expanded.spec.inherit);
-        const parentspec = baseBlock.object().spec;
-
-        expanded.spec = deepCopy(parentspec);
-        if (expanded.spec.config) {
-            if (transform.transformOverwrite) {
-                expanded.spec.config = deepAppend(expanded.spec.config, transform.transformOverwrite);
-            }
-            if (transform.transformDelete) {
-                // TODO - array of paths to be removed from the base
-                buildLog.error(`transformDelete not implemented in ${block}`);
-            }
-            if (transform.transformListItem) {
-                // TODO - array of path/index/transform[Overwrite|Delete|ListItem]
-                buildLog.error(`ERROR: transformListItem not implemented in ${block}`);
-            }
-        }
-        block.overWriteSpec(expanded.spec);
-        block.setFlag(false);
-
-        buildLog.log(`Expanded block ${block.name()} from base ${baseBlock.name()}`);
-    }
-}
-
-//
-// Expand derivative library blocks, recursively if necessary.
-// Ensure that no block is derived from another not-yet-expanded derivative block.
-// Detect and throw an error for circular derivation conditions.
-//
-const expandLibraryBlocks = function(library, buildLog) {
-    for (const name of Object.keys(library)) {
-        //
-        // We will only process revisioned (non-aliased) blocks.
-        //
-        if (name.indexOf(';') > 0) {
-            expandBlock(library, name, buildLog);
         }
     }
 }
 
 //
 // Given a root block, create a map of library blocks referenced by the tree rooted at the root block.
-// If any of the blocks are derived from other library blocks, expand those into their final form.
 //
 const loadLibrary = async function(client, rootBlockName, buildLog) {
     var   library = {};
     await loadLibraryBlock(client, library, rootBlockName, buildLog);
-    expandLibraryBlocks(library, buildLog);
     return library;
 }
 
@@ -1264,6 +1194,20 @@ const deployApplication = async function(client, appid, vanid, depid, deployLog)
 //=========================================================================================================
 // API Functions
 //=========================================================================================================
+const ExpandTemplate = async function(req, res) {
+    if (req.is('application/yaml')) {
+        try {
+            const spec = yaml.load(req.body);
+            const result = gotemplate.Expand(spec.template, spec.local, spec.remote);
+            res.status(200).send(result);
+        } catch(error) {
+            res.status(500).send(error.message);
+        }
+    } else {
+        res.status(400).send('Not YAML');
+    }
+}
+
 const postLibraryBlocks = async function(req, res) {
     if (req.is('application/yaml')) {
         const client = await db.ClientFromPool();
@@ -2189,6 +2133,10 @@ exports.ApiInit = function(app) {
     app.get(COMPOSE_PREFIX + 'interfaceroles', async (req, res) => {
         await getInterfaceRoles(req, res);
     });
+
+    app.post(COMPOSE_PREFIX + 'template', async (req, res) => {
+        await ExpandTemplate(req, res);
+    })
 
     app.use(express.json());
     app.put(COMPOSE_PREFIX + 'library/blocks/:blockid/config', async (req, res) => {

@@ -144,7 +144,7 @@ async function AppForm() {
     // Populate the root-block selector
     //
     for (const block of libdata) {
-        if (block.type == 'skupperx.io/container') {
+        if (block.type == 'skupperx.io/toplevel') {
             let option = document.createElement('option');
             option.setAttribute('value', `${block.id}`);
             option.textContent = `${block.name};${block.revision}`;
