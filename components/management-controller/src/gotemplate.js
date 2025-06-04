@@ -24,7 +24,6 @@ const TOKEN_VARIABLE = 1;
 const TOKEN_IF       = 2;
 const TOKEN_ELSE     = 3;
 const TOKEN_END      = 4;
-const TOKEN_RANGE    = 5;
 
 const END_WITH_ELSE = 1;
 const END_WITH_END  = 2;
@@ -33,7 +32,6 @@ const END_WITH_EOS  = 3;
 const OPEN    = '{{';
 const CLOSE   = '}}';
 const D_IF    = 'if ';
-const D_RANGE = 'range ';
 const D_ELSE  = 'else';
 const D_END   = 'end';
 
@@ -44,7 +42,6 @@ const typeName = function(type) {
         case TOKEN_IF:       return 'IF';
         case TOKEN_ELSE:     return 'ELSE';
         case TOKEN_END:      return 'END';
-        case TOKEN_RANGE:    return 'RANGE';
     }
 }
 
@@ -86,8 +83,6 @@ exports.Expand = function(template, localData, remoteData) {
         tokenStream.push(token);
     }
 
-    print_stream(tokenStream);
-
     //
     // Arrange the tokens into a template tree
     //
@@ -96,9 +91,6 @@ exports.Expand = function(template, localData, remoteData) {
     if (result != END_WITH_EOS) {
         throw new Error(`GoTemplate: Template ended with spurious End or Else`);
     }
-
-    console.log('TREE:');
-    print_tree(rootToken, '  ');
 
     //
     // Expand the template tree using the provided data
@@ -159,9 +151,6 @@ class Token {
         if (innerText.indexOf(D_IF) == 0) {
             this.type = TOKEN_IF;
             this.content = innerText.slice(D_IF.length);
-        } else if (innerText.indexOf(D_RANGE) == 0) {
-            this.type = TOKEN_RANGE;
-            this.content = innerText.slice(D_RANGE.length);
         } else if (innerText.indexOf(D_ELSE) == 0) {
             this.type = TOKEN_ELSE;
         } else if (innerText.indexOf(D_END) == 0) {
@@ -198,16 +187,12 @@ class Token {
 
             case TOKEN_IF:
                 this.thenClause = head;
-                console.log(`IF - tokenList size before then: ${tokenList.length}`);
                 const thenResult = head.Arrange(tokenList);
-                console.log(`IF - tokenList size after then: ${tokenList.length}`);
-                console.log(`    First token content: ${tokenList[0].content}`);
                 switch (thenResult) {
                     case END_WITH_EOS:
                         throw new Error('GoTemplate: Then clause not closed with End or Else');
                     case END_WITH_ELSE:
                         this.elseClause = tokenList.shift();
-                        console.log(`elseClause: ${this.elseClause.type}`);
                         const elseResult = this.elseClause.Arrange(tokenList);
                         if (elseResult != END_WITH_END) {
                             throw new Error('GoTemplate: Else clause did not close with End');
@@ -217,13 +202,6 @@ class Token {
                         break;
                 }
                 break;
-
-            case TOKEN_RANGE:
-                this.thenClause = head;
-                const rangeResult = head.Arrange(tokenList);
-                if (rangeResult != END_WITH_END) {
-                    throw new Error('GoTemplate: Body clause in Range did not close with End');
-                }
         }
 
         if (tokenList.length > 0) {
@@ -254,8 +232,6 @@ class Token {
                     expanded = this.elseClause.Expand(localData, remoteData);
                 }
                 break;
-
-            case TOKEN_RANGE:
         }
 
         if (this.next) {
@@ -265,9 +241,17 @@ class Token {
     }
 
     _value(localData, remoteData) {
-        let result;
-        if (this.content[0] == '.') {
+        const prefix = this.content[0];
+        const path   = this.content.slice(1).split('.');
+        let result = 'UNDEFINED';
+        if (prefix == '.') {
             result = localData[this.content.slice(1)];
+        } else if (this.content[0] == '$') {
+            let traverse = remoteData;
+            for (const element of path) {
+                traverse = traverse[element];
+            }
+            result = traverse;
         }
 
         return result;

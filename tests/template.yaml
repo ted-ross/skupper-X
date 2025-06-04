@@ -16,6 +16,7 @@ local:
   local1: "Local One"
   local2: "Local Two"
   local3: 1
+  local4: true
 remote:
   affblock:
     one: "Affinity Block"
@@ -26,7 +27,10 @@ remote:
 template: |
   This is a template for testing {{.local1}} and {{.local2}}
   {{-if .local3}}
-    Local-3 Then Clause
+    Local-3 Then Clause {{$affif.two}}
+    {{-if .local4 }}
+    Local Four is True
+    {{- end }}
   {{-else}}
     Local-3 Else Clause
   {{-end}}
