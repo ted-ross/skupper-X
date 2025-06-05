@@ -250,36 +250,41 @@ export async function ConfirmDialog(text, buttonText, asyncAction) {
     return modalBox;
 }
 
-export function TimeAgo(date) {
+export function TimeAgo(date, _min) {
+    const min = _min || 0;
     var seconds = Math.floor((new Date() - date) / 1000);
+    const prefix = seconds < min ? '< ' : '';
+    if (seconds < min) {
+        seconds = min;
+    }
 
     var interval = Math.floor(seconds / 31536000);
     if (interval > 0) {
-      return  `${interval} year${interval > 1 ? 's' : ''}`;
+      return  `${prefix}${interval} year${interval > 1 ? 's' : ''}`;
     }
 
     interval = Math.floor(seconds / 2592000);
     if (interval > 0) {
-      return `${interval} month${interval > 1 ? 's' : ''}`
+      return `${prefix}${interval} month${interval > 1 ? 's' : ''}`
     }
 
     interval = Math.floor(seconds / 86400);
     if (interval > 0) {
-      return `${interval} day${interval > 1 ? 's' : ''}`
+      return `${prefix}${interval} day${interval > 1 ? 's' : ''}`
     }
 
     interval = Math.floor(seconds / 3600);
     if (interval > 0) {
-      return `${interval} hour${interval > 1 ? 's' : ''}`
+      return `${prefix}${interval} hour${interval > 1 ? 's' : ''}`
     }
 
     interval = Math.floor(seconds / 60);
     if (interval > 0) {
-      return `${interval} minute${interval > 1 ? 's' : ''}`
+      return `${prefix}${interval} minute${interval > 1 ? 's' : ''}`
     }
 
     interval = Math.floor(seconds);
-    return `${interval} second${interval != 1 ? 's' : ''}`
+    return `${prefix}${interval} second${interval != 1 ? 's' : ''}`
 }
 
 export function ExpandableRow(layout, columnCount, expandAction, insertPoint) {

@@ -98,7 +98,7 @@ function ReconcileRow(row, member) {
     const invitationCell    = row.cells[4];
     const firstActiveCell   = row.cells[5];
 
-    const sinceLastHeartbeat = TimeAgo(new Date(member.lastheartbeat));
+    const sinceLastHeartbeat = TimeAgo(new Date(member.lastheartbeat), 300);
     const firstTime          = new Date(member.firstactivetime).toUTCString();
 
     if (nameCell.textContent != member.name) {

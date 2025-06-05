@@ -266,7 +266,7 @@ async function BackboneSites(bbid, panel) {
                             if (firstActiveCell.textContent != fa) {
                                 firstActiveCell.textContent = fa;
                             }
-                            let lhb = site.lastheartbeat ? TimeAgo(new Date(site.lastheartbeat)) : 'never';
+                            let lhb = site.lastheartbeat ? TimeAgo(new Date(site.lastheartbeat), 300) : 'never';
                             if (lastheartbeatCell.textContent != lhb) {
                                 lastheartbeatCell.textContent = lhb;
                             }
