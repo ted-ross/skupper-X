@@ -20,11 +20,15 @@ import {
   LibraryBlockRequest,
   LibraryBlockUpdateRequest,
   LibraryBlockTypeResponse,
+  LibraryBlockTypeMap,
   LibraryBlockHistoryResponse,
   IngressRequest,
   ApplicationResponse,
   ApplicationBlock,
-  CreateApplicationRequest
+  CreateApplicationRequest,
+  DeploymentRequest,
+  DeploymentResponse,
+  DeploymentDetailsResponse
 } from './REST.interfaces';
 import {
   getBackbonesPATH,
@@ -53,8 +57,6 @@ import {
   getAccessPointPATH,
   getAccessPointsForSitePATH,
   getAccessPointsForBackbonePATH,
-  getClaimAccessPATH,
-  getMemberAccessPATH,
   getTlsCertificatePATH,
   getTargetPlatformsPATH,
   getSiteDeploymentPATH,
@@ -66,13 +68,17 @@ import {
   getLibraryBodyPATH,
   getLibraryHistoryPATH,
   getLibraryBlockTypesPATH,
-  getLibraryBodyStylesPATH,
+  // getLibraryBodyStylesPATH, // Not implemented in backend
   getInterfaceRolesPATH,
   getApplicationsPATH,
   getApplicationPATH,
   getApplicationBuildPATH,
   getApplicationLogPATH,
-  getApplicationBlocksPATH
+  getApplicationBlocksPATH,
+  getDeploymentsPATH,
+  getDeploymentPATH,
+  getDeploymentDeployPATH,
+  getDeploymentLogPATH
 } from './REST.paths';
 import { mapOptionsToQueryParams } from './REST.utils';
 
@@ -332,19 +338,6 @@ export const RESTApi = {
     });
   },
 
-  // ACCESS CLAIM/MEMBER APIs
-  fetchAccessClaims: async (bid: string): Promise<{ id: string; name: string }[]> => {
-    const data = await axiosFetch<{ id: string; name: string }[]>(getClaimAccessPATH(bid));
-
-    return data;
-  },
-
-  fetchAccessMember: async (bid: string): Promise<{ id: string; name: string }[]> => {
-    const data = await axiosFetch<{ id: string; name: string }[]>(getMemberAccessPATH(bid));
-
-    return data;
-  },
-
   // TLS CERTIFICATE APIs
   fetchTlsCertificate: async (cid: string): Promise<TlsCertificateResponse> => {
     const data = await axiosFetch<TlsCertificateResponse>(getTlsCertificatePATH(cid));
@@ -413,49 +406,34 @@ export const RESTApi = {
     });
   },
 
-  createLibrary: async (data: LibraryBlockRequest): Promise<{ id: string }> => {
-    const formData = new FormData();
-    formData.append('name', data.name);
-    formData.append('type', data.type);
-    formData.append('bodystyle', data.bodystyle);
-    if (data.provider) {
-      formData.append('provider', data.provider);
-    }
-
-    const response = await axiosFetch<{ id: string }>(getLibrariesPATH(), {
+  createLibraryJson: async (data: LibraryBlockRequest): Promise<string> => {
+    const { id } = await axiosFetch<{ id: string }>(getLibrariesPATH(), {
       method: 'POST',
-      data: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+      data
     });
 
-    return response;
-  },
-
-  createLibraryJson: async (data: LibraryBlockRequest): Promise<{ id: string }> => {
-    const response = await axiosFetch<{ id: string }>(getLibrariesPATH(), {
-      method: 'POST',
-      data,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
-
-    return response;
+    return id;
   },
 
   fetchLibraryBlockTypes: async (): Promise<LibraryBlockTypeResponse[]> => {
-    const data = await axiosFetch<LibraryBlockTypeResponse[]>(getLibraryBlockTypesPATH());
+    const data = await axiosFetch<LibraryBlockTypeMap>(getLibraryBlockTypesPATH());
 
-    return data;
+    // Convert btMap (object) to btArray (array) for backward compatibility
+    // Add the type field back from the object key
+    const blockTypesArray: LibraryBlockTypeResponse[] = Object.entries(data).map(([typeName, typeData]) => ({
+      ...typeData,
+      type: typeName
+    }));
+
+    return blockTypesArray;
   },
 
-  fetchLibraryBodyStyles: async (): Promise<string[]> => {
-    const data = await axiosFetch<string[]>(getLibraryBodyStylesPATH());
-
-    return data;
-  },
+  // NOTE: Body styles are hardcoded as ['simple', 'composite'] in useLibraryMetadata
+  // because the backend doesn't implement /library/bodystyles endpoint
+  // fetchLibraryBodyStyles: async (): Promise<string[]> => {
+  //   const data = await axiosFetch<string[]>(getLibraryBodyStylesPATH());
+  //   return data;
+  // },
 
   fetchInterfaceRoles: async (): Promise<{ name: string; description?: string }[]> => {
     const data = await axiosFetch<{ name: string; description?: string }[]>(getInterfaceRolesPATH());
@@ -500,23 +478,13 @@ export const RESTApi = {
     return data;
   },
 
-  fetchApplicationDetail: async (id: string): Promise<ApplicationResponse> => {
-    const data = await axiosFetch<ApplicationResponse>(getApplicationPATH(id));
-
-    return data;
-  },
-
   createApplication: async (data: CreateApplicationRequest): Promise<string> => {
-    const formData = new FormData();
-    formData.append('name', data.name);
-    formData.append('rootblock', data.rootblock);
-
-    const response = await axiosFetch<{ id: string }>(getApplicationsPATH(), {
+    const { id } = await axiosFetch<{ id: string }>(getApplicationsPATH(), {
       method: 'POST',
-      data: formData
+      data
     });
 
-    return response.id;
+    return id;
   },
 
   deleteApplication: async (id: string): Promise<void> => {
@@ -539,6 +507,48 @@ export const RESTApi = {
 
   fetchApplicationBlocks: async (id: string): Promise<ApplicationBlock[]> => {
     const data = await axiosFetch<ApplicationBlock[]>(getApplicationBlocksPATH(id));
+
+    return data;
+  },
+
+  // DEPLOYMENT APIs
+  fetchDeployments: async (options?: RequestOptions): Promise<DeploymentResponse[]> => {
+    const data = await axiosFetch<DeploymentResponse[]>(getDeploymentsPATH(), {
+      params: options ? mapOptionsToQueryParams(options) : null
+    });
+
+    return data;
+  },
+
+  createDeployment: async (data: DeploymentRequest): Promise<string> => {
+    const {id} = await axiosFetch<{ id: string }>(getDeploymentsPATH(), {
+      method: 'POST',
+      data
+    });
+
+    return id;
+  },
+
+  fetchDeploymentDetails: async (id: string): Promise<DeploymentDetailsResponse> => {
+    const data = await axiosFetch<DeploymentDetailsResponse>(getDeploymentPATH(id));
+
+    return data;
+  },
+
+  deleteDeployment: async (id: string): Promise<void> => {
+    await axiosFetch<void>(getDeploymentPATH(id), {
+      method: 'DELETE'
+    });
+  },
+
+  deployDeployment: async (id: string): Promise<void> => {
+    await axiosFetch<void>(getDeploymentDeployPATH(id), {
+      method: 'PUT'
+    });
+  },
+
+  fetchDeploymentLog: async (id: string): Promise<string> => {
+    const data = await axiosFetch<string>(getDeploymentLogPATH(id));
 
     return data;
   }

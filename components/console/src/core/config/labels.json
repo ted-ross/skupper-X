@@ -31,6 +31,7 @@
     "saveTemplate": "Save Template",
     "editTemplate": "Edit Template",
     "createApplicationTitle": "Create Application",
+    "createDeploymentTitle": "Create Deployment",
     "build": "Build",
     "showLog": "Show Log",
     "clear": "Clear",
@@ -42,7 +43,8 @@
     "fitView": "Fit View",
     "center": "Center",
     "resetLayout": "Reset Layout",
-    "saveTopology": "Save Layout"
+    "saveTopology": "Save Layout",
+    "expire": "Expire"
   },
   "validation": {
     "required": "is required",
@@ -58,7 +60,11 @@
     "descriptionRequired": "Description is required",
     "templateContentRequired": "Template content is required",
     "targetPlatformsRequired": "At least one target platform must be selected",
-    "validationError": "Validation Error"
+    "validationError": "Validation Error",
+    "deploymentNameRequired": "Deployment name is required",
+    "applicationNameRequired": "Application name is required",
+    "vanNameRequired": "VAN name is required",
+    "failedToCreateDeployment": "Failed to create deployment"
   },
   "forms": {
     "name": "Name",
@@ -77,6 +83,17 @@
     "noEndTime": "No End Time",
     "claimAccessPoint": "Claim AP",
     "selectClaimAccessPoint": "Select claim access point",
+    "deploymentName": "Deployment Name",
+    "applicationName": "Application Name",
+    "vanName": "VAN Name",
+    "lifecycle": "Lifecycle",
+    "enterDeploymentName": "Enter deployment name",
+    "enterApplicationName": "Enter application name",
+    "enterVanName": "Enter VAN name",
+    "active": "Active",
+    "inactive": "Inactive",
+    "pending": "Pending",
+    "failed": "Failed",
     "noClaimAccessPoints": "No claim access points available",
     "memberAccessPoint": "Member AP",
     "selectMemberAccessPoint": "Select member access point",
@@ -137,6 +154,7 @@
     "name": "Name",
     "backbones": "Backbones",
     "status": "TLS Status",
+    "deploymentStatus": "Deployment Status",
     "startTime": "Created At",
     "endTime": "End Time",
     "provider": "Provider",
@@ -201,9 +219,12 @@
     "noApplicationsFound": "No Applications found",
     "noHistoryAvailable": "No History Available",
     "noHistoryDescription": "No revision history is available for this library block.",
-    "noTopologyData": "No topology data available",
-    "noTopologyDataDescription": "Create backbone networks and sites to view the topology",
-    "loadingTopology": "Loading topology data..."
+    "noTopologyData": "No topology to display",
+    "noTopologyDataDescription": "Create at least one backbone with a site to view the network topology",
+    "loadingTopology": "Loading topology data...",
+    "deploymentConfigurationNotAvailable": "Deployment Configuration Not Available",
+    "failedToLoadDeploymentLog": "Failed to Load Deployment Log",
+    "noDeploymentLogAvailable": "No Deployment Log Available"
   },
   "errors": {
     "generic": "An error occurred",
@@ -211,6 +232,8 @@
     "deleteConstraint": "Cannot delete: It is still being used by other components.",
     "noLibrariesFound": "No libraries found",
     "noLibrariesDescription": "No libraries are currently available.",
+    "noDeploymentsFound": "No deployments found",
+    "noDeploymentsDescription": "No deployments are currently available.",
     "noMembersFound": "No members found for this VAN",
     "noMembersDescription": "No members are currently part of this VAN.",
     "configurationError": "Configuration Error",
@@ -236,13 +259,17 @@
     "linkCreationRequiresPeerAccessPoints": "Peer Access Point and destination Site Required",
     "linkCreationDescription": "At least one peer access point is required to create a link.",
     "evictNotImplemented": "Evict functionality is not yet available. This feature is currently under development.",
-    "errorLoadingTopology": "Error loading topology data"
+    "errorLoadingTopology": "Error loading topology data",
+    "noPeerAccessPointsTitle": "No peer access points available for link creation",
+    "noPeerAccessPointsDescription": "To create links, you need peer access points in other sites within this backbone.",
+    "noPeerAccessPointsTooltip": "No peer access points available in other sites for creating links."
   },
   "descriptions": {
     "backbones": "A backbone is the central core of a network, that connects sites",
     "sites": "Sites are locations in the backbone network where a backbone router is deployed.",
     "libraries": "Manage your application libraries and compositions",
     "applications": "Manage and deploy your applications using library blocks",
+    "deployments": "Deploy and manage application instances across your network infrastructure",
     "vans": "Virtual Application Networks (VANs) using this backbone for secure connectivity.",
     "invitations": "Invitations allow you to add new members to this VAN. Each invitation can be used to join the network according to its configuration.",
     "members": "Members are sites that have joined this VAN using an invitation. They participate in the application network.",
@@ -316,5 +343,8 @@
     "status": "Status",
     "terminating": "Terminating",
     "unknown": "Unknown"
+  },
+  "config": {
+    "bodyStyles": ["simple", "composite"]
   }
 }

@@ -6,6 +6,7 @@ import { librariesRoutes } from './pages/Libraries/routes';
 import { vansRoutes } from './pages/Vans/routes';
 import { applicationsRoutes } from './pages/Applications/routes';
 import { topologyRoutes } from './pages/Topology/routes';
+import { deploymentRoutes } from './pages/Deployment/routes';
 
 export const routes: RouteObject[] = [
   { index: true, element: <Navigate to={DEFAULT_ROUTE} replace={true} /> },
@@ -13,5 +14,6 @@ export const routes: RouteObject[] = [
   ...backboneRoutes,
   ...librariesRoutes,
   ...vansRoutes,
-  ...applicationsRoutes
+  ...applicationsRoutes,
+  ...deploymentRoutes
 ];

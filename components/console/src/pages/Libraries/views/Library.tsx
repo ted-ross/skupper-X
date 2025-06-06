@@ -1,6 +1,4 @@
 import { useParams } from 'react-router-dom';
-
-import { getTestsIds } from '../../../config/testIds';
 import TitleSection from '../../../core/components/TitleSection';
 import { getIdAndNameFromUrlParams } from '../../../core/utils/getIdAndNameFromUrlParams';
 import MainContainer from '../../../layout/MainContainer';
@@ -16,7 +14,6 @@ const Library = function () {
 
   return (
     <MainContainer
-      dataTestId={getTestsIds.sitesView()}
       title={<TitleSection title={libraryName || library?.name} resourceType="library" />}
       mainContentChildren={<LibraryDetails library={library} libraryId={libraryId} />}
     />

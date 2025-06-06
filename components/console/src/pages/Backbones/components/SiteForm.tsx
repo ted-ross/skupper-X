@@ -1,7 +1,7 @@
 import { useState, FC, FormEvent, useCallback } from 'react';
 
 import { Form, FormGroup, TextInput, FormAlert, Alert, FormSelect, FormSelectOption } from '@patternfly/react-core';
-import { useMutation, useSuspenseQuery } from '@tanstack/react-query';
+import { useSuspenseQuery } from '@tanstack/react-query';
 
 import { RESTApi } from '../../../API/REST.api';
 import {
@@ -11,6 +11,7 @@ import {
   TargetPlatformResponse
 } from '../../../API/REST.interfaces';
 import { useModalActions } from '../../../core/hooks/useModalActions';
+import { useMutationWithCacheInvalidation, CacheInvalidationPresets } from '../../../core/hooks/useMutationWithCacheInvalidation';
 import labels from '../../../core/config/labels';
 import { DEFAULT_PLATFORM } from '../../../config/config';
 
@@ -31,33 +32,39 @@ const SiteForm: FC<{
     queryFn: () => RESTApi.fetchTargetPlatforms()
   });
 
-  const mutationCreate = useMutation({
-    mutationFn: (data: BackboneSiteRequest) => RESTApi.createSite(bid, data),
-    onError: (data: HTTPError) => {
-      setValidated(data.descriptionMessage);
-    },
-    onSuccess: () => {
-      setValidated(undefined);
-      setName('');
-      setPlatform(DEFAULT_PLATFORM);
-      setTimeout(() => {
-        onSubmit();
-      }, 100);
+  const mutationCreate = useMutationWithCacheInvalidation(
+    (data: BackboneSiteRequest) => RESTApi.createSite(bid, data),
+    CacheInvalidationPresets.createSite(bid),
+    {
+      onError: (data: HTTPError) => {
+        setValidated(data.descriptionMessage);
+      },
+      onSuccess: () => {
+        setValidated(undefined);
+        setName('');
+        setPlatform(DEFAULT_PLATFORM);
+        setTimeout(() => {
+          onSubmit();
+        }, 100);
+      }
     }
-  });
+  );
 
-  const mutationUpdate = useMutation({
-    mutationFn: (data: Partial<BackboneSiteRequest>) => RESTApi.updateSite(editingSite!.id, data),
-    onError: (data: HTTPError) => {
-      setValidated(data.descriptionMessage);
-    },
-    onSuccess: () => {
-      setValidated(undefined);
-      setTimeout(() => {
-        onSubmit();
-      }, 100);
+  const mutationUpdate = useMutationWithCacheInvalidation(
+    (data: Partial<BackboneSiteRequest>) => RESTApi.updateSite(editingSite!.id, data),
+    CacheInvalidationPresets.updateSite(bid),
+    {
+      onError: (data: HTTPError) => {
+        setValidated(data.descriptionMessage);
+      },
+      onSuccess: () => {
+        setValidated(undefined);
+        setTimeout(() => {
+          onSubmit();
+        }, 100);
+      }
     }
-  });
+  );
 
   const handleNameChange = useCallback((_: FormEvent<HTMLInputElement>, newName: string) => {
     setName(newName);

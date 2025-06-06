@@ -78,7 +78,6 @@ export interface TopologyGraphData {
 // Extended site interface with backbone info
 export interface ExtendedSite extends BackboneSiteResponse {
   backboneId: string;
-  backboneName: string;
 }
 
 // Topology data interface
@@ -303,9 +302,18 @@ export const transformTopologyData = (topologyData: TopologyData | undefined): T
 };
 
 /**
- * Check if topology data is empty
+ * Check if topology data is empty for visualization purposes
+ * Returns true if there are no backbones, or if there are backbones but no sites
+ * A meaningful topology requires at least one backbone with at least one site
  */
 export const isTopologyDataEmpty = (topologyData: TopologyData | undefined): boolean => {
   if (!topologyData) return true;
-  return topologyData.backbones.length === 0 && topologyData.sites.length === 0;
+  
+  // If no backbones exist, topology is empty
+  if (topologyData.backbones.length === 0) return true;
+  
+  // If backbones exist but no sites, topology is empty for visualization
+  if (topologyData.sites.length === 0) return true;
+  
+  return false;
 };

@@ -49,7 +49,7 @@ export const EndTimeCell = function ({ value }: { value: string }) {
 };
 
 export const BackboneCell = function ({ data }: LinkCellProps<VanResponse>) {
-  const backboneLink = `${BackbonesPaths.path}/${data.backbonename}@${data.backboneid}`;
+  const backboneLink = `${BackbonesPaths.path}/${data.backbonename}@${data.backbone}`; // Backend returns backbone as ID for a list of vans, However, for a single van, it returns backboneid
   return <LinkCell data={data} value={data.backbonename} link={backboneLink} type="backbone" />;
 };
 

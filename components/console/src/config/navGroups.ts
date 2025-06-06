@@ -4,6 +4,7 @@ import { LibraryPaths } from '../pages/Libraries/Libraries.constants';
 import { TopologyPaths } from '../pages/Topology/Topology.constants';
 import { ApplicationPaths } from '../pages/Applications/Applications.constants';
 import labels from '../core/config/labels.json';
+import { DeploymentPaths } from '../pages/Deployment/Deployments.constants';
 
 // Navigation groupings for sidebar
 export const NAV_GROUPS = [
@@ -24,7 +25,7 @@ export const NAV_GROUPS = [
   },
   {
     label: labels.navigation.runtime,
-    items: [{ path: '/deployments', name: labels.navigation.deployments }]
+    items: [{ path: DeploymentPaths.path, name: DeploymentPaths.name }]
   }
 ];
 

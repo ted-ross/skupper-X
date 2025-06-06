@@ -2,8 +2,6 @@ import { CSSProperties, FC } from 'react';
 
 import { Bullseye, PageSection, Spinner } from '@patternfly/react-core';
 
-import { getTestsIds } from '../../../config/testIds';
-
 const floatLoader: CSSProperties = {
   top: 0,
   position: 'absolute',
@@ -21,7 +19,7 @@ const LoadingPage: FC<LoadingPageProps> = function ({ isFLoating = false }) {
   return (
     <div style={isFLoating ? floatLoader : undefined}>
       <PageSection hasBodyWrapper={false}>
-        <Bullseye className="sk-loading-page" data-testid={getTestsIds.loadingView()}>
+        <Bullseye className="sk-loading-page">
           <Spinner size="xl" />
         </Bullseye>
       </PageSection>

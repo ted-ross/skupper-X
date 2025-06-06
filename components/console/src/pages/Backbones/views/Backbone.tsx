@@ -1,7 +1,6 @@
 import { Card, CardBody, Stack, StackItem } from '@patternfly/react-core';
 import { useParams } from 'react-router-dom';
 
-import { getTestsIds } from '../../../config/testIds';
 import TitleSection from '../../../core/components/TitleSection';
 import { getIdAndNameFromUrlParams } from '../../../core/utils/getIdAndNameFromUrlParams';
 import MainContainer from '../../../layout/MainContainer';
@@ -18,7 +17,6 @@ const Backbone = function () {
 
   return (
     <MainContainer
-      dataTestId={getTestsIds.sitesView()}
       title={<TitleSection title={bname} resourceType="backbone" />}
       mainContentChildren={
         <Stack hasGutter>

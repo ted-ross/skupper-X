@@ -5,11 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build:console": "npm --prefix ../console/ run build",
+    "build:console": "cd ../console && yarn build",
     "build:server": "node build",
-    "build": "npm run build:console && npm run build:server",
-    "dev": "./dev.sh",
-    "start": "node index.js"
+    "build": "npm run build:console && npm run build:server"
   },
   "author": "Theodore L. Ross",
   "license": "Apache-2.0",
@@ -28,10 +26,5 @@
     "pg": "^8.11.3",
     "rhea": "^2.0.4",
     "yaml": ">=2.2.2"
-  },
-  "devDependencies": {
-    "cross-env": "^7.0.3",
-    "nodemon": "^3.1.10"
-  },
-  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+  }
 }

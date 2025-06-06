@@ -1,4 +1,4 @@
-import { useState, FC, FormEvent, useCallback } from 'react';
+import { useState, FC, FormEvent, useCallback, useEffect } from 'react';
 
 import {
   Form,
@@ -11,11 +11,12 @@ import {
   HelperText,
   HelperTextItem
 } from '@patternfly/react-core';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import { RESTApi } from '../../../API/REST.api';
 import { CreateApplicationRequest, HTTPError } from '../../../API/REST.interfaces';
 import { useModalActions } from '../../../core/hooks/useModalActions';
+import { useMutationWithCacheInvalidation, CacheInvalidationPresets } from '../../../core/hooks/useMutationWithCacheInvalidation';
 import labels from '../../../core/config/labels';
 
 const ApplicationForm: FC<{
@@ -39,24 +40,34 @@ const ApplicationForm: FC<{
   // Filter for toplevel blocks only
   const toplevelBlocks = libraryBlocks.filter((block) => block.type === 'skupperx.io/toplevel');
 
-  const mutationCreate = useMutation({
-    mutationFn: (data: CreateApplicationRequest) => RESTApi.createApplication(data),
-    onError: (data: HTTPError) => {
-      setValidated(data.descriptionMessage || 'Failed to create application');
-    },
-    onSuccess: () => {
-      setValidated(undefined);
-
-      // Clear form state to prepare for potential next use
-      setName('');
-      setRootblock('');
-
-      // Small delay to allow for smooth transition
-      setTimeout(() => {
-        onSubmit();
-      }, 100);
+  // Auto-select first toplevel block when data loads
+  useEffect(() => {
+    if (!isLoadingLibraries && toplevelBlocks.length > 0 && !rootblock) {
+      setRootblock(toplevelBlocks[0].id);
     }
-  });
+  }, [toplevelBlocks, isLoadingLibraries, rootblock]);
+
+  const mutationCreate = useMutationWithCacheInvalidation(
+    (data: CreateApplicationRequest) => RESTApi.createApplication(data),
+    CacheInvalidationPresets.createApplication,
+    {
+      onError: (data: HTTPError) => {
+        setValidated(data.descriptionMessage || 'Failed to create application');
+      },
+      onSuccess: () => {
+        setValidated(undefined);
+
+        // Clear form state to prepare for potential next use
+        setName('');
+        setRootblock('');
+
+        // Small delay to allow for smooth transition
+        setTimeout(() => {
+          onSubmit();
+        }, 100);
+      }
+    }
+  );
 
   const handleNameChange = useCallback(
     (_: FormEvent<HTMLInputElement>, newName: string) => {
@@ -139,11 +150,6 @@ const ApplicationForm: FC<{
           onChange={handleRootblockChange}
           isDisabled={mutationCreate.isPending || isLoadingLibraries}
         >
-          <FormSelectOption
-            isDisabled
-            value=""
-            label={isLoadingLibraries ? 'Loading blocks...' : 'Select a root block...'}
-          />
           {!isLoadingLibraries && toplevelBlocks.length === 0 && (
             <FormSelectOption isDisabled value="" label="No toplevel blocks available" />
           )}

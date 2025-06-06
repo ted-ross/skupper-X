@@ -1,10 +1,11 @@
 import { useState, FC, FormEvent, useCallback, useEffect } from 'react';
 import { Form, FormGroup, TextInput, FormAlert, Alert, FormSelect, FormSelectOption } from '@patternfly/react-core';
-import { useMutation, useSuspenseQuery } from '@tanstack/react-query';
+import { useSuspenseQuery } from '@tanstack/react-query';
 
 import { RESTApi } from '../../../API/REST.api';
-import { LinkRequest, HTTPError } from '../../../API/REST.interfaces';
+import { LinkRequest, HTTPError, AccessPointResponse } from '../../../API/REST.interfaces';
 import { useModalActions } from '../../../core/hooks/useModalActions';
+import { useMutationWithCacheInvalidation, CacheInvalidationPresets } from '../../../core/hooks/useMutationWithCacheInvalidation';
 import labels from '../../../core/config/labels';
 import { QueriesBackbones } from '../Backbones.enum';
 
@@ -15,7 +16,7 @@ const LinkForm: FC<{
   onCancel: () => void;
 }> = function ({ bid, sid, onSubmit, onCancel }) {
   const [validated, setValidated] = useState<string | undefined>();
-  const [connectingSite, setConnectingSite] = useState<string | undefined>();
+  const [selectedAccessPointId, setSelectedAccessPointId] = useState<string | undefined>();
   const [cost, setCost] = useState<string>('1');
 
   const { data: sites } = useSuspenseQuery({
@@ -23,22 +24,26 @@ const LinkForm: FC<{
     queryFn: () => RESTApi.fetchSites(bid)
   });
 
-  const { data: accessPoints } = useSuspenseQuery({
-    queryKey: ['accessPoints', sid],
-    queryFn: () => RESTApi.fetchAccessPointsForSite(sid)
+  // Fetch all access points for the backbone to find peer access points in other sites
+  const { data: allAccessPoints } = useSuspenseQuery({
+    queryKey: ['allAccessPoints', bid],
+    queryFn: () => RESTApi.fetchAccessPointsForBackbone(bid)
   });
 
-  const mutationCreate = useMutation({
-    mutationFn: ({ accessPointId, linkData }: { accessPointId: string; linkData: LinkRequest }) =>
+  const mutationCreate = useMutationWithCacheInvalidation(
+    ({ accessPointId, linkData }: { accessPointId: string; linkData: LinkRequest }) =>
       RESTApi.createLink(accessPointId, linkData),
-    onError: (data: HTTPError) => {
-      setValidated(data.descriptionMessage);
-    },
-    onSuccess: onSubmit
-  });
+    CacheInvalidationPresets.createLink(bid),
+    {
+      onError: (data: HTTPError) => {
+        setValidated(data.descriptionMessage);
+      },
+      onSuccess: onSubmit
+    }
+  );
 
-  const handleConnectingSiteChange = (_: FormEvent<HTMLSelectElement>, site: string) => {
-    setConnectingSite(site);
+  const handleAccessPointChange = (_: FormEvent<HTMLSelectElement>, accessPointId: string) => {
+    setSelectedAccessPointId(accessPointId);
   };
 
   const handleCostChange = (_: FormEvent<HTMLInputElement>, value: string) => {
@@ -55,26 +60,38 @@ const LinkForm: FC<{
     setCost(value);
   };
 
+  // Filter peer access points from other sites (exclude current site)
+  const availablePeerAccessPoints =
+    allAccessPoints?.filter((ap: AccessPointResponse) => ap.kind === 'peer' && ap.interiorsite !== sid) || [];
+
+  // Create a mapping of access point ID to site name for display
+  const siteNameMap =
+    sites?.reduce(
+      (acc, site) => {
+        acc[site.id] = site.name;
+        return acc;
+      },
+      {} as Record<string, string>
+    ) || {};
+
   const handleSubmit = useCallback(() => {
-    if (!connectingSite) {
+    if (!selectedAccessPointId) {
       setValidated(labels.validation.bothAccessPointsRequired);
       return;
     }
 
-    // Find the first available peer access point
-    const peerAccessPoints = accessPoints?.filter((ap) => ap.kind === 'peer');
-    if (!peerAccessPoints || peerAccessPoints.length === 0) {
+    if (availablePeerAccessPoints.length === 0) {
       setValidated('No peer access points available for creating links');
       return;
     }
 
     const linkData = {
-      connectingsite: connectingSite,
+      connectingsite: sid, // The current site is the connecting site
       cost: Number(cost || '1')
     } as LinkRequest;
 
-    mutationCreate.mutate({ accessPointId: peerAccessPoints[0].id, linkData });
-  }, [connectingSite, cost]);
+    mutationCreate.mutate({ accessPointId: selectedAccessPointId, linkData });
+  }, [selectedAccessPointId, cost, sid, availablePeerAccessPoints.length, mutationCreate]);
 
   // Setup modal actions
   useModalActions({
@@ -86,14 +103,11 @@ const LinkForm: FC<{
   });
 
   useEffect(() => {
-    if (sites && sites.length > 0) {
-      // Filter out the current site from connecting sites
-      const otherSites = sites.filter((site) => site.id !== sid);
-      if (otherSites.length > 0) {
-        setConnectingSite(otherSites[0].id);
-      }
+    // Auto-select the first available peer access point
+    if (availablePeerAccessPoints.length > 0 && !selectedAccessPointId) {
+      setSelectedAccessPointId(availablePeerAccessPoints[0].id);
     }
-  }, [sid, sites]);
+  }, [availablePeerAccessPoints, selectedAccessPointId]);
 
   return (
     <Form isHorizontal>
@@ -104,10 +118,11 @@ const LinkForm: FC<{
       )}
 
       <FormGroup label="Dest. Site/AP" isRequired fieldId="link-connecting-site">
-        <FormSelect id={`link-connecting-site-select`} value={connectingSite} onChange={handleConnectingSiteChange}>
-          {sites
-            ?.filter((site) => site.id !== sid)
-            .map((site) => <FormSelectOption key={`connecting-${site.id}`} value={site.id} label={site.name} />)}
+        <FormSelect id={`link-connecting-site-select`} value={selectedAccessPointId} onChange={handleAccessPointChange}>
+          {availablePeerAccessPoints.map((ap) => {
+            const siteName = siteNameMap[ap.interiorsite] || 'Unknown Site';
+            return <FormSelectOption key={`ap-${ap.id}`} value={ap.id} label={`${siteName}/${ap.name}`} />;
+          })}
         </FormSelect>
       </FormGroup>
       <FormGroup label="Cost" fieldId="link-cost">

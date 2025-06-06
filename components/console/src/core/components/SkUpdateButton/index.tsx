@@ -18,6 +18,10 @@ export const refreshDataIntervalMap = [
     value: 0
   },
   {
+    key: '5s',
+    value: 5 * 1000
+  },
+  {
     key: '15s',
     value: 15 * 1000
   },

@@ -39,13 +39,7 @@ export async function BuildLibraryTable() {
     }
 
     const btresponse = await fetch('/compose/v1alpha1/library/blocktypes');
-    const blockTypesArray = await btresponse.json();
-    
-    // Convert array to object indexed by type name
-    const blockTypes = {};
-    for (const bt of blockTypesArray) {
-        blockTypes[bt.type] = bt;
-    }
+    const blockTypes = await btresponse.json();
 
     const irresponse     = await fetch('/compose/v1alpha1/interfaceroles');
     const interfaceRoles = await irresponse.json();
@@ -177,12 +171,6 @@ async function LibTabSheet(lbid, blockTypes, interfaceRoles, libraryBlocks) {
     const result    = await fetch(`/compose/v1alpha1/library/blocks/${lbid}`);
     const block     = await result.json();
     const blockType = blockTypes[block.type];
-
-    if (!blockType) {
-        console.error(`Block type ${block.type} not found in blockTypes:`, blockTypes);
-        panel.innerHTML = `<h2>Error: Unknown block type: ${block.type}</h2>`;
-        return;
-    }
 
     let headerDiv  = document.createElement('div');
     headerDiv.className = 'onerow'

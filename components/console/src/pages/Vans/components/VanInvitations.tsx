@@ -13,25 +13,21 @@ import {
   AlertActionCloseButton,
   Split,
   SplitItem,
-  Modal,
-  ModalVariant,
-  ModalHeader,
-  ModalBody,
-  EmptyState,
-  EmptyStateBody,
   Title,
   Toolbar,
   ToolbarContent,
   ToolbarGroup,
   ToolbarItem
 } from '@patternfly/react-core';
-import { TrashIcon, TimesIcon, EnvelopeIcon } from '@patternfly/react-icons';
+import { TrashIcon, OutlinedClockIcon, EnvelopeIcon } from '@patternfly/react-icons';
 
 import InvitationForm from './InvitationForm';
 import { RESTApi } from '../../../API/REST.api';
 import { InvitationResponse } from '../../../API/REST.interfaces';
 import { CreateButton } from '../../../core/components/ActionButtons';
+import EmptyData from '../../../core/components/EmptyData';
 import LocaleDateTimeCell from '../../../core/components/LocaleDateTimeCell';
+import ModalWrapper from '../../../core/components/ModalWrapper';
 import { useVanDetails } from '../hooks/useVanDetails';
 import { useVanInvitationOperations } from '../hooks/useVanInvitationOperations';
 import labels from '../../../core/config/labels';
@@ -72,9 +68,10 @@ const VanInvitations: FC<VanInvitationsProps> = function ({ vanId }) {
         const van = await RESTApi.searchVan(vanId);
         const backboneId = van.backboneid;
 
-        // Fetch claim and member access points
-        const claimList = await RESTApi.fetchAccessClaims(backboneId);
-        const memberList = await RESTApi.fetchAccessMember(backboneId);
+        // Fetch all access points using admin API and filter client-side
+        const accessPoints = await RESTApi.fetchAccessPointsForBackbone(backboneId);
+        const claimList = accessPoints.filter((ap) => ap.kind === 'claim');
+        const memberList = accessPoints.filter((ap) => ap.kind === 'member');
         if (!cancelled) {
           const claimId = claimList?.[0]?.id;
           const memberId = memberList?.[0]?.id;
@@ -172,6 +169,7 @@ const VanInvitations: FC<VanInvitationsProps> = function ({ vanId }) {
               {labels.descriptions.invitations}
             </Flex>
           </ToolbarItem>
+          as 'alignRight'
           <ToolbarGroup align={{ default: 'alignEnd' }}>
             <ToolbarItem>
               <CreateButton
@@ -249,17 +247,17 @@ const VanInvitations: FC<VanInvitationsProps> = function ({ vanId }) {
                   </DataListCell>,
                   <DataListCell key="actions" width={1}>
                     <Split hasGutter>
-                      {invitation.lifecycle === 'ready' && (
+                      {!isExpiring && (
                         <SplitItem>
                           <Button
                             variant="link"
-                            icon={<TimesIcon />}
+                            icon={<OutlinedClockIcon />}
                             onClick={() => handleExpireInvitation(invitation.id)}
                             size="sm"
                             isLoading={isExpiring}
                             isDisabled={isExpiring}
                           >
-                            {isExpiring ? labels.generic.evicting : labels.buttons.delete}
+                            {labels.buttons.expire}
                           </Button>
                         </SplitItem>
                       )}
@@ -286,26 +284,21 @@ const VanInvitations: FC<VanInvitationsProps> = function ({ vanId }) {
       </DataList>
 
       {invitations.length === 0 && (
-        <EmptyState>
-          <EnvelopeIcon />
-          <Title headingLevel="h4" size="lg">
-            {labels.emptyStates.noInvitationsFound} {vanDetails?.name || vanId}
-          </Title>
-          <EmptyStateBody>{labels.emptyStates.noInvitationsDescription}</EmptyStateBody>
-        </EmptyState>
+        <EmptyData
+          icon={EnvelopeIcon}
+          message={`${labels.emptyStates.noInvitationsFound} ${vanDetails?.name || vanId}`}
+          description={labels.emptyStates.noInvitationsDescription}
+        />
       )}
 
-      <Modal variant={ModalVariant.medium} isOpen={isModalOpen} onClose={handleModalCancel}>
-        <ModalHeader title={labels.buttons.addInvitation} />
-        <ModalBody>
-          <InvitationForm
-            vanId={vanId}
-            onSubmit={handleModalSubmit}
-            onCancel={handleModalCancel}
-            onRefresh={refreshInvitations}
-          />
-        </ModalBody>
-      </Modal>
+      <ModalWrapper isOpen={isModalOpen} onClose={handleModalCancel} title={labels.buttons.addInvitation}>
+        <InvitationForm
+          vanId={vanId}
+          onSubmit={handleModalSubmit}
+          onCancel={handleModalCancel}
+          onRefresh={refreshInvitations}
+        />
+      </ModalWrapper>
     </>
   );
 };

@@ -62,29 +62,12 @@ exports.Start = async function (k8s_mod, fs_mod, yaml_mod, standalone_namespace)
     fs   = fs_mod;
     YAML = yaml_mod;
 
-    if (standalone_namespace) {
-        // Standalone mode - skip Kubernetes API client initialization
-        Log(`[Kube module] Running in standalone mode, namespace: ${standalone_namespace}`);
-        namespace = standalone_namespace;
-        
-        // Initialize dummy objects to prevent errors
-        client = null;
-        v1Api = null;
-        v1AppApi = null;
-        customApi = null;
-        secretWatch = null;
-        certificateWatch = null;
-        configMapWatch = null;
-        routeWatch = null;
-        serviceWatch = null;
-        podWatch = null;
-        
-        return;
-    }
-
-    // Cluster mode - normal Kubernetes API initialization
     kc = new k8s.KubeConfig();
-    kc.loadFromCluster();
+    if (!standalone_namespace) {
+        kc.loadFromCluster();
+    } else {
+        kc.loadFromDefault();
+    }
 
     client    = k8s.KubernetesObjectApi.makeApiClient(kc);
     v1Api     = kc.makeApiClient(k8s.CoreV1Api);
@@ -99,7 +82,11 @@ exports.Start = async function (k8s_mod, fs_mod, yaml_mod, standalone_namespace)
     podWatch         = new k8s.Watch(kc);
 
     try {
-        namespace = fs.readFileSync('/var/run/secrets/kubernetes.io/serviceaccount/namespace', 'utf8');
+        if (standalone_namespace) {
+            namespace = standalone_namespace;
+        } else {
+            namespace = fs.readFileSync('/var/run/secrets/kubernetes.io/serviceaccount/namespace', 'utf8');
+        }
         Log(`Running in namespace: ${namespace}`);
     } catch (err) {
         Log(`Unable to determine namespace, assuming ${namespace}`);
@@ -107,10 +94,6 @@ exports.Start = async function (k8s_mod, fs_mod, yaml_mod, standalone_namespace)
 }
 
 exports.GetIssuers = async function() {
-    if (!customApi) {
-        Log('[Kube module] GetIssuers called in standalone mode - returning empty list');
-        return [];
-    }
     let list = await customApi.listNamespacedCustomObject(
         'cert-manager.io',
         'v1',
@@ -142,10 +125,6 @@ exports.DeleteIssuer = async function(name) {
 }
 
 exports.GetCertificates = async function() {
-    if (!customApi) {
-        Log('[Kube module] GetCertificates called in standalone mode - returning empty list');
-        return [];
-    }
     let list = await customApi.listNamespacedCustomObject(
         'cert-manager.io',
         'v1',
@@ -156,9 +135,6 @@ exports.GetCertificates = async function() {
 }
 
 exports.LoadCertificate = async function(name) {
-    if (!customApi) {
-        throw new Error('[Kube module] LoadCertificate called in standalone mode');
-    }
     let cert = await customApi.getNamespacedCustomObject(
         'cert-manager.io',
         'v1',
@@ -170,10 +146,6 @@ exports.LoadCertificate = async function(name) {
 }
 
 exports.DeleteCertificate = async function(name) {
-    if (!customApi) {
-        Log('[Kube module] DeleteCertificate called in standalone mode - ignoring');
-        return;
-    }
     await customApi.deleteNamespacedCustomObject(
         'cert-manager.io',
         'v1',
@@ -184,18 +156,11 @@ exports.DeleteCertificate = async function(name) {
 }
 
 exports.GetSecrets = async function() {
-    if (!v1Api) {
-        Log('[Kube module] GetSecrets called in standalone mode - returning empty list');
-        return [];
-    }
     let list = await v1Api.listNamespacedSecret(namespace);
     return list.body.items;
 }
 
 exports.LoadSecret = async function(name) {
-    if (!v1Api) {
-        throw new Error('[Kube module] LoadSecret called in standalone mode');
-    }
     let secret = await v1Api.readNamespacedSecret(name, namespace);
     return secret.body;
 }
@@ -269,24 +234,34 @@ exports.DeleteService = async function(name) {
 }
 
 exports.GetRoutes = async function() {
-    let list = await customApi.listNamespacedCustomObject(
-        'route.openshift.io',
-        'v1',
-        namespace,
-        'routes'
-    );
-    return list.body.items;
+    try {
+        let list = await customApi.listNamespacedCustomObject(
+            'route.openshift.io',
+            'v1',
+            namespace,
+            'routes'
+        );
+        return list.body.items;
+    } catch (error) {
+        // Routes are not available (not running on OpenShift)
+        return [];
+    }
 }
 
 exports.DeleteRoute = async function(name) {
-    Log(`Kube - Deleting route ${name}`);
-    await customApi.deleteNamespacedCustomObject(
-        'route.openshift.io',
-        'v1',
-        namespace,
-        'routes',
-        name
-    );
+    try {
+        Log(`Kube - Deleting route ${name}`);
+        await customApi.deleteNamespacedCustomObject(
+            'route.openshift.io',
+            'v1',
+            namespace,
+            'routes',
+            name
+        );
+    } catch (error) {
+        // Routes are not available (not running on OpenShift)
+        Log(`Route deletion skipped - OpenShift routes not available: ${name}`);
+    }
 }
 
 exports.LoadDeployment = async function(name) {
@@ -473,11 +448,6 @@ exports.WatchPods = function(callback) {
 }
 
 exports.ApplyObject = async function(obj) {
-    if (!client) {
-        Log(`[Kube module] ApplyObject called in standalone mode for ${obj.kind} ${obj.metadata.name} - skipping`);
-        return null;
-    }
-    
     try {
         if (obj.metadata.annotations == undefined) {
             obj.metadata.annotations = {};

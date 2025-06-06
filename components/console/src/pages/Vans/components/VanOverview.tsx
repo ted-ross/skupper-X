@@ -39,8 +39,8 @@ const VanOverview: FC<VanOverviewProps> = function ({ van, vanId }) {
                 <DescriptionListDescription>
                   <LinkCell
                     data={van}
-                    value={van.backbonename || van.backboneId}
-                    link={`${BackbonesPaths.path}/${van.backbonename}@${van.backboneId}`}
+                    value={van.backbonename || van.backboneid}
+                    link={`${BackbonesPaths.path}/${van.backbonename}@${van.backboneid}`}
                     type="backbone"
                   />
                 </DescriptionListDescription>

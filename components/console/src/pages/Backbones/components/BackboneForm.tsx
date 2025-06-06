@@ -1,11 +1,11 @@
 import { useState, FC, FormEvent, useCallback } from 'react';
 
 import { Form, FormGroup, TextInput, FormAlert, Alert, Checkbox } from '@patternfly/react-core';
-import { useMutation } from '@tanstack/react-query';
 
 import { RESTApi } from '../../../API/REST.api';
 import { BackboneRequest, HTTPError } from '../../../API/REST.interfaces';
 import { useModalActions } from '../../../core/hooks/useModalActions';
+import { useMutationWithCacheInvalidation, CacheInvalidationPresets } from '../../../core/hooks/useMutationWithCacheInvalidation';
 import labels from '../../../core/config/labels';
 
 const BackboneForm: FC<{
@@ -16,26 +16,27 @@ const BackboneForm: FC<{
   const [name, setName] = useState<string>('');
   const [multitenant, setMultitenant] = useState<boolean>(true);
 
-  const mutationCreate = useMutation({
-    mutationFn: (data: BackboneRequest) => {
-      return RESTApi.createBackbone(data);
-    },
-    onError: (data: HTTPError) => {
-      setValidated(data.descriptionMessage);
-    },
-    onSuccess: () => {
-      setValidated(undefined);
+  const mutationCreate = useMutationWithCacheInvalidation(
+    (data: BackboneRequest) => RESTApi.createBackbone(data),
+    CacheInvalidationPresets.createBackbone,
+    {
+      onError: (data: HTTPError) => {
+        setValidated(data.descriptionMessage);
+      },
+      onSuccess: () => {
+        setValidated(undefined);
 
-      // Clear form state to prepare for potential next use
-      setName('');
-      setMultitenant(true);
+        // Clear form state to prepare for potential next use
+        setName('');
+        setMultitenant(true);
 
-      // Small delay to allow for smooth transition
-      setTimeout(() => {
-        onSubmit();
-      }, 100);
+        // Small delay to allow for smooth transition
+        setTimeout(() => {
+          onSubmit();
+        }, 100);
+      }
     }
-  });
+  );
 
   const handleNameChange = useCallback(
     (_: FormEvent<HTMLInputElement>, newName: string) => {

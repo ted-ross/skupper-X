@@ -23,17 +23,18 @@ const modules = [
   'site-templates',
   'site-deployment-state',
   'certs',
+  'claim-server',
+  'compose',
   'config',
+  'crd-templates',
   'db',
-  'sync-management',
-  'sync-application',
+  'gotemplate',
+  'ident',
   'mc-apiserver',
   'mc-main',
   'prune',
-  'compose',
-  'crd-templates',
-  'ident',
-  'claim-server',
+  'sync-application',
+  'sync-management',
 ];
 
 // List of common modules to copy to the application directory
@@ -105,8 +106,21 @@ async function copyCommonModules() {
 
 // Function to copy the build from the console directory to the application directory
 async function copyConsoleBuild() {
-  // Check if the source directory exists
-  await fs.access(consoleBuildSourceDir);
+  // Check if console build exists, if not build it first
+  try {
+    await fs.access(consoleBuildSourceDir);
+    console.log('Console build found, proceeding with copy...');
+  } catch (error) {
+    console.log('Console build not found, building console first...');
+    const { execSync } = require('child_process');
+    try {
+      execSync('cd ../console && yarn build', { stdio: 'inherit', cwd: currentDir });
+      console.log('Console build completed successfully.');
+    } catch (buildError) {
+      throw new Error(`Failed to build console: ${buildError.message}`);
+    }
+  }
+  
   // Create the destination directory if it doesn't exist
   await fs.mkdir(appConsoleSrcDir, { recursive: true });
 

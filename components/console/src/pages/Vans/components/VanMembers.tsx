@@ -10,8 +10,6 @@ import {
   Button,
   Alert,
   AlertActionCloseButton,
-  EmptyState,
-  EmptyStateBody,
   Title,
   Toolbar,
   ToolbarContent,
@@ -20,6 +18,7 @@ import {
 } from '@patternfly/react-core';
 import { TrashIcon, UsersIcon } from '@patternfly/react-icons';
 
+import EmptyData from '../../../core/components/EmptyData';
 import LocaleDateTimeCell from '../../../core/components/LocaleDateTimeCell';
 import { useVanDetails } from '../hooks/useVanDetails';
 import { useVanSiteOperations } from '../hooks/useVanSiteOperations';
@@ -171,13 +170,11 @@ const VanMembers: FC<VanMembersProps> = function ({ vanId }) {
       </DataList>
 
       {memberSites.length === 0 && (
-        <EmptyState>
-          <UsersIcon />
-          <Title headingLevel="h4" size="lg">
-            {labels.errors.noMembersFound} {van?.name || vanId}
-          </Title>
-          <EmptyStateBody>{labels.errors.noMembersDescription}</EmptyStateBody>
-        </EmptyState>
+        <EmptyData
+          icon={UsersIcon}
+          message={`${labels.errors.noMembersFound} ${van?.name || vanId}`}
+          description={labels.errors.noMembersDescription}
+        />
       )}
     </>
   );

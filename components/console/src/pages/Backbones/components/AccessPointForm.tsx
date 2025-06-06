@@ -1,32 +1,36 @@
 import { useState, FC, useCallback } from 'react';
 
 import { Form, FormGroup, TextInput, FormAlert, Alert, FormSelect, FormSelectOption } from '@patternfly/react-core';
-import { useMutation } from '@tanstack/react-query';
 
 import { RESTApi } from '../../../API/REST.api';
 import { AccessPointRequest, HTTPError } from '../../../API/REST.interfaces';
 import { useModalActions } from '../../../core/hooks/useModalActions';
+import { useMutationWithCacheInvalidation, CacheInvalidationPresets } from '../../../core/hooks/useMutationWithCacheInvalidation';
 import labels from '../../../core/config/labels';
 
 const AccessPointForm: FC<{
+  bid: string;
   siteId: string;
   onSubmit: () => void;
   onCancel: () => void;
-}> = function ({ siteId, onSubmit, onCancel }) {
+}> = function ({ bid, siteId, onSubmit, onCancel }) {
   const [validated, setValidated] = useState<string | undefined>();
   const [name, setName] = useState<string>('');
   const [kind, setKind] = useState<'claim' | 'peer' | 'member' | 'manage'>('claim');
   const [bindhost, setBindhost] = useState<string>('');
 
-  const mutationCreate = useMutation({
-    mutationFn: (data: AccessPointRequest) => RESTApi.createAccessPoint(siteId, data),
-    onError: (data: HTTPError) => {
-      setValidated(data.descriptionMessage);
-    },
-    onSuccess: () => {
-      onSubmit();
+  const mutationCreate = useMutationWithCacheInvalidation(
+    (data: AccessPointRequest) => RESTApi.createAccessPoint(siteId, data),
+    CacheInvalidationPresets.createAccessPoint(bid),
+    {
+      onError: (data: HTTPError) => {
+        setValidated(data.descriptionMessage);
+      },
+      onSuccess: () => {
+        onSubmit();
+      }
     }
-  });
+  );
 
   const handleSubmit = useCallback(() => {
     setValidated(undefined);

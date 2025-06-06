@@ -37,29 +37,26 @@ const InvitationForm: FC<InvitationFormProps> = function ({ vanId, onSubmit, onC
   const [interactive, setInteractive] = useState<boolean>(false);
   const [unlimited, setUnlimited] = useState<boolean>(false);
 
-  // Fetch access points data
-  const [, { data: claims }, { data: members }] = useQueries({
+  // Fetch access points data using admin API
+  const [, { data: accessPoints }] = useQueries({
     queries: [
       {
         queryKey: ['van', vanId],
         queryFn: () => RESTApi.searchVan(vanId)
       },
       {
-        queryKey: ['claimAccess', vanId],
+        queryKey: ['accessPoints', vanId],
         queryFn: async () => {
           const vanData = await RESTApi.searchVan(vanId);
-          return RESTApi.fetchAccessClaims(vanData.backboneid);
-        }
-      },
-      {
-        queryKey: ['memberAccess', vanId],
-        queryFn: async () => {
-          const vanData = await RESTApi.searchVan(vanId);
-          return RESTApi.fetchAccessMember(vanData.backboneid);
+          return RESTApi.fetchAccessPointsForBackbone(vanData.backboneid);
         }
       }
     ]
   });
+
+  // Filter access points by kind
+  const claims = accessPoints?.filter((ap) => ap.kind === 'claim') || [];
+  const members = accessPoints?.filter((ap) => ap.kind === 'member') || [];
 
   const mutationCreate = useMutation({
     mutationFn: (data: InvitationRequest) => RESTApi.createInvitation(vanId, data),
@@ -145,13 +142,13 @@ const InvitationForm: FC<InvitationFormProps> = function ({ vanId, onSubmit, onC
 
   // Set default values when data is loaded
   useEffect(() => {
-    if (claims?.length && !claimAccessId) {
+    if (claims.length && !claimAccessId) {
       setClaimAccessId(claims[0].id);
     }
   }, [claims, claimAccessId]);
 
   useEffect(() => {
-    if (members?.length && !memberAccessId) {
+    if (members.length && !memberAccessId) {
       setMemberAccessId(members[0].id);
     }
   }, [members, memberAccessId]);
@@ -191,24 +188,26 @@ const InvitationForm: FC<InvitationFormProps> = function ({ vanId, onSubmit, onC
           value={claimAccessId}
           onChange={handleClaimAccessChange}
           aria-label={labels.forms.selectClaimAccessPoint}
-          isDisabled={!claims?.length}
+          isDisabled={!claims.length}
         >
-          {claims?.map((claim) => <FormSelectOption key={claim.id} value={claim.id} label={claim.name} />)}
+          {claims.map((claim) => (
+            <FormSelectOption key={claim.id} value={claim.id} label={claim.name} />
+          ))}
         </FormSelect>
-        {!claims?.length && (
-          <div className="sk-text-secondary sk-margin-top-xs">{labels.forms.noClaimAccessPoints}</div>
-        )}
+        {!claims.length && <div className="sk-text-secondary sk-margin-top-xs">{labels.forms.noClaimAccessPoints}</div>}
       </FormGroup>
       <FormGroup isRequired label={labels.forms.memberAccessPoint} fieldId="member-access">
         <FormSelect
           value={memberAccessId}
           onChange={handleMemberAccessChange}
           aria-label={labels.forms.selectMemberAccessPoint}
-          isDisabled={!members?.length}
+          isDisabled={!members.length}
         >
-          {members?.map((member) => <FormSelectOption key={member.id} value={member.id} label={member.name} />)}
+          {members.map((member) => (
+            <FormSelectOption key={member.id} value={member.id} label={member.name} />
+          ))}
         </FormSelect>
-        {!members?.length && (
+        {!members.length && (
           <div className="sk-text-secondary sk-margin-top-xs">{labels.forms.noMemberAccessPoints}</div>
         )}
       </FormGroup>

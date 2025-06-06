@@ -154,6 +154,7 @@ export interface VanRequest {
 export interface VanResponse {
   id: string;
   name: string;
+  backbone: string;
   backboneid: string;
   backbonename: string;
   lifecycle: NetworkLifeCycleStatus;
@@ -290,6 +291,21 @@ export interface DeploymentRequest {
 
 export interface DeploymentResponse {
   id: string;
+  lifecycle: string;
+  application: string;
+  van: string;
+  appname: string;
+  vanname: string;
+}
+
+export interface DeploymentDetailsResponse {
+  id: string;
+  lifecycle: string;
+  application: string;
+  van: string;
+  appname: string;
+  vanname: string;
+  deploylog?: string;
 }
 
 export interface TlsCertificateResponse {
@@ -358,10 +374,14 @@ export interface HeartbeatRequest {
 
 export interface LibraryBlockTypeResponse {
   type: string;
-  description?: string;
   allownorth: boolean;
   allowsouth: boolean;
   allocatetosite: boolean;
+}
+
+// Object map format returned by the backend API
+export interface LibraryBlockTypeMap {
+  [blockTypeName: string]: LibraryBlockTypeResponse;
 }
 
 export interface LibraryBlockHistoryResponse {

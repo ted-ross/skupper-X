@@ -8,7 +8,7 @@ import { hexColors } from '../../../config/colors';
 import './ResourceIcon.css';
 
 interface ResourceIconProps {
-  type: 'site' | 'backbone' | 'link' | 'van' | 'invitation' | 'accessPoint' | 'library' | 'application';
+  type: 'site' | 'backbone' | 'link' | 'van' | 'invitation' | 'accessPoint' | 'library' | 'application' | 'deployment';
 }
 
 const RESOURCE_MAP = {
@@ -51,6 +51,11 @@ const RESOURCE_MAP = {
     class: 'sk-resource-applcation',
     symbol: 'A',
     style: { background: hexColors.Blue100, color: hexColors.Black900 }
+  },
+  deployment: {
+    class: 'sk-resource-deployment',
+    symbol: 'D',
+    style: { background: hexColors.Cyan500, color: hexColors.White }
   }
 };
 

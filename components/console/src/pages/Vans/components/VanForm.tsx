@@ -1,4 +1,4 @@
-import { useState, FC, FormEvent, useCallback } from 'react';
+import { useState, FC, FormEvent, useCallback, useEffect } from 'react';
 
 import {
   Form,
@@ -10,11 +10,12 @@ import {
   FormSelectOption,
   Checkbox
 } from '@patternfly/react-core';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import { RESTApi } from '../../../API/REST.api';
 import { VanRequest, HTTPError } from '../../../API/REST.interfaces';
 import { useModalActions } from '../../../core/hooks/useModalActions';
+import { useMutationWithCacheInvalidation, CacheInvalidationPresets } from '../../../core/hooks/useMutationWithCacheInvalidation';
 import labels from '../../../core/config/labels';
 import { QueriesBackbones } from '../../Backbones/Backbones.enum';
 
@@ -35,13 +36,23 @@ const VanForm: FC<{
     queryFn: () => RESTApi.fetchBackbones()
   });
 
-  const mutationCreate = useMutation({
-    mutationFn: (data: { bid: string; request: VanRequest }) => RESTApi.createVan(data.bid, data.request),
-    onError: (data: HTTPError) => {
-      setValidated(data.descriptionMessage);
-    },
-    onSuccess: onSubmit
-  });
+  // Auto-select the first backbone when data loads
+  useEffect(() => {
+    if (backbones && backbones.length > 0 && !bid) {
+      setBid(backbones[0].id);
+    }
+  }, [backbones, bid]);
+
+  const mutationCreate = useMutationWithCacheInvalidation(
+    (data: { bid: string; request: VanRequest }) => RESTApi.createVan(data.bid, data.request),
+    CacheInvalidationPresets.createVan,
+    {
+      onError: (data: HTTPError) => {
+        setValidated(data.descriptionMessage);
+      },
+      onSuccess: onSubmit
+    }
+  );
 
   const handleBackboneChange = useCallback((_: FormEvent<HTMLSelectElement>, value: string) => {
     setBid(value);
@@ -123,7 +134,6 @@ const VanForm: FC<{
       </FormGroup>
       <FormGroup label={labels.navigation.backbones} fieldId="van-backbone">
         <FormSelect value={bid} onChange={handleBackboneChange} id="van-backbone" name="van-backbone">
-          <FormSelectOption value="" label={labels.navigation.backbones} isDisabled />
           {backbones?.map((option: any) => <FormSelectOption key={option.id} value={option.id} label={option.name} />)}
         </FormSelect>
       </FormGroup>

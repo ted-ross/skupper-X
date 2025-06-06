@@ -45,17 +45,17 @@ export const backboneColumns: SKColumn<BackboneResponse>[] = [
 
 export const siteColumns: SKColumn<BackboneSiteResponse>[] = [
   {
-    name: labels.forms.name,
+    name: labels.columns.name,
     prop: 'name',
     customCellName: 'linkCell'
   },
   {
-    name: labels.forms.status,
+    name: labels.columns.status,
     prop: 'lifecycle',
     customCellName: 'lifecycleCell'
   },
   {
-    name: labels.forms.type,
+    name: labels.columns.deploymentStatus,
     prop: 'deploymentstate',
     customCellName: 'deploymentStateCell'
   },

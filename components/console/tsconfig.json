@@ -2,8 +2,8 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["dom", "es2022"],
-    "module": "es2022",
-    "moduleResolution": "node",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "typeRoots": ["node_modules/@types"],
     "baseUrl": "src",
@@ -22,8 +22,10 @@
     "strictFunctionTypes": true,
     "noUnusedParameters": true,
     "noUnusedLocals": true,
-    "strictPropertyInitialization": true
+    "strictPropertyInitialization": true,
+    "allowImportingTsExtensions": false,
+    "isolatedModules": true
   },
-  "include": ["src/**/*", "jest.config.ts", "mocks/*.ts"],
+  "include": ["src/**/*", "jest.config.ts", "mocks/*.ts", "vite.config.ts", "eslint.config.js"],
   "exclude": ["node_modules", "build"]
 }

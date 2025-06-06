@@ -1,7 +1,6 @@
 import { Breadcrumb, BreadcrumbHeading, BreadcrumbItem } from '@patternfly/react-core';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 
-import { getTestsIds } from '../../../config/testIds';
 import { getIdAndNameFromUrlParams } from '../../utils/getIdAndNameFromUrlParams';
 
 const SkBreadcrumb = function () {
@@ -28,7 +27,7 @@ const SkBreadcrumb = function () {
       .join(' ');
 
   return (
-    <Breadcrumb data-testid={getTestsIds.breadcrumbComponent()}>
+    <Breadcrumb>
       {pathsNormalized.map((path, index) => {
         const displayName = formatDisplayName(path.name);
 

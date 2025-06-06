@@ -49,10 +49,6 @@ export const getMemberPATH = (id: string) => `${MEMBERS_PATH}/${id}`;
 export const getMembersForVanPATH = (vanId: string) => `${VANS_PATH}/${vanId}/members`;
 export const getEvictMemberPATH = (id: string) => `${MEMBERS_PATH}/${id}/evict`;
 
-// Access and Member Claim paths
-export const getClaimAccessPATH = (backboneId: string) => `${BACKBONES_PATH}/${backboneId}/access/claim`;
-export const getMemberAccessPATH = (backboneId: string) => `${BACKBONES_PATH}/${backboneId}/access/member`;
-
 // TLS Certificate paths
 const TLS_CERTIFICATES_PATH = `${COLLECTOR_URL}/tls-certificates`;
 export const getTlsCertificatePATH = (id: string) => `${TLS_CERTIFICATES_PATH}/${id}`;
@@ -75,7 +71,6 @@ export const getIngressPATH = (siteId: string) => `${COLLECTOR_URL}/backbonesite
 // Library Block paths
 const LIBRARIES_PATH = `${BASE_URL_COLLECTOR}/compose/v1alpha1/library/blocks`;
 export const getLibrariesPATH = () => LIBRARIES_PATH;
-export const getLibrariesJsonPATH = () => `${LIBRARIES_PATH}/json`;
 export const getLibraryPATH = (id: string) => `${LIBRARIES_PATH}/${id}`;
 export const getLibraryConfigPATH = (id: string) => `${LIBRARIES_PATH}/${id}/config`;
 export const getLibraryInterfacesPATH = (id: string) => `${LIBRARIES_PATH}/${id}/interfaces`;
@@ -92,3 +87,10 @@ export const getApplicationPATH = (id: string) => `${APPLICATIONS_PATH}/${id}`;
 export const getApplicationBuildPATH = (id: string) => `${APPLICATIONS_PATH}/${id}/build`;
 export const getApplicationLogPATH = (id: string) => `${APPLICATIONS_PATH}/${id}/log`;
 export const getApplicationBlocksPATH = (id: string) => `${APPLICATIONS_PATH}/${id}/blocks`;
+
+// Deployment paths
+const DEPLOYMENTS_PATH = `${BASE_URL_COLLECTOR}/compose/v1alpha1/deployments`;
+export const getDeploymentsPATH = () => DEPLOYMENTS_PATH;
+export const getDeploymentPATH = (id: string) => `${DEPLOYMENTS_PATH}/${id}`;
+export const getDeploymentDeployPATH = (id: string) => `${DEPLOYMENTS_PATH}/${id}/deploy`;
+export const getDeploymentLogPATH = (id: string) => `${DEPLOYMENTS_PATH}/${id}/log`;
