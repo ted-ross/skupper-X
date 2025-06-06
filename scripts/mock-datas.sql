@@ -212,7 +212,6 @@ INSERT INTO BlockTypes (Name, AllowNorth, AllowSouth, AllocateToSite) VALUES
     ('skupperx.io/mixed', true, true, false),
     ('skupperx.io/ingress', true, false, true),
     ('skupperx.io/egress', false, true, false),
-    ('skupperx.io/container', true, true, true),
     ('microservice', true, true, true),
     ('auth-server', true, false, true),
     ('monitoring', false, true, true),

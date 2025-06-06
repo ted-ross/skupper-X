@@ -99,15 +99,31 @@ const Site = function ({ bid, site }: SiteProps) {
     queryFn: () => RESTApi.fetchLinksForSite(site.id)
   });
 
-  // Fetch all sites in this backbone to check for available destination sites
-  const { data: allSites = [], isLoading: isSitesLoading } = useQuery({
+  // Fetch all access points in this backbone to check for available peer access points
+  const { data: allAccessPoints = [] } = useQuery({
+    queryKey: ['allAccessPoints', bid],
+    queryFn: () => RESTApi.fetchAccessPointsForBackbone(bid)
+  });
+
+  // Fetch all sites in this backbone to get site names for access point display
+  const { data: allSites = [] } = useQuery({
     queryKey: [QueriesBackbones.GetSites, bid],
     queryFn: () => RESTApi.fetchSites(bid)
   });
 
-  // Check if there are available destination sites (excluding current site)
-  const availableDestinationSites = allSites.filter((s) => s.id !== site.id);
-  const hasAvailableDestinationSites = availableDestinationSites.length > 0;
+  // Check if there are available peer access points in other sites
+  const availablePeerAccessPoints = allAccessPoints.filter(
+    (ap) => ap.kind === 'peer' && ap.interiorsite !== site.id
+  );
+  const hasAvailableDestinationSites = availablePeerAccessPoints.length > 0;
+
+  // Create a mapping from access point ID to "sitename/accesspointname" format
+  const accessPointDisplayMap = allAccessPoints.reduce((acc, ap) => {
+    const site = allSites.find(s => s.id === ap.interiorsite);
+    const siteName = site ? site.name : 'Unknown Site';
+    acc[ap.id] = `${siteName}/${ap.name}`;
+    return acc;
+  }, {} as Record<string, string>);
 
   // Helper functions for modal management
   const handleOpenAccessPointModal = useCallback(() => {
@@ -120,8 +136,10 @@ const Site = function ({ bid, site }: SiteProps) {
 
   const handleAccessPointSubmit = useCallback(() => {
     refetchAccessPoints();
+    // Invalidate the allAccessPoints query so LinkForm sees the new access point
+    queryClient.invalidateQueries({ queryKey: ['allAccessPoints', bid] });
     handleCloseAccessPointModal();
-  }, [refetchAccessPoints, handleCloseAccessPointModal]);
+  }, [refetchAccessPoints, queryClient, bid, handleCloseAccessPointModal]);
 
   // Helper functions for link modal management
   const handleOpenLinkModal = useCallback(() => {
@@ -248,7 +266,7 @@ const Site = function ({ bid, site }: SiteProps) {
             <CardTitle>
               <Split hasGutter>
                 <SplitItem>
-                  <TitleSection title={labels.navigation.accessPoints} resourceType="accessPoint" headingLevel={'h2'} />
+                  <TitleSection title={labels.navigation.accessPoints} resourceType="accessPoint" headingLevel={'h4'} />
                 </SplitItem>
                 <SplitItem isFilled />
                 <SplitItem>
@@ -347,19 +365,13 @@ const Site = function ({ bid, site }: SiteProps) {
                   <TitleSection
                     title={labels.navigation.outgoingInterRouterLinks}
                     resourceType="link"
-                    headingLevel={'h2'}
+                    headingLevel={'h4'}
                   />
                 </SplitItem>
                 <SplitItem isFilled />
                 <SplitItem>
-                  {accessPoints.filter((ap) => ap.kind === 'peer').length === 0 ? (
-                    <Tooltip content={labels.errors.linkCreationTooltip}>
-                      <CreateButton icon={<LinkIcon />} onClick={() => {}} disabled>
-                        {labels.buttons.addLinkTitle}
-                      </CreateButton>
-                    </Tooltip>
-                  ) : !hasAvailableDestinationSites ? (
-                    <Tooltip content="You need at least one other site to create a link.">
+                  {!hasAvailableDestinationSites ? (
+                    <Tooltip content={labels.errors.noPeerAccessPointsTooltip}>
                       <CreateButton icon={<LinkIcon />} onClick={() => {}} disabled>
                         {labels.buttons.addLinkTitle}
                       </CreateButton>
@@ -387,9 +399,9 @@ const Site = function ({ bid, site }: SiteProps) {
               </Alert>
             )}
 
-            {(accessPoints.filter((ap) => ap.kind === 'peer').length === 0 || !hasAvailableDestinationSites) && (
-              <Alert variant="warning" title={labels.errors.linkCreationRequiresPeerAccessPoints} isInline>
-                {labels.errors.linkCreationDescription}
+            {!hasAvailableDestinationSites && (
+              <Alert variant="warning" title={labels.errors.noPeerAccessPointsTitle} isInline>
+                {labels.errors.noPeerAccessPointsDescription}
               </Alert>
             )}
 
@@ -413,7 +425,7 @@ const Site = function ({ bid, site }: SiteProps) {
                           <Split hasGutter>
                             <SplitItem>
                               <Title headingLevel="h4" size="md">
-                                {link.accesspoint}
+                                {accessPointDisplayMap[link.accesspoint] || link.accesspoint}
                               </Title>
                             </SplitItem>
                             <SplitItem isFilled />

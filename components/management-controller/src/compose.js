@@ -1304,7 +1304,7 @@ const createLibraryBlock = async function(req, res) {
         let norm;
         let fields;
         
-        // Check if this is a JSON request or form data request
+        // Check if this is a JSON request (console) or form data request (compose-web-app)
         if (req.is('application/json')) {
             // Convert JSON to formidable-style fields format for unified validation
             fields = {};
@@ -1326,18 +1326,14 @@ const createLibraryBlock = async function(req, res) {
             // Handle form data request (existing behavior)
             const form = new formidable.IncomingForm();
             const [parsedFields, files] = await form.parse(req);
-            fields = {};
-            // Extract first element from each formidable field array
-            for (const [key, valueArray] of Object.entries(parsedFields)) {
-                fields[key] = Array.isArray(valueArray) ? valueArray[0] || '' : valueArray;
-            }
+            fields = parsedFields;
         }
         // Use unified validation for both JSON and form data
         norm = util.ValidateAndNormalizeFields(fields, {
             'name'      : {type: 'dnsname', optional: false},
             'type'      : {type: 'string',  optional: false},
             'bodystyle' : {type: 'string',  optional: false},
-            'provider'  : {type: 'dnsname', optional: true},
+            'provider'  : {type: 'dnsname', optional: true, default: ''},
         });
 
         const checkResult = await client.query("SELECT Id FROM LibraryBlocks WHERE Name = $1", [norm.name]);
@@ -1391,17 +1387,15 @@ const getBlockTypes = async function(req, res) {
     try {
         await client.query("BEGIN");
         const result = await client.query("SELECT * FROM BlockTypes");
-        let btArray = [];
+        let btmap = {};
         for (const row of result.rows) {
-            btArray.push({
-                type: row.name,
-                description: row.description || row.name,
-                allownorth: row.allownorth,
-                allowsouth: row.allowsouth,
-                allocatetosite: row.allocatetosite
-            });
+            btmap[row.name] = {
+                allownorth     : row.allownorth,
+                allowsouth     : row.allowsouth,
+                allocatetosite : row.allocatetosite,
+            };
         }
-        res.status(returnStatus).json(btArray);
+        res.status(returnStatus).json(btmap);
         await client.query("COMMIT");
     } catch (error) {
         Log(`Exception in getBlockTypes: ${error.message}`);
@@ -1531,12 +1525,7 @@ const postApplication = async function(req, res) {
             // Handle form data request (existing behavior)
             const form = new formidable.IncomingForm();
             const [parsedFields, files] = await form.parse(req);
-            
-            // Extract first element from each formidable field array
-            fields = {};
-            for (const [key, valueArray] of Object.entries(parsedFields)) {
-                fields[key] = Array.isArray(valueArray) ? valueArray[0] || '' : valueArray;
-            }
+            fields = parsedFields
         }
         
         const norm = util.ValidateAndNormalizeFields(fields, {
@@ -1544,7 +1533,7 @@ const postApplication = async function(req, res) {
             'rootblock' : {type: 'uuid',    optional: false},
         });
 
-        const result = await client.query("INSERT INTO Applications (Name, RootBlock, Lifecycle) VALUES ($1, $2, 'created') RETURNING Id",
+        const result = await client.query("INSERT INTO Applications (Name, RootBlock) VALUES ($1, $2) RETURNING Id",
                                           [norm.name, norm.rootblock]);
         await client.query("COMMIT");
         if (result.rowCount == 1) {
@@ -1685,7 +1674,7 @@ const listApplications = async function(req, res) {
     try {
         await client.query("BEGIN");
         const result = await client.query(
-            "SELECT Applications.Id as id, Applications.Name as name, RootBlock as rootblock, Lifecycle as lifecycle, Applications.Created as created, LibraryBlocks.Name as rootname FROM Applications " +
+            "SELECT Applications.Id, Applications.Name, RootBlock, Lifecycle, LibraryBlocks.Name as rootname FROM Applications " +
             "JOIN LibraryBlocks ON LibraryBlocks.Id = RootBlock"
         );
         res.status(returnStatus).json(result.rows);
@@ -1707,7 +1696,7 @@ const getApplication = async function(apid, req, res) {
     try {
         await client.query("BEGIN");
         const result = await client.query(
-            "SELECT Applications.Id as id, Applications.Name as name, RootBlock as rootblock, Lifecycle as lifecycle, Applications.Created as created, BuildLog as buildlog, LibraryBlocks.Name as rootname FROM Applications " +
+            "SELECT Applications.*, LibraryBlocks.Name as rootname FROM Applications " +
             "JOIN LibraryBlocks ON LibraryBlocks.Id = RootBlock " +
             "WHERE Applications.Id = $1", [apid]
         );
@@ -2089,6 +2078,9 @@ const getInterfaceRoles = async function(req, res) {
 
 }
 
+// API endpoint to get available block body styles from the database enum.
+// This is used by the new React console for dynamic form options,
+// while the old compose web app hardcodes "simple" and "composite" values.
 const getBodyStyles = async function(req, res) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
@@ -2123,13 +2115,20 @@ exports.ApiInit = function(app) {
         await postLibraryBlocks(req, res);
     });
 
+    // compose-web-app -expects form-data (multipart/form-data or application/x-www-form-urlencoded)
     app.post(COMPOSE_PREFIX + 'library/blocks', async (req, res) => {
         await createLibraryBlock(req, res);
     });
 
+    // console - expects JSON (application/json)
     app.post(COMPOSE_PREFIX + 'library/blocks/json', async (req, res) => {
         await createLibraryBlock(req, res);
     });
+
+
+    app.get(COMPOSE_PREFIX + 'library/bodystyles', async (req, res) => {
+        await getBodyStyles(req, res);
+    })
 
     app.get(COMPOSE_PREFIX + 'library/blocks', async (req, res) => {
         await listLibraryBlocks(req, res);
@@ -2137,10 +2136,6 @@ exports.ApiInit = function(app) {
 
     app.get(COMPOSE_PREFIX + 'library/blocktypes', async (req, res) => {
         await getBlockTypes(req, res);
-    })
-
-    app.get(COMPOSE_PREFIX + 'library/bodystyles', async (req, res) => {
-        await getBodyStyles(req, res);
     })
 
     app.get(COMPOSE_PREFIX + 'library/blocks/:blockid', async (req, res) => {

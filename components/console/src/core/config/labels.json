@@ -236,7 +236,10 @@
     "linkCreationRequiresPeerAccessPoints": "Peer Access Point and destination Site Required",
     "linkCreationDescription": "At least one peer access point is required to create a link.",
     "evictNotImplemented": "Evict functionality is not yet available. This feature is currently under development.",
-    "errorLoadingTopology": "Error loading topology data"
+    "errorLoadingTopology": "Error loading topology data",
+    "noPeerAccessPointsTitle": "No peer access points available for link creation",
+    "noPeerAccessPointsDescription": "To create links, you need peer access points in other sites within this backbone.",
+    "noPeerAccessPointsTooltip": "No peer access points available in other sites for creating links."
   },
   "descriptions": {
     "backbones": "A backbone is the central core of a network, that connects sites",

@@ -18,7 +18,7 @@ const LibraryForm: FC<LibraryFormProps> = function ({ onSubmit, onCancel }) {
   const [validated, setValidated] = useState<string | undefined>();
   const [name, setName] = useState<string>('');
   const [type, setType] = useState<string>('');
-  const [bodystyle, setBodystyle] = useState<string>('');
+  const [bodystyle, setBodystyle] = useState<'simple' | 'composite' | ''>('');
   const [provider, setProvider] = useState<string>('');
 
   // Fetch metadata for block types and body styles
@@ -54,7 +54,7 @@ const LibraryForm: FC<LibraryFormProps> = function ({ onSubmit, onCancel }) {
     };
 
     mutationCreate.mutate(libraryData);
-  }, [name, type, bodystyle, provider, mutationCreate]);
+  }, [name, type, bodystyle, provider, mutationCreate.mutate]);
 
   // Setup modal actions
   useModalActions({
@@ -76,7 +76,10 @@ const LibraryForm: FC<LibraryFormProps> = function ({ onSubmit, onCancel }) {
   }, []);
 
   const handleBodystyleChange = useCallback((_: FormEvent<HTMLSelectElement>, newBodystyle: string) => {
-    setBodystyle(newBodystyle);
+    // Type guard to ensure we only set valid bodystyle values
+    if (newBodystyle === 'simple' || newBodystyle === 'composite') {
+      setBodystyle(newBodystyle);
+    }
     setValidated(undefined);
   }, []);
 
@@ -92,10 +95,14 @@ const LibraryForm: FC<LibraryFormProps> = function ({ onSubmit, onCancel }) {
         setType(blockTypes[0].type);
       }
       if (!bodystyle && bodyStyles.length > 0) {
-        setBodystyle(bodyStyles[0]);
+        // Type guard to ensure we only set valid bodystyle values
+        const firstBodyStyle = bodyStyles[0];
+        if (firstBodyStyle === 'simple' || firstBodyStyle === 'composite') {
+          setBodystyle(firstBodyStyle);
+        }
       }
     }
-  }, [blockTypes, bodyStyles, type, bodystyle]);
+  }, [blockTypes, bodyStyles]);
 
   // Show loading state while metadata is being fetched
   if (isLoading) {
@@ -121,7 +128,7 @@ const LibraryForm: FC<LibraryFormProps> = function ({ onSubmit, onCancel }) {
               <FormSelectOption
                 key={blockType.type}
                 value={blockType.type}
-                label={blockType.description || blockType.type}
+                label={blockType.type}
               />
             ))}
         </FormSelect>

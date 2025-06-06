@@ -78,7 +78,6 @@ export interface TopologyGraphData {
 // Extended site interface with backbone info
 export interface ExtendedSite extends BackboneSiteResponse {
   backboneId: string;
-  backboneName: string;
 }
 
 // Topology data interface

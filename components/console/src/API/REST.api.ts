@@ -20,6 +20,7 @@ import {
   LibraryBlockRequest,
   LibraryBlockUpdateRequest,
   LibraryBlockTypeResponse,
+  LibraryBlockTypeMap,
   LibraryBlockHistoryResponse,
   IngressRequest,
   ApplicationResponse,
@@ -446,9 +447,16 @@ export const RESTApi = {
   },
 
   fetchLibraryBlockTypes: async (): Promise<LibraryBlockTypeResponse[]> => {
-    const data = await axiosFetch<LibraryBlockTypeResponse[]>(getLibraryBlockTypesPATH());
+    const data = await axiosFetch<LibraryBlockTypeMap>(getLibraryBlockTypesPATH());
 
-    return data;
+    // Convert btMap (object) to btArray (array) for backward compatibility
+    // Add the type field back from the object key
+    const blockTypesArray: LibraryBlockTypeResponse[] = Object.entries(data).map(([typeName, typeData]) => ({
+      ...typeData,
+      type: typeName
+    }));
+
+    return blockTypesArray;
   },
 
   fetchLibraryBodyStyles: async (): Promise<string[]> => {
@@ -497,12 +505,6 @@ export const RESTApi = {
       params: options ? mapOptionsToQueryParams(options) : null
     });
     console.log('API fetchApplications result:', data);
-    return data;
-  },
-
-  fetchApplicationDetail: async (id: string): Promise<ApplicationResponse> => {
-    const data = await axiosFetch<ApplicationResponse>(getApplicationPATH(id));
-
     return data;
   },
 
