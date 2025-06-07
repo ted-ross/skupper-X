@@ -176,7 +176,9 @@ class InstanceBlock {
     _buildInterfaces(buildLog) {
         const ilist = this.libraryBlock.interfaces();
         if (ilist) {
-            for (const iface of ilist) {
+            // Handle both array and object formats for interfaces
+            const interfaceArray = Array.isArray(ilist) ? ilist : Object.values(ilist);
+            for (const iface of interfaceArray) {
                 this.interfaces[iface.name] = new BlockInterface(this, iface, iface.blockType || this.libraryBlock.nameNoRev(), buildLog);
             }
         }
@@ -842,6 +844,12 @@ const importBlock = async function(client, block, blockRevisions) {
 //               <blockname>;<rev>   - specified revision
 //
 const loadLibraryBlock = async function(client, library, blockName, buildLog) {
+    // Validate blockName parameter
+    if (!blockName || typeof blockName !== 'string') {
+        buildLog.error(`Invalid or missing library block name: ${blockName}`);
+        return;
+    }
+    
     const elements = blockName.split(';');
     const latest   = elements.length == 1;
 
@@ -894,6 +902,11 @@ const loadLibraryBlock = async function(client, library, blockName, buildLog) {
     const body = yaml.load(revisionBlock.specbody);
     if (body && revisionBlock.bodystyle == 'composite') {
         for (const subblock of body) {
+            // Validate subblock structure before recursive call
+            if (!subblock || !subblock.block || typeof subblock.block !== 'string') {
+                buildLog.error(`Malformed composite block specification: missing or invalid 'block' property in subblock of ${elements[0]}`);
+                continue;
+            }
             await loadLibraryBlock(client, library, subblock.block, buildLog)
         }
     }
@@ -1285,11 +1298,38 @@ const postLibraryBlocks = async function(req, res) {
 const createLibraryBlock = async function(req, res) {
     var returnStatus = 201;
     const client = await db.ClientFromPool();
-    const form = new formidable.IncomingForm();
     try {
         await client.query("BEGIN");
-        const [fields, files] = await form.parse(req);
-        const norm = util.ValidateAndNormalizeFields(fields, {
+        
+        let norm;
+        let fields;
+        
+        // Check if this is a JSON request (console) or form data request (compose-web-app)
+        if (req.is('application/json')) {
+            // Convert JSON to formidable-style fields format for unified validation
+            fields = {};
+            
+            // Only add fields that are actually present in the request
+            if (req.body.name !== undefined) {
+                fields.name = req.body.name;
+            }
+            if (req.body.type !== undefined) {
+                fields.type = req.body.type;
+            }
+            if (req.body.bodystyle !== undefined) {
+                fields.bodystyle = req.body.bodystyle;
+            }
+            if (req.body.provider !== undefined && req.body.provider.trim() !== '') {
+                fields.provider = req.body.provider;
+            }
+        } else {
+            // Handle form data request (existing behavior)
+            const form = new formidable.IncomingForm();
+            const [parsedFields, files] = await form.parse(req);
+            fields = parsedFields;
+        }
+        // Use unified validation for both JSON and form data
+        norm = util.ValidateAndNormalizeFields(fields, {
             'name'      : {type: 'dnsname', optional: false},
             'type'      : {type: 'string',  optional: false},
             'bodystyle' : {type: 'string',  optional: false},
@@ -1464,10 +1504,30 @@ const deleteLibraryBlock = async function(blockid, req, res) {
 const postApplication = async function(req, res) {
     var returnStatus = 201;
     const client = await db.ClientFromPool();
-    const form = new formidable.IncomingForm();
     try {
         await client.query("BEGIN");
-        const [fields, files] = await form.parse(req);
+        
+        let fields;
+        
+        // Check if this is a JSON request or form data request
+        if (req.is('application/json')) {
+            // Handle JSON request
+            fields = {};
+            
+            // Only add fields that are actually present in the request
+            if (req.body.name !== undefined) {
+                fields.name = req.body.name;
+            }
+            if (req.body.rootblock !== undefined) {
+                fields.rootblock = req.body.rootblock;
+            }
+        } else {
+            // Handle form data request (existing behavior)
+            const form = new formidable.IncomingForm();
+            const [parsedFields, files] = await form.parse(req);
+            fields = parsedFields
+        }
+        
         const norm = util.ValidateAndNormalizeFields(fields, {
             'name'      : {type: 'dnsname', optional: false},
             'rootblock' : {type: 'uuid',    optional: false},
@@ -2018,16 +2078,57 @@ const getInterfaceRoles = async function(req, res) {
 
 }
 
+// API endpoint to get available block body styles from the database enum.
+// This is used by the new React console for dynamic form options,
+// while the old compose web app hardcodes "simple" and "composite" values.
+const getBodyStyles = async function(req, res) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        // Query the enum values for BlockBodyStyle
+        const result = await client.query(
+            "SELECT enumlabel FROM pg_enum WHERE enumtypid = (SELECT oid FROM pg_type WHERE typname = 'blockbodystyle')"
+        );
+        let bodyStyles = [];
+        for (const row of result.rows) {
+            bodyStyles.push(row.enumlabel);
+        }
+        res.status(returnStatus).json(bodyStyles);
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in getBodyStyles: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 500;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+}
+
 exports.ApiInit = function(app) {
     app.use(express.static('../compose-web-app'));
+    app.use(express.json());
 
     app.post(COMPOSE_PREFIX + 'library/blocks/import', async (req, res) => {
         await postLibraryBlocks(req, res);
     });
 
+    // compose-web-app -expects form-data (multipart/form-data or application/x-www-form-urlencoded)
     app.post(COMPOSE_PREFIX + 'library/blocks', async (req, res) => {
         await createLibraryBlock(req, res);
     });
+
+    // console - expects JSON (application/json)
+    app.post(COMPOSE_PREFIX + 'library/blocks/json', async (req, res) => {
+        await createLibraryBlock(req, res);
+    });
+
+
+    app.get(COMPOSE_PREFIX + 'library/bodystyles', async (req, res) => {
+        await getBodyStyles(req, res);
+    })
 
     app.get(COMPOSE_PREFIX + 'library/blocks', async (req, res) => {
         await listLibraryBlocks(req, res);
@@ -2138,7 +2239,6 @@ exports.ApiInit = function(app) {
         await ExpandTemplate(req, res);
     })
 
-    app.use(express.json());
     app.put(COMPOSE_PREFIX + 'library/blocks/:blockid/config', async (req, res) => {
         await putLibraryBlockSection(req.params.blockid, 'Config', req, res);
     });

@@ -1,13 +1,13 @@
 const path = require('path');
+
 const ROOT = process.cwd();
 
-const { merge } = require('webpack-merge');
-const webpack = require('webpack');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
-const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
-const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const TerserJSPlugin = require('terser-webpack-plugin');
+const webpack = require('webpack');
+const { merge } = require('webpack-merge');
 
 const commonConfig = require('./webpack.common');
 
@@ -31,18 +31,12 @@ const prodConfig = {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
       'process.env.ENABLE_MOCK_SERVER': JSON.stringify(process.env.ENABLE_MOCK_SERVER || false)
     }),
-    new BundleAnalyzerPlugin({
-      analyzerMode: process.env.STATS || 'disabled',
-      generateStatsFile: false,
-      statsOptions: { source: false },
-      reportFilename: path.join(ROOT, '/reports/bundle-size.html')
-    }),
     new CopyWebpackPlugin({
       patterns: [
         path.resolve(ROOT, 'public', 'manifest.json'),
         {
           from: process.env.BRAND_FAVICON || path.resolve(ROOT, 'public', 'favicon.ico'),
-          to: path.resolve(ROOT, 'build', 'favicon.v.ico')
+          to: path.resolve(ROOT, 'build', 'favicon.ico')
         }
       ]
     }),

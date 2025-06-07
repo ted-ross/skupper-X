@@ -441,9 +441,10 @@ const listClaimAccessPoints = async function(res, bid, ref) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT BackboneAccessPoints.Name as accessname, BackboneAccessPoints.Id as accessid FROM InteriorSites " +
-                                          `JOIN BackboneAccessPoints ON BackboneAccessPoints.Id = InteriorSites.${ref} ` +
-                                          "WHERE InteriorSites.Backbone = $1", [bid]);
+
+         const result = await client.query("SELECT BackboneAccessPoints.Name as accessname, BackboneAccessPoints.Id as accessid FROM InteriorSites " +
+                                          `JOIN BackboneAccessPoints ON BackboneAccessPoints.InteriorSite = InteriorSites.Id ` +
+                                          "WHERE InteriorSites.Backbone = $1 AND BackboneAccessPoints.Kind = $2", [bid, ref]);
         let data = [];
         for (const row of result.rows) {
             data.push({
@@ -559,11 +560,11 @@ exports.Initialize = async function(api, keycloak) {
 
     // Claim Access Points
     api.get(API_PREFIX + 'backbones/:bid/access/claim', keycloak.protect('realm:van-owner'), async (req, res) => {
-        await listClaimAccessPoints(res, req.params.bid, 'ClaimAccess');
+        await listClaimAccessPoints(res, req.params.bid, 'claim');
     });
 
     // Member Access Points
     api.get(API_PREFIX + 'backbones/:bid/access/member', keycloak.protect('realm:van-owner'), async (req, res) => {
-        await listClaimAccessPoints(res, req.params.bid, 'MemberAccess');
+        await listClaimAccessPoints(res, req.params.bid, 'member');
     });
 }
