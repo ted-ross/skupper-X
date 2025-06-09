@@ -31,6 +31,8 @@ const gotemplate = require('./gotemplate.js');
 const COMPOSE_PREFIX = '/compose/v1alpha1/';
 const API_VERSION    = 'skupperx.io/compose/v1alpha1';
 const PROCESS_ERROR  = 'process-error';
+const BODY_STYLE_SIMPLE    = 'simple';
+const BODY_STYLE_COMPOSITE = 'composite';
 
 var cachedApplications = {};
 
@@ -109,9 +111,7 @@ class BlockInterface {
         this.maxBindings   = ifaceSpec.maxBindings ? ifaceSpec.maxBindings == 'unlimited' ? 0 : parseInt(ifaceSpec.maxBindings) : 1;
         this.bindings      = [];
         this.boundThrough  = false;
-        this.metadata      = {};
-
-        this.metadata = deepCopy(ifaceSpec);
+        this.metadata      = deepCopy(ifaceSpec.data || {});
 
         buildLog.log(`    ${this}`);
     }
@@ -134,6 +134,10 @@ class BlockInterface {
 
     getData(key) {
         return this.metadata[key];
+    }
+
+    copyAllData() {
+        return deepCopy(this.metadata);
     }
 
     addBinding(binding) {
@@ -186,12 +190,8 @@ class InstanceBlock {
         this.libraryBlock = libraryBlock;
         this.name         = name;
 
-        const libConfig = libraryBlock.config();
-        if (!!libConfig) {
-            this.metadata = deepAppend(libConfig, this.config);
-        }
-
         this.metadata.ident = ident.NewIdentity();
+        this.metadata.name  = name;
 
         buildLog.log(`${this}`);
         this._buildInterfaces(buildLog);
@@ -396,7 +396,7 @@ class LibraryBlock {
     }
 
     isComposite() {
-        return this.item.spec.bodyStyle == 'composite';
+        return this.item.spec.bodyStyle == BODY_STYLE_COMPOSITE;
     }
 
     overWriteSpec(updated) {
@@ -604,7 +604,7 @@ class Application {
     // Recursive component instantiation function.
     //
     instantiateSubComponents(path, libraryBlock, instanceName, buildLog) {
-        if (libraryBlock.getBodyStyle() == 'composite') {
+        if (libraryBlock.getBodyStyle() == BODY_STYLE_COMPOSITE) {
             const body = libraryBlock.body();
             //
             // This is a composite block.  Begin by creating instances of all of the block's children.
@@ -690,7 +690,7 @@ class Application {
                     // If this is a monolithic block, return the interface instance for this interface, otherwise
                     // find the sub-block that binds this interface and recurse down into it.
                     //
-                    if (spec.body && typeof(spec.body) == 'object' && instanceBlock.getBodyStyle() == 'composite') {
+                    if (spec.body && typeof(spec.body) == 'object' && instanceBlock.getBodyStyle() == BODY_STYLE_COMPOSITE) {
                         //
                         // The referenced block is a composite.  We must find a sub-block that binds to this interface.
                         // Note that the name of the sub-block interface may differ from the interface on this block.
@@ -892,7 +892,7 @@ const loadLibraryBlock = async function(client, library, blockName, buildLog) {
     // If the body of the desired block references other blocks (it's composite or derived), load those into the map as well.
     //
     const body = yaml.load(revisionBlock.specbody);
-    if (body && revisionBlock.bodystyle == 'composite') {
+    if (body && revisionBlock.bodystyle == BODY_STYLE_COMPOSITE) {
         for (const subblock of body) {
             await loadLibraryBlock(client, library, subblock.block, buildLog)
         }
@@ -928,134 +928,109 @@ const generateDerivativeData = function(application, buildLog, blockTypes) {
     }
 }
 
-//
-// Input variables are of one of the following forms:
-//
-//   <variable>
-//   localif.<local-if-name>:<variable>
-//   peerif.<local-if-name>:<variable>
-//   peerif:<variable>
-//   peerblock.<local-if-name>:<variable>
-//   peerblock:<variable>
-//   site:<variable>
-//
-const evaluateVariable = function(key, block, affinityInterface, site) {
-    const colon = key.indexOf(':');
+const LoadInstanceConfig = function(instanceBlock) {
+    const libraryBlock = instanceBlock.getLibraryBlock();
+    var   localConfig  = {};
+    const libConfig    = libraryBlock.config();
+    const instConfig   = instanceBlock.getConfig();
+    const metadata     = instanceBlock.getMetadata();
 
-    if (colon < 0) {
-        return block.getBlockData(key);
+    // Pre-populate with the default values from the library block
+    for (const [cname, cdesc] of Object.entries(libConfig)) {
+        localConfig[cname] = cdesc.default;
     }
 
-    const section = key.split(':');
-    if (section.length != 2) {
-        throw new Error(`Malformed variable '${key}' (block ${block.name()})`);
+    // Overwrite the values from the instance block
+    for (const [iname, ival] of Object.entries(instConfig)) {
+        localConfig[iname] = ival;
     }
 
-    const scope = section[0].split('.');
-    switch (scope[0]) {
-        case 'localif':
-            if (scope.length != 2) {
-                throw new Error(`Malformed variable '${key}' - 'localif' requires a local interface name qualifier`);
-            }
-            return block.getLocalInterfaceData(scope[1], section[1]);
-
-        case 'peerif':
-            if (scope.length == 1) {
-                if (!affinityInterface) {
-                    throw new Error(`Malformed variables '${key}' - 'peerif' has no qualifiers but there is no interface with affinity`);
-                }
-                return block.getPeerInterfaceData(affinityInterface, section[1]);
-            } else if (scope.length == 2) {
-                return block.getPeerInterfaceData(scope[1], section[1]);
-            } else {
-                throw new Error(`Malformed variable '${key}' - 'peerif' may have zero or one qualifiers, not more`);
-            }
-
-        case 'peerblock':
-            if (scope.length == 1) {
-                if (!affinityInterface) {
-                    throw new Error(`Malformed variables '${key}' - 'peerblock' has no qualifiers but there is no interface with affinity`);
-                }
-                return block.getPeerBlockData(affinityInterface, section[1]);
-            } else if (scope.length == 2) {
-                return block.getPeerBlockData(scope[1], section[1]);
-            } else {
-                throw new Error(`Malformed variable '${key}' - 'peerblock' may have zero or one qualifiers, not more`);
-            }
-
-        case 'site':
-            if (scope.length == 2) {
-                throw new Error(`Malformed variable '${key}' - 'site' does not permit qualifiers`);
-            }
-            return site && site[section[1]];
+    // Inject the block metadata
+    for (const [mname, mval] of Object.entries(metadata)) {
+        localConfig[mname] = mval;
     }
 
-    throw new Error(`Malformed variable '${key}' - Unrecognized qualifier`);
+    return localConfig;
 }
 
 //
-// Identify all variables in the string and expand each of them
+// instanceBlock - The block whose templates shall be expanded
+// site          - The site on which the expanded templates shall be deployed
+// thruInterface - If supplied, this is instanceBlock's interface through which this unallocated block is deployed
+// thruBlock     - If supplied, this is the allocated instance block that is pulling along this (unallocated) block's templates
+// accumulated   - The accumulated list of expanded templates
 //
-const substituteString = function(text, block, affinityInterface, site, deployLog) {
-    const varStart = text.indexOf('${');
-    if (varStart < 0) {
-        //
-        // No variables in this text
-        //
-        return text;
-    }
+const expandBlock = function(instanceBlock, site, thruInterface, accumulated, deployLog) {
+    const siteMetadata = JSON.parse(site.metadata);
+    const libraryBlock = instanceBlock.getLibraryBlock();
+    const body         = libraryBlock.body();
 
-    const before = text.slice(0, varStart);
-    const after  = text.slice(varStart + 2);
-    const varEnd = after.indexOf('}');
-    if (varEnd < 0) {
-        //
-        // No well-formed variable expression, don't substitute
-        //
-        return text;
-    }
+    //
+    // Build the local configuration
+    //
+    const localConfig = LoadInstanceConfig(instanceBlock);
 
-    const variable = after.slice(0, varEnd);
-    const theRest  = after.slice(varEnd + 1)
-    var   evalData = evaluateVariable(variable, block, affinityInterface, site);
-    if (!evalData) {
-        evalData = "UNDEFINED";
-        deployLog.warning(`Unresolvable variable '${variable}' in block ${block.getName()}`);
-    }
+    //
+    // Build the remote configuration
+    //
+    var localInterfaces = {};
+    var peerInterfaces  = {};
+    var peerBlocks      = {};
+    var affInterface    = {};
+    var affBlock        = {};
+    var affifname       = thruInterface ? thruInterface.getName() : undefined;
+    var affblockname;
 
-    var result;
-    if (before.length == 0 && theRest.length == 0) {
-        result = evalData;
-    } else {
-        result = before + evalData + substituteString(theRest, block, affinityInterface, site, deployLog);
-    }
+    // Iterate over local interfaces
+    const myInterfaces = instanceBlock.getInterfaces();
+    for (const [iname, iface] of Object.entries(myInterfaces)) {
+        localInterfaces[iname] = iface.copyAllData();
 
-    return result;
-}
+        // Get the bound/remote interface
+        const binding = iface.getBindings()[0];
+        const peerInterface = iface.isNorth() ? binding.getSouthInterface() : binding.getNorthInterface();
+        peerInterfaces[iname] = peerInterface.copyAllData();
 
-//
-// Substitute variables in the contents of an object.  Note that variables can be in map keys as
-// well as map values.
-//
-const substituteObject = function(obj, block, affinityInterface, site, deployLog) {
-    var result;
-    if (Array.isArray(obj)) {
-        result = [];
-        for (const subobj of obj) {
-            result.push(substituteObject(subobj, block, affinityInterface, site, deployLog));
+        // Get the bound/remote instance block
+        const peerBlock       = peerInterface.getOwner();
+        let   peerBlockConfig = LoadInstanceConfig(peerBlock);
+        peerBlocks[iname] = peerBlockConfig;
+
+        // Set the affinity shortcuts if we are looking at the affinity (thru) interface
+        if (thruInterface && iname == thruInterface.getName()) {
+            affInterface = peerInterfaces[iname];
+            affBlock     = peerBlocks[iname];
+            affblockname = peerBlock.getName();
         }
-    } else if (typeof(obj) == 'object') {
-        result = {};
-        for (const [key, value] of Object.entries(obj)) {
-            const subkey = substituteString(key, block, affinityInterface, site, deployLog);
-            result[subkey] = substituteObject(value, block, affinityInterface, site, deployLog);
-        }
-    } else if (typeof(obj) == 'string') {
-        result = substituteString(obj, block, affinityInterface, site, deployLog);
-    } else {
-        result = obj;
     }
-    return result;
+
+    var remoteConfig = {
+        localif   : localInterfaces,
+        peerif    : peerInterfaces,
+        peerblock : peerBlocks,
+        affif     : affInterface,
+        affblock  : affBlock,
+        site      : siteMetadata,
+    };
+
+    if (libraryBlock.getBodyStyle() == BODY_STYLE_SIMPLE) {
+        let unresolvable = {};
+        for (const element of body) {
+            if (true || !element.targetPlatforms || element.targetPlatforms.indexOf(site.targetplatform) >= 0) {  // FIXME
+                if (!thruInterface || !element.affinity || element.affinity.indexOf(thruInterface.getName() >= 0)) {
+                    accumulated.push(gotemplate.Expand(element.template, localConfig, remoteConfig, unresolvable));
+                }
+            }
+        }
+
+        //
+        // Report the unresolvable template fields
+        //
+        for (const varname of Object.keys(unresolvable)) {
+            const extra = varname.indexOf('$aff') == 0 ? `, affblock: ${affblockname}, affif: ${affifname}` : ''
+            deployLog.warning(`Unresolvable: ${varname}, template: ${instanceBlock.getName()}${extra}`);
+        }
+    }
 }
 
 //
@@ -1067,7 +1042,6 @@ const substituteObject = function(obj, block, affinityInterface, site, deployLog
 //
 const addMemberSite = async function(client, app, site, depid, deployLog) {
     const siteClasses  = site.siteclasses;
-    const siteMetadata = JSON.parse(site.metadata);
     const instanceBlocks = app.getInstanceBlocks();
 
     deployLog.log(`Adding member site: ${site.name}`)
@@ -1077,7 +1051,7 @@ const addMemberSite = async function(client, app, site, depid, deployLog) {
     //
     let siteConfiguration = [];
 
-    for (const [path, instanceBlock] of Object.entries(instanceBlocks)) {
+    for (const instanceBlock of Object.values(instanceBlocks)) {
         const derivative = instanceBlock.getDerivative();
 
         //
@@ -1090,19 +1064,7 @@ const addMemberSite = async function(client, app, site, depid, deployLog) {
             if (instanceBlock.siteClassMatches(siteClasses)) {
                 deployLog.log(`    Allocating block ${instanceBlock.getName()}`);
                 instanceBlock.setFlag(true);
-
-                //
-                // Configure the allocation of the block to this site
-                //
-                const libraryBlock = instanceBlock.getLibraryBlock();
-                const body         = substituteObject(libraryBlock.body(), instanceBlock, undefined, siteMetadata, deployLog);
-                if (body.kubeTemplates) {
-                    for (const element of body.kubeTemplates) {
-                        for (const template of element.template) {
-                            siteConfiguration.push(template);
-                        }
-                    }
-                }
+                expandBlock(instanceBlock, site, undefined, siteConfiguration, deployLog);
 
                 //
                 // For each interface of this block, follow the binding to the bound peer block.
@@ -1117,20 +1079,7 @@ const addMemberSite = async function(client, app, site, depid, deployLog) {
                     for (const binding of bindings) {
                         const peerInterface = iface.isNorth() ? binding.getSouthInterface() : binding.getNorthInterface();
                         const peer          = peerInterface.getOwner();
-                        const peerBody      = deepCopy(peer.getLibraryBlock().body());
-
-                        //
-                        // Generate configuration data based on the content of the peer.
-                        //
-                        if (peerBody.kubeTemplates) {
-                            for (const kt of peerBody.kubeTemplates) {
-                                if (!kt.affinity || kt.affinity == peerInterface.getName()) {
-                                    for (var templateItem of kt.template) {
-                                        siteConfiguration.push(substituteObject(templateItem, peer, kt.affinity, siteMetadata, deployLog));
-                                    }
-                                }
-                            }
-                        }
+                        expandBlock(peer, site, peerInterface, siteConfiguration, deployLog);
                     }
                 }
             }
@@ -1198,7 +1147,8 @@ const ExpandTemplate = async function(req, res) {
     if (req.is('application/yaml')) {
         try {
             const spec = yaml.load(req.body);
-            const result = gotemplate.Expand(spec.template, spec.local, spec.remote);
+            let   unresolvable = {};
+            const result = gotemplate.Expand(spec.template, spec.local, spec.remote, unresolvable);
             res.status(200).send(result);
         } catch(error) {
             res.status(500).send(error.message);
@@ -1830,7 +1780,7 @@ const deployDeployment = async function(depid, req, res) {
             res.status(returnStatus).send("Deploy Failed - See deployment log for details");
         } else {
             returnStatus = 400;
-            res.status(returnStatus).send(error.message);
+            res.status(returnStatus).send(error.stack);
         }
     } finally {
         client.release();

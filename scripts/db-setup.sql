@@ -72,9 +72,7 @@ CREATE TABLE Configuration (
     DefaultCaExpiration interval,
     DefaultCertExpiration interval,
     SiteDataplaneImage text,
-    SiteControllerImage text,
-    VaultURL text,
-    VaultToken text
+    SiteControllerImage text
 );
 
 --
@@ -268,6 +266,7 @@ CREATE TABLE MemberSites (
     Invitation UUID REFERENCES MemberInvitations ON DELETE CASCADE,
     SiteClasses text ARRAY,
     ActiveAccessPoint UUID REFERENCES BackboneAccessPoints,
+    TargetPlatform text REFERENCES TargetPlatforms,
     Metadata text
 );
 

@@ -17,11 +17,18 @@ local:
   local2: "Local Two"
   local3: 1
   local4: true
+  keyPrefix: abd
+  name: /app/main/front-to-db
+  ident: 33425
+  networkPolicyOnAcceptor: true
 remote:
   affblock:
     one: "Affinity Block"
+    selectorKey: application
+    selectorValue: program
   affif:
     two: "Affinity Interface"
+    port: 6809
   site:
     three: "Site Data"
 template: |
@@ -34,3 +41,34 @@ template: |
   {{-else}}
     Local-3 Else Clause
   {{-end}}
+  ---
+  - apiVersion: skupper.io/v2alpha1
+    kind: Connector
+    metadata:
+      name: connector-{{.ident}}
+    spec:
+      type: tcp
+      selector: {{$affblock.selectorKey}}={{$affblock.selectorValue}}
+      port: {{$affif.port}}
+      routingKey: {{.keyPrefix}}{{.name}}
+  {{- if .networkPolicyOnAcceptor}}
+  - apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: ingress-policy-{{.ident}}
+    spec:
+      podSelector:
+        matchLabels:
+          {{$affblock.selectorKey}} : {{$affblock.selectorValue}}
+      policyTypes:
+      - Ingress
+      ingress:
+      - from:
+        - podSelector:
+            matchLabels:
+              skupper.io/component: router
+        ports:
+        - protocol: TCP
+          port: {{$affif.port}}
+  {{end}}
+ 

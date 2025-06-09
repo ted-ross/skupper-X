@@ -136,7 +136,7 @@ spec:
         spec:
           podSelector:
             matchLabels:
-              {{$affblock.selectorKey} : {{$affblock.selectorValue}}
+              {{$affblock.selectorKey}} : {{$affblock.selectorValue}}
           policyTypes:
           - Egress
           egress:
@@ -396,7 +396,7 @@ spec:
     config:
       replicas: 2
     siteClasses:
-    - worksite
+    - worker
     bindings:
     - interface: control
       super: request

@@ -71,7 +71,7 @@ const print_tree = function(node, _margin) {
     }
 }
 
-exports.Expand = function(template, localData, remoteData) {
+exports.Expand = function(template, localData, remoteData, unresolvable) {
     //
     // Parse the text into a token stream
     //
@@ -95,7 +95,7 @@ exports.Expand = function(template, localData, remoteData) {
     //
     // Expand the template tree using the provided data
     //
-    return rootToken.Expand(localData, remoteData);
+    return rootToken.Expand(localData, remoteData, unresolvable);
 }
 
 class Token {
@@ -212,7 +212,7 @@ class Token {
         }
     }
 
-    Expand(localData, remoteData) {
+    Expand(localData, remoteData, unresolvable) {
         var expanded = '';
         switch (this.type) {
             case TOKEN_LITERAL:
@@ -220,35 +220,44 @@ class Token {
                 break;
 
             case TOKEN_VARIABLE:
-                const val = this._value(localData, remoteData);
-                expanded = val.toString();
+                const val = this._value(localData, remoteData, unresolvable);
+                expanded = val ? val.toString() : 'undefined';
                 break;
 
             case TOKEN_IF:
-                const condition = this._value(localData, remoteData);
+                const condition = this._value(localData, remoteData, unresolvable);
                 if (condition) {
-                    expanded = this.thenClause.Expand(localData, remoteData);
+                    expanded = this.thenClause.Expand(localData, remoteData, unresolvable);
                 } else if (this.elseClause) {
-                    expanded = this.elseClause.Expand(localData, remoteData);
+                    expanded = this.elseClause.Expand(localData, remoteData, unresolvable);
                 }
                 break;
         }
 
         if (this.next) {
-            expanded += this.next.Expand(localData, remoteData);
+            expanded += this.next.Expand(localData, remoteData, unresolvable);
         }
         return expanded;
     }
 
-    _value(localData, remoteData) {
-        const prefix = this.content[0];
-        const path   = this.content.slice(1).split('.');
-        let result = 'UNDEFINED';
+    _value(localData, remoteData, unresolvable) {
+        const prefix       = this.content[0];
+        const path         = this.content.slice(1);
+        const pathElements = path.split('.');
+        let result = `UNDEFINED[${this.content}]`;
         if (prefix == '.') {
-            result = localData[this.content.slice(1)];
+            if (Object.keys(localData).indexOf(path) >= 0) {
+                result = localData[path];
+            } else {
+                unresolvable[this.content] = true;
+            }
         } else if (this.content[0] == '$') {
             let traverse = remoteData;
-            for (const element of path) {
+            for (const element of pathElements) {
+                if (Object.keys(traverse).indexOf(element) == -1) {
+                    unresolvable[this.content] = true;
+                    return result;
+                }
                 traverse = traverse[element];
             }
             result = traverse;
