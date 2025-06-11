@@ -1,7 +1,7 @@
 import { createRoot } from 'react-dom/client';
 
-import { Wrapper } from '@core/components/Wrapper';
-import App from 'App';
+import App from './App';
+import { Wrapper } from './core/components/Wrapper';
 
 const rootElement = document.getElementById('app') as HTMLDivElement;
 const root = createRoot(rootElement);

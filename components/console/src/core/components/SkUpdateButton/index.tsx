@@ -1,4 +1,4 @@
-import { FC, useMemo, MouseEvent as ReactMouseEvent, useState, useCallback, Ref, useRef } from 'react';
+import { FC, useMemo, MouseEvent as ReactMouseEvent, useState, useCallback, Ref, useRef, useEffect } from 'react';
 
 import { Button, MenuToggle, MenuToggleElement, Select, SelectList, SelectOption } from '@patternfly/react-core';
 import { SyncIcon } from '@patternfly/react-icons';
@@ -16,6 +16,10 @@ export const refreshDataIntervalMap = [
   {
     key: 'Refresh off',
     value: 0
+  },
+  {
+    key: '5s',
+    value: 5 * 1000
   },
   {
     key: '15s',
@@ -48,7 +52,7 @@ const SkUpdateDataButton: FC<SkUpdateDataButtonProps> = function ({
     findRefreshDataIntervalLabelFromValue(refreshIntervalDefault)
   );
 
-  const refreshIntervalId = useRef<number>();
+  const refreshIntervalId = useRef<number | undefined>(undefined);
 
   const refreshIntervalOptions = useMemo(
     () =>
@@ -93,6 +97,12 @@ const SkUpdateDataButton: FC<SkUpdateDataButtonProps> = function ({
     [onRefreshIntervalSelected, revalidateLiveQueries]
   );
 
+  useEffect(() => {
+    return () => {
+      clearInterval(refreshIntervalId.current);
+    };
+  }, []);
+
   return (
     <>
       <Select
@@ -115,13 +125,12 @@ const SkUpdateDataButton: FC<SkUpdateDataButtonProps> = function ({
       </Select>
 
       <Button
+        icon={<SyncIcon />}
         key="split-action-primary"
         data-testid="update-data-click"
         onClick={() => revalidateLiveQueries()}
         style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}
-      >
-        <SyncIcon />
-      </Button>
+      />
     </>
   );
 };

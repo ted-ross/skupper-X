@@ -1,31 +1,89 @@
 import { axiosFetch } from './apiMiddleware';
 import {
-  SiteResponse,
+  BackboneSiteResponse,
   RequestOptions,
   BackboneResponse,
   BackboneRequest,
-  SiteRequest,
+  BackboneSiteRequest,
   LinkResponse,
   LinkRequest,
   VanResponse,
   VanRequest,
   InvitationResponse,
   InvitationRequest,
-  MemberResponse
+  MemberSiteResponse,
+  AccessPointResponse,
+  AccessPointRequest,
+  TlsCertificateResponse,
+  TargetPlatformResponse,
+  LibraryBlockResponse,
+  LibraryBlockRequest,
+  LibraryBlockUpdateRequest,
+  LibraryBlockTypeResponse,
+  LibraryBlockTypeMap,
+  LibraryBlockHistoryResponse,
+  IngressRequest,
+  ApplicationResponse,
+  ApplicationBlock,
+  CreateApplicationRequest,
+  DeploymentRequest,
+  DeploymentResponse,
+  DeploymentDetailsResponse
 } from './REST.interfaces';
 import {
   getBackbonesPATH,
   getBackbonePATH,
-  getInteriorSitesPATH,
-  getLinkPATH,
+  getBackboneActivatePATH,
+  getBackboneSitePATH,
+  getBackboneSitesPATH,
+  getBackboneLinkPATH,
+  getBackboneLinksForBackbonePATH,
+  getBackboneLinksForSitePATH,
+  getCreateLinkPATH,
   getVanPATH,
-  getInvitationPath,
-  getMemberPath,
-  getVansPATH
+  getVansPATH,
+  getVansForBackbonePATH,
+  getCreateVanPATH,
+  getEvictVanPATH,
+  getInvitationPATH,
+  getInvitationsPATH,
+  getInvitationYamlPATH,
+  getInvitationsForVanPATH,
+  getCreateInvitationPATH,
+  getExpireInvitationPATH,
+  getMemberPATH,
+  getMembersForVanPATH,
+  getEvictMemberPATH,
+  getAccessPointPATH,
+  getAccessPointsForSitePATH,
+  getAccessPointsForBackbonePATH,
+  getTlsCertificatePATH,
+  getTargetPlatformsPATH,
+  getSiteDeploymentPATH,
+  getIngressPATH,
+  getLibrariesPATH,
+  getLibraryPATH,
+  getLibraryConfigPATH,
+  getLibraryInterfacesPATH,
+  getLibraryBodyPATH,
+  getLibraryHistoryPATH,
+  getLibraryBlockTypesPATH,
+  // getLibraryBodyStylesPATH, // Not implemented in backend
+  getInterfaceRolesPATH,
+  getApplicationsPATH,
+  getApplicationPATH,
+  getApplicationBuildPATH,
+  getApplicationLogPATH,
+  getApplicationBlocksPATH,
+  getDeploymentsPATH,
+  getDeploymentPATH,
+  getDeploymentDeployPATH,
+  getDeploymentLogPATH
 } from './REST.paths';
 import { mapOptionsToQueryParams } from './REST.utils';
 
 export const RESTApi = {
+  // BACKBONE APIs
   fetchBackbones: async (options?: RequestOptions): Promise<BackboneResponse[]> => {
     const data = await axiosFetch<BackboneResponse[]>(getBackbonesPATH(), {
       params: options ? mapOptionsToQueryParams(options) : null
@@ -43,28 +101,35 @@ export const RESTApi = {
     return id;
   },
 
+  searchBackbone: async (bid: string): Promise<BackboneResponse> => {
+    const data = await axiosFetch<BackboneResponse>(getBackbonePATH(bid));
+
+    return data;
+  },
+
   deleteBackbone: async (bid: string): Promise<void> => {
-    await axiosFetch<void>(`${getBackbonePATH(bid)}`, {
+    await axiosFetch<void>(getBackbonePATH(bid), {
       method: 'DELETE'
     });
   },
 
   activateBackbone: async (bid: string): Promise<void> => {
-    await axiosFetch<void>(`${getBackbonePATH(bid)}/activate`, {
+    await axiosFetch<void>(getBackboneActivatePATH(bid), {
       method: 'PUT'
     });
   },
 
-  fetchSites: async (bid: string, options?: RequestOptions): Promise<SiteResponse[]> => {
-    const data = await axiosFetch<SiteResponse[]>(`${getBackbonePATH(bid)}/sites`, {
+  // BACKBONE SITE APIs
+  fetchSites: async (bid: string, options?: RequestOptions): Promise<BackboneSiteResponse[]> => {
+    const data = await axiosFetch<BackboneSiteResponse[]>(getBackboneSitesPATH(bid), {
       params: options ? mapOptionsToQueryParams(options) : null
     });
 
     return data;
   },
 
-  createSite: async (bid: string, data: SiteRequest): Promise<string> => {
-    const { id } = await axiosFetch<{ id: string }>(`${getBackbonePATH(bid)}/sites`, {
+  createSite: async (bid: string, data: BackboneSiteRequest): Promise<string> => {
+    const { id } = await axiosFetch<{ id: string }>(getBackboneSitesPATH(bid), {
       method: 'POST',
       data
     });
@@ -72,119 +137,418 @@ export const RESTApi = {
     return id;
   },
 
-  deleteSite: async (id: string): Promise<void> => {
-    await axiosFetch<void>(getInteriorSitesPATH(id), {
+  searchSite: async (sid: string): Promise<BackboneSiteResponse> => {
+    const data = await axiosFetch<BackboneSiteResponse>(getBackboneSitePATH(sid));
+
+    return data;
+  },
+
+  updateSite: async (sid: string, data: Partial<BackboneSiteRequest>): Promise<void> => {
+    await axiosFetch<void>(getBackboneSitePATH(sid), {
+      method: 'PUT',
+      data
+    });
+  },
+
+  deleteSite: async (sid: string): Promise<void> => {
+    await axiosFetch<void>(getBackboneSitePATH(sid), {
       method: 'DELETE'
     });
   },
 
-  searchSite: async (id: string): Promise<SiteResponse> => axiosFetch<SiteResponse>(`${getInteriorSitesPATH(id)}`),
-
-  // LINKS APIs
-  fetchLinks: async (bid: string, options?: RequestOptions): Promise<LinkResponse[]> => {
-    const data = await axiosFetch<LinkResponse[]>(`${getBackbonePATH(bid)}/links`, {
+  // ACCESS POINT APIs
+  fetchAccessPointsForSite: async (sid: string, options?: RequestOptions): Promise<AccessPointResponse[]> => {
+    const data = await axiosFetch<AccessPointResponse[]>(getAccessPointsForSitePATH(sid), {
       params: options ? mapOptionsToQueryParams(options) : null
     });
 
     return data;
   },
 
-  createLink: async (bid: string, data?: LinkRequest): Promise<void> => {
-    await axiosFetch<void>(`${getBackbonePATH(bid)}/links`, {
+  fetchAccessPointsForBackbone: async (bid: string, options?: RequestOptions): Promise<AccessPointResponse[]> => {
+    const data = await axiosFetch<AccessPointResponse[]>(getAccessPointsForBackbonePATH(bid), {
+      params: options ? mapOptionsToQueryParams(options) : null
+    });
+
+    return data;
+  },
+
+  createAccessPoint: async (sid: string, data: AccessPointRequest): Promise<string> => {
+    const { id } = await axiosFetch<{ id: string }>(getAccessPointsForSitePATH(sid), {
       method: 'POST',
       data
     });
+
+    return id;
   },
 
-  deleteLink: async (id: string): Promise<void> => {
-    await axiosFetch<void>(getLinkPATH(id), {
+  searchAccessPoint: async (apid: string): Promise<AccessPointResponse> => {
+    const data = await axiosFetch<AccessPointResponse>(getAccessPointPATH(apid));
+
+    return data;
+  },
+
+  deleteAccessPoint: async (apid: string): Promise<void> => {
+    await axiosFetch<void>(getAccessPointPATH(apid), {
       method: 'DELETE'
     });
   },
 
-  fetchInitialDeployment: async (id: string): Promise<string> => axiosFetch<string>(`${getInteriorSitesPATH(id)}/kube`),
+  // BACKBONE LINK APIs
+  fetchLinksForBackbone: async (bid: string, options?: RequestOptions): Promise<LinkResponse[]> => {
+    const data = await axiosFetch<LinkResponse[]>(getBackboneLinksForBackbonePATH(bid), {
+      params: options ? mapOptionsToQueryParams(options) : null
+    });
 
-  fetchIngress: async (sid: string, data: string): Promise<void> => {
-    await axiosFetch<void>(`${getInteriorSitesPATH(sid)}/ingress`, {
-      headers: {
-        'Content-Type': 'application/json'
-      },
+    return data;
+  },
+
+  fetchLinksForSite: async (sid: string, options?: RequestOptions): Promise<LinkResponse[]> => {
+    const data = await axiosFetch<LinkResponse[]>(getBackboneLinksForSitePATH(sid), {
+      params: options ? mapOptionsToQueryParams(options) : null
+    });
+
+    return data;
+  },
+
+  createLink: async (apid: string, data: LinkRequest): Promise<string> => {
+    const { id } = await axiosFetch<{ id: string }>(getCreateLinkPATH(apid), {
       method: 'POST',
+      data
+    });
+
+    return id;
+  },
+
+  updateLink: async (lid: string, data: Partial<LinkRequest>): Promise<void> => {
+    await axiosFetch<void>(getBackboneLinkPATH(lid), {
+      method: 'PUT',
       data
     });
   },
 
-  fetchIncomingLinks: async (id: string): Promise<string> =>
-    axiosFetch<string>(`${getInteriorSitesPATH(id)}/links/incoming/kube`),
-
-  fetchVans: async (): Promise<VanResponse[]> => axiosFetch<VanResponse[]>(`${getVansPATH()}`),
-
-  createVan: async (bid: string, data?: VanRequest): Promise<void> => {
-    await axiosFetch<void>(`${getBackbonePATH(bid)}/vans`, {
-      method: 'POST',
-      data: {
-        name: data?.name
-      }
+  deleteLink: async (lid: string): Promise<void> => {
+    await axiosFetch<void>(getBackboneLinkPATH(lid), {
+      method: 'DELETE'
     });
   },
 
-  searchVan: async (vid: string): Promise<VanResponse> => {
-    const data = await axiosFetch<VanResponse>(`${getVanPATH(vid)}`, {
-      method: 'GET'
+  // VAN (APPLICATION NETWORK) APIs
+  fetchVans: async (): Promise<VanResponse[]> => {
+    const data = await axiosFetch<VanResponse[]>(getVansPATH());
+
+    return data;
+  },
+
+  fetchVansForBackbone: async (bid: string): Promise<VanResponse[]> => {
+    const data = await axiosFetch<VanResponse[]>(getVansForBackbonePATH(bid));
+
+    return data;
+  },
+
+  createVan: async (bid: string, data: VanRequest): Promise<string> => {
+    const { id } = await axiosFetch<{ id: string }>(getCreateVanPATH(bid), {
+      method: 'POST',
+      data
     });
+
+    return id;
+  },
+
+  searchVan: async (vid: string): Promise<VanResponse> => {
+    const data = await axiosFetch<VanResponse>(getVanPATH(vid));
 
     return data;
   },
 
   deleteVan: async (vid: string): Promise<void> => {
-    await axiosFetch<void>(`${getVanPATH(vid)}`, {
+    await axiosFetch<void>(getVanPATH(vid), {
       method: 'DELETE'
     });
   },
 
-  fetchInvitations: async (vid: string): Promise<InvitationResponse[]> =>
-    axiosFetch<InvitationResponse[]>(`${getVanPATH(vid)}/invitations`),
+  evictVan: async (vid: string): Promise<void> => {
+    await axiosFetch<void>(getEvictVanPATH(vid), {
+      method: 'PUT'
+    });
+  },
 
-  createInvitation: async (vid: string, data?: InvitationRequest): Promise<void> => {
-    await axiosFetch<void>(`${getVanPATH(vid)}/invitations`, {
+  // INVITATION APIs
+  fetchInvitations: async (vid: string): Promise<InvitationResponse[]> => {
+    const data = await axiosFetch<InvitationResponse[]>(getInvitationsForVanPATH(vid));
+
+    return data;
+  },
+
+  fetchAllInvitations: async (): Promise<InvitationResponse[]> => {
+    const data = await axiosFetch<InvitationResponse[]>(getInvitationsPATH());
+
+    return data;
+  },
+
+  createInvitation: async (vid: string, data: InvitationRequest): Promise<string> => {
+    const { id } = await axiosFetch<{ id: string }>(getCreateInvitationPATH(vid), {
+      method: 'POST',
+      data
+    });
+
+    return id;
+  },
+
+  searchInvitation: async (iid: string): Promise<InvitationResponse> => {
+    const data = await axiosFetch<InvitationResponse>(getInvitationPATH(iid));
+
+    return data;
+  },
+
+  searchInvitationYAML: async (iid: string): Promise<string> => {
+    const data = await axiosFetch<string>(getInvitationYamlPATH(iid));
+
+    return data;
+  },
+
+  deleteInvitation: async (iid: string): Promise<void> => {
+    await axiosFetch<void>(getInvitationPATH(iid), {
+      method: 'DELETE'
+    });
+  },
+
+  expireInvitation: async (iid: string): Promise<void> => {
+    await axiosFetch<void>(getExpireInvitationPATH(iid), {
+      method: 'PUT'
+    });
+  },
+
+  // MEMBER APIs
+  fetchMembers: async (vid: string): Promise<MemberSiteResponse[]> => {
+    const data = await axiosFetch<MemberSiteResponse[]>(getMembersForVanPATH(vid));
+
+    return data;
+  },
+
+  searchMember: async (mid: string): Promise<MemberSiteResponse> => {
+    const data = await axiosFetch<MemberSiteResponse>(getMemberPATH(mid));
+
+    return data;
+  },
+
+  evictMember: async (mid: string): Promise<void> => {
+    await axiosFetch<void>(getEvictMemberPATH(mid), {
+      method: 'PUT'
+    });
+  },
+
+  // TLS CERTIFICATE APIs
+  fetchTlsCertificate: async (cid: string): Promise<TlsCertificateResponse> => {
+    const data = await axiosFetch<TlsCertificateResponse>(getTlsCertificatePATH(cid));
+
+    return data;
+  },
+
+  // TARGET PLATFORM APIs
+  fetchTargetPlatforms: async (): Promise<TargetPlatformResponse[]> => {
+    const data = await axiosFetch<TargetPlatformResponse[]>(getTargetPlatformsPATH());
+
+    return data;
+  },
+
+  // DEPLOYMENT APIs
+  fetchSiteDeployment: async (sid: string, target: 'sk2' | 'kube'): Promise<string> => {
+    const data = await axiosFetch<string>(getSiteDeploymentPATH(sid, target));
+
+    return data;
+  },
+
+  // INGRESS APIs
+  createIngress: async (sid: string, data: IngressRequest): Promise<void> => {
+    await axiosFetch<void>(getIngressPATH(sid), {
       method: 'POST',
       data
     });
   },
 
-  searchInvitation: async (iid: string): Promise<InvitationResponse> => {
-    const data = await axiosFetch<InvitationResponse>(`${getInvitationPath(iid)}`, {
-      method: 'GET'
+  // LIBRARY BLOCK APIs
+  fetchLibraries: async (options?: RequestOptions): Promise<LibraryBlockResponse[]> => {
+    const data = await axiosFetch<LibraryBlockResponse[]>(getLibrariesPATH(), {
+      params: options ? mapOptionsToQueryParams(options) : null
     });
 
     return data;
   },
 
-  searchInvitationYAML: async (id: string): Promise<string> => axiosFetch<string>(`${getInvitationPath(id)}/kube`),
+  fetchLibraryBlock: async (id: string): Promise<LibraryBlockResponse> => {
+    const data = await axiosFetch<LibraryBlockResponse>(getLibraryPATH(id));
 
-  deleteInvitation: async (vid: string): Promise<void> => {
-    await axiosFetch<void>(`${getInvitationPath(vid)}`, {
+    return data;
+  },
+
+  fetchLibraryConfig: async (id: string): Promise<LibraryBlockUpdateRequest> => {
+    const data = await axiosFetch<LibraryBlockUpdateRequest>(getLibraryConfigPATH(id));
+
+    return data;
+  },
+
+  fetchLibraryInterfaces: async (id: string): Promise<LibraryBlockUpdateRequest> => {
+    const data = await axiosFetch<LibraryBlockUpdateRequest>(getLibraryInterfacesPATH(id));
+
+    return data;
+  },
+
+  fetchLibraryBody: async (id: string): Promise<LibraryBlockUpdateRequest> => {
+    const data = await axiosFetch<LibraryBlockUpdateRequest>(getLibraryBodyPATH(id));
+
+    return data;
+  },
+
+  deleteLibrary: async (id: string): Promise<void> => {
+    await axiosFetch<void>(getLibraryPATH(id), {
       method: 'DELETE'
     });
   },
 
-  fetchMembers: async (vid: string): Promise<MemberResponse[]> =>
-    axiosFetch<MemberResponse[]>(`${getVanPATH(vid)}/members`),
+  createLibraryJson: async (data: LibraryBlockRequest): Promise<string> => {
+    const { id } = await axiosFetch<{ id: string }>(getLibrariesPATH(), {
+      method: 'POST',
+      data
+    });
 
-  searchMember: async (mid: string): Promise<MemberResponse[]> => axiosFetch<MemberResponse[]>(`${getMemberPath(mid)}`),
+    return id;
+  },
 
-  fetchAccessClaims: async (bid: string): Promise<{ id: string; name: string }[]> => {
-    const data = await axiosFetch<{ id: string; name: string }[]>(`${getBackbonePATH(bid)}/access/claim`, {
-      method: 'GET'
+  fetchLibraryBlockTypes: async (): Promise<LibraryBlockTypeResponse[]> => {
+    const data = await axiosFetch<LibraryBlockTypeMap>(getLibraryBlockTypesPATH());
+
+    // Convert btMap (object) to btArray (array) for backward compatibility
+    // Add the type field back from the object key
+    const blockTypesArray: LibraryBlockTypeResponse[] = Object.entries(data).map(([typeName, typeData]) => ({
+      ...typeData,
+      type: typeName
+    }));
+
+    return blockTypesArray;
+  },
+
+  // NOTE: Body styles are hardcoded as ['simple', 'composite'] in useLibraryMetadata
+  // because the backend doesn't implement /library/bodystyles endpoint
+  // fetchLibraryBodyStyles: async (): Promise<string[]> => {
+  //   const data = await axiosFetch<string[]>(getLibraryBodyStylesPATH());
+  //   return data;
+  // },
+
+  fetchInterfaceRoles: async (): Promise<{ name: string; description?: string }[]> => {
+    const data = await axiosFetch<{ name: string; description?: string }[]>(getInterfaceRolesPATH());
+
+    return data;
+  },
+
+  updateLibraryConfig: async (id: string, config: LibraryBlockUpdateRequest): Promise<void> => {
+    await axiosFetch<void>(getLibraryConfigPATH(id), {
+      method: 'PUT',
+      data: config
+    });
+  },
+
+  updateLibraryInterfaces: async (id: string, interfaces: LibraryBlockUpdateRequest): Promise<void> => {
+    await axiosFetch<void>(getLibraryInterfacesPATH(id), {
+      method: 'PUT',
+      data: interfaces
+    });
+  },
+
+  updateLibraryBody: async (id: string, body: LibraryBlockUpdateRequest): Promise<void> => {
+    await axiosFetch<void>(getLibraryBodyPATH(id), {
+      method: 'PUT',
+      data: body
+    });
+  },
+
+  fetchLibraryHistory: async (id: string): Promise<LibraryBlockHistoryResponse[]> => {
+    const data = await axiosFetch<LibraryBlockHistoryResponse[]>(getLibraryHistoryPATH(id));
+
+    return data;
+  },
+
+  // APPLICATION APIs
+  fetchApplications: async (options?: RequestOptions): Promise<ApplicationResponse[]> => {
+    console.log('API fetchApplications called with options:', options);
+    const data = await axiosFetch<ApplicationResponse[]>(getApplicationsPATH(), {
+      params: options ? mapOptionsToQueryParams(options) : null
+    });
+    console.log('API fetchApplications result:', data);
+    return data;
+  },
+
+  createApplication: async (data: CreateApplicationRequest): Promise<string> => {
+    const { id } = await axiosFetch<{ id: string }>(getApplicationsPATH(), {
+      method: 'POST',
+      data
+    });
+
+    return id;
+  },
+
+  deleteApplication: async (id: string): Promise<void> => {
+    await axiosFetch<void>(getApplicationPATH(id), {
+      method: 'DELETE'
+    });
+  },
+
+  buildApplication: async (id: string): Promise<void> => {
+    await axiosFetch<void>(getApplicationBuildPATH(id), {
+      method: 'PUT'
+    });
+  },
+
+  fetchApplicationLog: async (id: string): Promise<string> => {
+    const data = await axiosFetch<string>(getApplicationLogPATH(id));
+
+    return data;
+  },
+
+  fetchApplicationBlocks: async (id: string): Promise<ApplicationBlock[]> => {
+    const data = await axiosFetch<ApplicationBlock[]>(getApplicationBlocksPATH(id));
+
+    return data;
+  },
+
+  // DEPLOYMENT APIs
+  fetchDeployments: async (options?: RequestOptions): Promise<DeploymentResponse[]> => {
+    const data = await axiosFetch<DeploymentResponse[]>(getDeploymentsPATH(), {
+      params: options ? mapOptionsToQueryParams(options) : null
     });
 
     return data;
   },
 
-  fetchAccessMember: async (bid: string): Promise<{ id: string; name: string }[]> => {
-    const data = await axiosFetch<{ id: string; name: string }[]>(`${getBackbonePATH(bid)}/access/member`, {
-      method: 'GET'
+  createDeployment: async (data: DeploymentRequest): Promise<string> => {
+    const {id} = await axiosFetch<{ id: string }>(getDeploymentsPATH(), {
+      method: 'POST',
+      data
     });
+
+    return id;
+  },
+
+  fetchDeploymentDetails: async (id: string): Promise<DeploymentDetailsResponse> => {
+    const data = await axiosFetch<DeploymentDetailsResponse>(getDeploymentPATH(id));
+
+    return data;
+  },
+
+  deleteDeployment: async (id: string): Promise<void> => {
+    await axiosFetch<void>(getDeploymentPATH(id), {
+      method: 'DELETE'
+    });
+  },
+
+  deployDeployment: async (id: string): Promise<void> => {
+    await axiosFetch<void>(getDeploymentDeployPATH(id), {
+      method: 'PUT'
+    });
+  },
+
+  fetchDeploymentLog: async (id: string): Promise<string> => {
+    const data = await axiosFetch<string>(getDeploymentLogPATH(id));
 
     return data;
   }
