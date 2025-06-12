@@ -53,11 +53,11 @@ spec:
     networkPolicyOnAcceptor:
       type: bool
       description: "Generate network policy to match the acceptor"
-      default: true
+      default: false
     networkPolicyOnConnector:
       type: bool
       description: "Generate network policy to match the connector"
-      default: true
+      default: false
     vanFlowTransport:
       type: bool
       description: "Generate vanFlow transport events"
