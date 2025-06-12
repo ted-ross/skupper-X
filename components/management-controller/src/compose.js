@@ -1017,7 +1017,7 @@ const expandBlock = function(instanceBlock, site, thruInterface, accumulated, de
         let unresolvable = {};
         for (const element of body) {
             if (true || !element.targetPlatforms || element.targetPlatforms.indexOf(site.targetplatform) >= 0) {  // FIXME
-                if (!thruInterface || !element.affinity || element.affinity.indexOf(thruInterface.getName() >= 0)) {
+                if (!thruInterface || !element.affinity || element.affinity.indexOf(thruInterface.getName()) >= 0) {
                     accumulated.push(gotemplate.Expand(element.template, localConfig, remoteConfig, unresolvable));
                 }
             }
@@ -1089,7 +1089,7 @@ const addMemberSite = async function(client, app, site, depid, deployLog) {
     if (siteConfiguration.length > 0) {
         let configtext = "";
         for (const item of siteConfiguration) {
-            configtext += "---\n" + yaml.dump(item);
+            configtext += item;
         }
         await client.query("INSERT INTO SiteData (DeployedApplication, MemberSite, Format, Configuration) " +
                            "VALUES ($1, $2, 'application/yaml', $3)", [depid, site.id, configtext]);

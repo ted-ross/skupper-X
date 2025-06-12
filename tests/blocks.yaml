@@ -86,67 +86,71 @@ spec:
     targetPlatforms: [sk2]
     description: "Interface to Skupper-v2 acceptors on kubernetes sites"
     template: |
-      - apiVersion: skupper.io/v2alpha1
-        kind: Connector
-        metadata:
-          name: connector-{{.ident}}
-        spec:
-          type: tcp
-          selector: {{$affblock.selectorKey}}={{$affblock.selectorValue}}
-          port: {{$affif.port}}
-          routingKey: {{.keyPrefix}}{{.name}}
+      ---
+      apiVersion: skupper.io/v2alpha1
+      kind: Connector
+      metadata:
+        name: connector-{{.ident}}
+      spec:
+        type: tcp
+        selector: {{$affblock.selectorKey}}={{$affblock.selectorValue}}
+        port: {{$affif.port}}
+        routingKey: {{.keyPrefix}}{{.name}}
       {{- if .networkPolicyOnAcceptor}}
-      - apiVersion: networking.k8s.io/v1
-        kind: NetworkPolicy
-        metadata:
-          name: ingress-policy-{{.ident}}
-        spec:
-          podSelector:
-            matchLabels:
-              {{$affblock.selectorKey}} : {{$affblock.selectorValue}}
-          policyTypes:
-          - Ingress
-          ingress:
-          - from:
-            - podSelector:
-                matchLabels:
-                  skupper.io/component: router
-            ports:
-            - protocol: TCP
-              port: {{$affif.port}}
+      ---
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: ingress-policy-{{.ident}}
+      spec:
+        podSelector:
+          matchLabels:
+            {{$affblock.selectorKey}} : {{$affblock.selectorValue}}
+        policyTypes:
+        - Ingress
+        ingress:
+        - from:
+          - podSelector:
+              matchLabels:
+                skupper.io/component: router
+          ports:
+          - protocol: TCP
+            port: {{$affif.port}}
       {{end}}
   - affinity: [connector]
     targetPlatforms: [sk2]
     description: "Interface to Skupper-v2 connectors on kubernetes sites"
     template: |
-      - apiVersion: skupper.io/v2alpha1
-        kind: Listener
-        metadata:
-          name: listener-{{.ident}}
-        spec:
-          type: tcp
-          host: {{$affif.host}}
-          port: {{$affif.port}}
-          routingKey: {{.keyPrefix}}{{.name}}
+      ---
+      apiVersion: skupper.io/v2alpha1
+      kind: Listener
+      metadata:
+        name: listener-{{.ident}}
+      spec:
+        type: tcp
+        host: {{$affif.host}}
+        port: {{$affif.port}}
+        routingKey: {{.keyPrefix}}{{.name}}
       {{- if .networkPolicyOnConnector}}
-      - apiVersion: networking.k8s.io/v1
-        kind: NetworkPolicy
-        metadata:
-          name: egress-policy-{{.ident}}
-        spec:
-          podSelector:
-            matchLabels:
-              {{$affblock.selectorKey}} : {{$affblock.selectorValue}}
-          policyTypes:
-          - Egress
-          egress:
-          - to:
-            - podSelector:
-                matchLabels:
-                  skupper.io/component: router
-            ports:
-            - protocol: TCP
-              port: {{$affif.port}}
+      ---
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: egress-policy-{{.ident}}
+      spec:
+        podSelector:
+          matchLabels:
+            {{$affblock.selectorKey}} : {{$affblock.selectorValue}}
+        policyTypes:
+        - Egress
+        egress:
+        - to:
+          - podSelector:
+              matchLabels:
+                skupper.io/component: router
+          ports:
+          - protocol: TCP
+            port: {{$affif.port}}
       {{end}}
 
 ##
@@ -184,45 +188,46 @@ spec:
   body:
   - targetPlatforms: [sk2, podman-sk2]
     template: |
-      - apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: nearestprime-{{.ident}}
-        spec:
-          replicas: {{.replicas}}
-          selector:
-            matchLabels:
+      ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: nearestprime-{{.ident}}
+      spec:
+        replicas: {{.replicas}}
+        selector:
+          matchLabels:
+            {{.selectorKey}}: {{.selectorValue}}
+        template:
+          metadata:
+            labels:
               {{.selectorKey}}: {{.selectorValue}}
-          template:
-            metadata:
-              labels:
-                {{.selectorKey}}: {{.selectorValue}}
-            spec:
-              containers:
-              - name: nearestprime
-                image: quay.io/tedlross/nearestprime:latest
-                imagePullPolicy: Always
-                livenessProbe:
-                  failureThreshold: 3
-                  httpGet:
-                    path: /healthz
-                    port: {{$localif.control.port}}
-                    scheme: HTTP
-                  initialDelaySeconds: 60
-                  periodSeconds: 10
-                  successThreshold: 1
-                  timeoutSeconds: 5
-                ports:
-                - containerPort: {{$localif.control.port}}
-                env:
-                - name: DDW_USER
-                  value: access
-                - name: DDW_PASSWORD
-                  value: demopass
-                - name: DDW_HOST
-                  value: {{$localif.postgres.host}}
-                - name: DDW_SITENAME
-                  value: {{$site.name}}
+          spec:
+            containers:
+            - name: nearestprime
+              image: quay.io/tedlross/nearestprime:latest
+              imagePullPolicy: Always
+              livenessProbe:
+                failureThreshold: 3
+                httpGet:
+                  path: /healthz
+                  port: {{$localif.control.port}}
+                  scheme: HTTP
+                initialDelaySeconds: 60
+                periodSeconds: 10
+                successThreshold: 1
+                timeoutSeconds: 5
+              ports:
+              - containerPort: {{$localif.control.port}}
+              env:
+              - name: DDW_USER
+                value: access
+              - name: DDW_PASSWORD
+                value: demopass
+              - name: DDW_HOST
+                value: {{$localif.postgres.host}}
+              - name: DDW_SITENAME
+                value: {{$site.name}}
 
 ##
 ## PostgresSql Database
@@ -266,40 +271,41 @@ spec:
   bodyStyle: simple
   body:
   - template: |
-      - apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: postgres-{{.ident}}
-        spec:
-          replicas: 1
-          selector:
-            matchLabels:
+      ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: postgres-{{.ident}}
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            {{.selectorKey}}: {{.selectorValue}}
+        template:
+          metadata:
+            labels:
               {{.selectorKey}}: {{.selectorValue}}
-          template:
-            metadata:
-              labels:
-                {{.selectorKey}}: {{.selectorValue}}
-            spec:
-              containers:
-              - name: postgres
-                image: postgres:{{.imageVersion}}
-                imagePullPolicy: "IfNotPresent"
-                ports:
-                - containerPort: {{$localif.postgres.port}}
-                env:
-                - name: POSTGRES_DB
-                  value: {{.POSTGRES_DB}}
-                - name: POSTGRES_USER
-                  value: {{.POSTGRES_USER}}
-                - name: POSTGRES_PASSWORD
-                  value: {{.POSTGRES_PASSWORD}}
-                volumeMounts:
-                - mountPath: /var/lib/postgresql/data
-                  name: postgresdb
-              volumes:
-              - name: postgresdb
-                emptyDir:
-                  sizeLimit: {{$localif.files.volumeSize}}
+          spec:
+            containers:
+            - name: postgres
+              image: postgres:{{.imageVersion}}
+              imagePullPolicy: "IfNotPresent"
+              ports:
+              - containerPort: {{$localif.postgres.port}}
+              env:
+              - name: POSTGRES_DB
+                value: {{.POSTGRES_DB}}
+              - name: POSTGRES_USER
+                value: {{.POSTGRES_USER}}
+              - name: POSTGRES_PASSWORD
+                value: {{.POSTGRES_PASSWORD}}
+              volumeMounts:
+              - mountPath: /var/lib/postgresql/data
+                name: postgresdb
+            volumes:
+            - name: postgresdb
+              emptyDir:
+                sizeLimit: {{$localif.files.volumeSize}}
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
@@ -325,29 +331,31 @@ spec:
   body:
   - affinity: mountpoint
     template: |
-      - apiVersion: v1
-        kind: PersistentVolume
-        metadata:
-          name: postgres-pv-{{.ident}}
-        spec:
-          storageClassName: {{.storageClass}}
-          capacity:
-            storage: {{.capacity}}
-          accessModes:
-          - {{.accessModes}}
-          hostPath:
-            path: "/mnt/data"
-      - apiVersion: v1
-        kind: PersistentVolumeClaim
-        metadata:
-          name: postgres-pvc-{{.ident}}
-        spec:
-          storageClassName: {{.storageClass}}
-          accessModes:
-          - {{.accessModes}}
-          resources:
-            requests:
-              storage: {{$affif.volumeSize}}
+      ---
+      apiVersion: v1
+      kind: PersistentVolume
+      metadata:
+        name: postgres-pv-{{.ident}}
+      spec:
+        storageClassName: {{.storageClass}}
+        capacity:
+          storage: {{.capacity}}
+        accessModes:
+        - {{.accessModes}}
+        hostPath:
+          path: "/mnt/data"
+      ---
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: postgres-pvc-{{.ident}}
+      spec:
+        storageClassName: {{.storageClass}}
+        accessModes:
+        - {{.accessModes}}
+        resources:
+          requests:
+            storage: {{$affif.volumeSize}}
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
@@ -434,9 +442,10 @@ spec:
   - name: request-ingress-to-main
     block: library/tcp-connection
     config:
-      keyPrefix: http
+      keyPrefix: http-ingress
       protocol: http
       connectorType: selector
+      networkPolicyOnConnector: false
     bindings:
     - interface: acceptor
       block: mainApp
@@ -464,20 +473,21 @@ spec:
   bodyStyle: simple
   body:
   - template: |
-      - apiVersion: networking.k8s.io/v1
-        kind: Ingress
-        metadata:
-          name: {{.namePrefix}}-{{.ident}}
-        spec:
-          ingressClassName: nginx
-          rules:
-            - host: {{.serviceName}}
-              http:
-                paths:
-                  - path: /
-                    pathType: Prefix
-                    backend:
-                      service:
-                        name: {{$localif.connector.host}}
-                        port:
-                          number: {{$localif.connector.port}}
+      ---
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: {{.namePrefix}}-{{.ident}}
+      spec:
+        ingressClassName: nginx
+        rules:
+          - host: {{.serviceName}}
+            http:
+              paths:
+                - path: /
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: {{$localif.connector.host}}
+                      port:
+                        number: {{$localif.connector.port}}
