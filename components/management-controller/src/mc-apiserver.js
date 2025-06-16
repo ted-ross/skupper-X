@@ -162,7 +162,7 @@ const fetchBackboneSiteKube = async function (siteId, res) {
             text += siteTemplates.BackboneRoleYaml();
             text += siteTemplates.RoleBindingYaml();
             text += siteTemplates.ConfigMapYaml('interior', result.rows[0].sitename);
-            text += siteTemplates.DeploymentYaml(siteId, true);
+            text += siteTemplates.DeploymentYaml(siteId, true, 'kube');
             text += siteTemplates.SecretYaml(secret, `skx-site-${siteId}`, common.INJECT_TYPE_SITE, `tls-site-${siteId}`);
 
             const links = await sync.GetBackboneLinks_TX(client, siteId);
@@ -191,14 +191,16 @@ const fetchBackboneSiteKube = async function (siteId, res) {
     return returnStatus;
 }
 
-const fetchBackboneSiteCrd = async function (siteId, res) {
+const fetchBackboneSiteSkupper2 = async function (siteId, res) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
         await client.query('BEGIN');
         const result = await client.query(
-            "SELECT Name, DeploymentState, Certificate, TlsCertificates.ObjectName FROM InteriorSites " +
-            "JOIN TlsCertificates ON Certificate = TlsCertificates.Id WHERE Interiorsites.Id = $1", [siteId]);
+            "SELECT Name, DeploymentState, Certificate, TlsCertificates.ObjectName " +
+            "FROM   InteriorSites " +
+            "JOIN   TlsCertificates ON Certificate = TlsCertificates.Id " +
+            "WHERE  Interiorsites.Id = $1", [siteId]);
         if (result.rowCount == 1) {
             const site = result.rows[0];
             if (site.deploymentstate == 'deployed') {
@@ -209,6 +211,10 @@ const fetchBackboneSiteCrd = async function (siteId, res) {
             }
             const secret = await kube.LoadSecret(site.objectname);
             let text = '';
+            text += siteTemplates.ServiceAccountYaml();
+            text += siteTemplates.BackboneRoleYaml();
+            text += siteTemplates.RoleBindingYaml();
+            text += siteTemplates.DeploymentYaml(siteId, true, 'sk2');
             text += siteTemplates.SecretYaml(secret, `tls-client-${site.certificate}`, false);
 
             const links = await sync.GetBackboneLinks_TX(client, siteId);
@@ -412,7 +418,7 @@ exports.Start = async function() {
 
     app.get(API_PREFIX + 'backbonesite/:bsid/:target', async (req, res) => {
         switch (req.params.target) {
-            case 'sk2'  : await fetchBackboneSiteCrd(req.params.bsid, res);   break;
+            case 'sk2'  : await fetchBackboneSiteSkupper2(req.params.bsid, res);   break;
             case 'kube' : await fetchBackboneSiteKube(req.params.bsid, res);  break;
             default:
                 res.status(400).send(`Unsupported target: ${req.params.target}`);

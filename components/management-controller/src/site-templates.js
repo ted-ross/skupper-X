@@ -19,10 +19,11 @@
 
 "use strict";
 
-const config = require('./config.js');
-const yaml   = require('js-yaml');
-const common = require('./common/common.js');
-const crypto = require('crypto');
+const config     = require('./config.js');
+const yaml       = require('js-yaml');
+const common     = require('./common/common.js');
+const crypto     = require('crypto');
+const gotemplate = require('./gotemplate.js');
 
 const SA_NAME           = 'skupperx-site';
 const ROLE_NAME         = SA_NAME;
@@ -199,17 +200,30 @@ ${vanId ? `                "vanId": "${vanId}",` : ''}
 `;
 }
 
-exports.DeploymentYaml = function(bsid, backboneMode) {
-    return `---
+exports.DeploymentYaml = function(bsid, backboneMode, target) {
+    let values = {
+        deploymentName     : DEPLOYMENT_NAME,
+        application        : APPLICATION,
+        routerLabel        : ROUTER_LABEL,
+        serviceAccountName : SA_NAME,
+        dataplaneImage     : config.SiteDataplaneImage(),
+        controllerImage    : config.SiteControllerImage(),
+        backboneMode       : backboneMode ? 'YES' : 'NO',
+        siteId             : bsid,
+        targetV2           : target == 'sk2',
+        targetKube         : target == 'kube',
+    };
+    const template =
+`---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app.kubernetes.io/name: ${DEPLOYMENT_NAME}
+    app.kubernetes.io/name: {{.deploymentName}}
     app.kubernetes.io/part-of: skupperx
     skupper.io/component: router
-    application: ${APPLICATION}
-  name: ${DEPLOYMENT_NAME}
+    application: {{.application}}
+  name: {{.deploymentName}}
 spec:
   progressDeadlineSeconds: 600
   replicas: 1
@@ -228,15 +242,16 @@ spec:
         prometheus.io/port: "9090"
         prometheus.io/scrape: "true"
       labels:
-        app.kubernetes.io/name: ${DEPLOYMENT_NAME}
+        app.kubernetes.io/name: {{.deploymentName}}
         app.kubernetes.io/part-of: skupperx
-        application: ${ROUTER_LABEL}
+        application: {{.routerLabel}}
         skupper.io/component: router
     spec:
       containers:
+{{- if .targetKube }}
       - env:
         - name: APPLICATION_NAME
-          value: ${APPLICATION}
+          value: {{.application}}
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
@@ -253,7 +268,7 @@ spec:
           value: /etc/skupper-router/config/skrouterd.json
         - name: QDROUTERD_CONF_TYPE
           value: json
-        image: ${config.SiteDataplaneImage()}
+        image: {{.dataplaneImage}}
         imagePullPolicy: Always
         livenessProbe:
           failureThreshold: 3
@@ -290,16 +305,23 @@ spec:
           name: router-config
         - mountPath: /etc/skupper-router-certs
           name: skupper-router-certs
-      - image: ${config.SiteControllerImage()}
+{{- end }}
+      - image: {{.controllerImage}}
         imagePullPolicy: Always
         name: controller
         env:
         - name: SKUPPERX_SITE_ID
-          value: ${bsid}
+          value: {{.siteId}}
         - name: SKX_BACKBONE
-          value: "${backboneMode ? 'YES' : 'NO'}"
+          value: "{{.backboneMode}}"
         - name: NODE_ENV
           value: production
+        - name: SIDECAR_MODE
+{{- if .targetKube }}
+          value: "YES"
+{{- else }}
+          value: "NO"
+{{- end }}
         ports:
         - containerPort: 1040
           name: siteapi
@@ -327,8 +349,8 @@ spec:
       schedulerName: default-scheduler
       securityContext:
         runAsNonRoot: true
-      serviceAccount: ${SA_NAME}
-      serviceAccountName: ${SA_NAME}
+      serviceAccount: {{.serviceAccountName}}
+      serviceAccountName: {{.serviceAccountName}}
       terminationGracePeriodSeconds: 30
       volumes:
       - configMap:
@@ -338,6 +360,9 @@ spec:
       - emptyDir: {}
         name: skupper-router-certs
 `;
+
+    let unresolvable = {};
+    return gotemplate.Expand(template, values, {}, unresolvable);
 }
 
 exports.SiteApiServiceYaml = function() {
