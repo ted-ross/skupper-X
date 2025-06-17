@@ -1,8 +1,7 @@
 import { Breadcrumb, BreadcrumbHeading, BreadcrumbItem } from '@patternfly/react-core';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 
-import { getTestsIds } from '@config/testIds';
-import { getIdAndNameFromUrlParams } from '@core/utils/getIdAndNameFromUrlParams';
+import { getIdAndNameFromUrlParams } from '../../utils/getIdAndNameFromUrlParams';
 
 const SkBreadcrumb = function () {
   const { pathname } = useLocation();
@@ -18,15 +17,26 @@ const SkBreadcrumb = function () {
 
   const queryParams = searchParams.size > 0 ? `?${searchParams.toString()}` : '';
 
+  // Dynamically capitalize and format segment names from URL
+  // Automatically handles both section names and detail pages with nome@id format
+  const formatDisplayName = (segment: string) =>
+    // Capitalize first letter and replace common abbreviations
+    segment
+      .split(/[-_]/) // Split on hyphens and underscores
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+
   return (
-    <Breadcrumb data-testid={getTestsIds.breadcrumbComponent()}>
-      {pathsNormalized.map((path, index) => (
-        <BreadcrumbItem key={path.name} className="sk-capitalize">
-          {path.name !== 'sites' && path.name !== 'invitations' && (
-            <Link to={`${[...paths].slice(0, index + 1).join('/')}${queryParams}`}>{path.name}</Link>
-          )}
-        </BreadcrumbItem>
-      ))}
+    <Breadcrumb>
+      {pathsNormalized.map((path, index) => {
+        const displayName = formatDisplayName(path.name);
+
+        return (
+          <BreadcrumbItem key={path.name} style={{ textTransform: 'capitalize' }}>
+            <Link to={`/${[...paths].slice(0, index + 1).join('/')}${queryParams}`}>{displayName}</Link>
+          </BreadcrumbItem>
+        );
+      })}
 
       <BreadcrumbHeading> &nbsp; {lastPath?.name}</BreadcrumbHeading>
     </Breadcrumb>

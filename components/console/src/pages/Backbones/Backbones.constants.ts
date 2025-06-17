@@ -1,45 +1,40 @@
+import { RoutesPaths, DeploymentStates } from './Backbones.enum';
+import labels from '../../core/config/labels';
 import {
   BackboneResponse,
   InvitationResponse,
   LinkResponse,
-  MemberResponse,
-  SiteResponse,
-  VanResponse
-} from '@API/REST.interfaces';
-import { HexColors, VarColors } from '@config/colors';
-import { SKColumn } from '@core/components/SkTable/SkTable.interfaces';
-
-import {
-  BackboneLabels,
-  RoutesPaths,
-  DeploymentStates,
-  InvitationLabels,
-  LinkLabels,
-  MemberLabels,
-  SiteLabels,
-  VanLabels
-} from './Backbones.enum';
+  MemberSiteResponse,
+  BackboneSiteResponse
+} from '../../API/REST.interfaces';
+import { hexColors } from '../../config/colors';
+import { SKColumn } from '../../core/components/SkTable/SkTable.interfaces';
 
 export const BackbonesPaths = {
-  path: RoutesPaths.App,
-  name: BackboneLabels.Section
+  path: RoutesPaths.Backbones,
+  name: labels.navigation.backbones
 };
 
 export const backboneColumns: SKColumn<BackboneResponse>[] = [
   {
-    name: BackboneLabels.Name,
+    name: labels.forms.name,
     prop: 'name',
     customCellName: 'linkCell'
   },
   {
-    name: BackboneLabels.Lifecycle,
+    name: labels.forms.status,
     prop: 'lifecycle',
     customCellName: 'lifecycleCell'
   },
   {
-    name: BackboneLabels.Multitenant,
+    name: labels.forms.manage,
     prop: 'multitenant',
     customCellName: 'booleanCell'
+  },
+  {
+    name: labels.errors.generic,
+    prop: 'failure',
+    customCellName: 'failure'
   },
   {
     name: '',
@@ -48,31 +43,31 @@ export const backboneColumns: SKColumn<BackboneResponse>[] = [
   }
 ];
 
-export const siteColumns: SKColumn<SiteResponse>[] = [
+export const siteColumns: SKColumn<BackboneSiteResponse>[] = [
   {
-    name: BackboneLabels.Name,
+    name: labels.columns.name,
     prop: 'name',
     customCellName: 'linkCell'
   },
   {
-    name: BackboneLabels.Lifecycle,
+    name: labels.columns.status,
     prop: 'lifecycle',
     customCellName: 'lifecycleCell'
   },
   {
-    name: SiteLabels.FirstActiveTime,
-    prop: 'firstactivetime',
-    customCellName: 'DateCell'
+    name: labels.columns.deploymentStatus,
+    prop: 'deploymentstate',
+    customCellName: 'deploymentStateCell'
   },
   {
-    name: SiteLabels.LastHeartBeat,
+    name: labels.generic.lastHeartbeat,
     prop: 'lastheartbeat',
     customCellName: 'DateCell'
   },
   {
-    name: SiteLabels.DeploymentState,
-    prop: 'deploymentstate',
-    customCellName: 'deploymentStateCell'
+    name: labels.generic.firstActive,
+    prop: 'firstactivetime',
+    customCellName: 'DateCell'
   },
   {
     name: '',
@@ -83,51 +78,14 @@ export const siteColumns: SKColumn<SiteResponse>[] = [
 
 export const linkColumns: SKColumn<LinkResponse>[] = [
   {
-    name: LinkLabels.ConnectingSite,
+    name: labels.forms.peer,
     prop: 'connectinginteriorsite',
     customCellName: 'linkCellConnectingSiteCell'
   },
   {
-    name: LinkLabels.ListeningSite,
-    prop: 'listeninginteriorsite',
-    customCellName: 'linkCellListeningSiteCell'
-  },
-  {
-    name: LinkLabels.Cost,
+    name: labels.forms.revision,
     prop: 'cost',
     modifier: 'fitContent'
-  },
-
-  {
-    name: '',
-    modifier: 'fitContent',
-    customCellName: 'actions'
-  }
-];
-
-export const VanColumns: SKColumn<VanResponse>[] = [
-  {
-    name: VanLabels.Name,
-    prop: 'name',
-    customCellName: 'linkCell'
-  },
-  {
-    name: VanLabels.Lifecycle,
-    prop: 'lifecycle',
-    customCellName: 'lifecycleCell'
-  },
-  {
-    name: VanLabels.BackBone,
-    prop: 'backbonename'
-  },
-  {
-    name: VanLabels.EndTime,
-    prop: 'endtime'
-  },
-  {
-    name: VanLabels.DeleteDelay,
-    prop: 'deletedelay',
-    customCellName: 'deleteDelayCell'
   },
   {
     name: '',
@@ -138,36 +96,36 @@ export const VanColumns: SKColumn<VanResponse>[] = [
 
 export const invitationColumns: SKColumn<InvitationResponse>[] = [
   {
-    name: InvitationLabels.Name,
+    name: labels.forms.name,
     prop: 'name'
   },
   {
-    name: InvitationLabels.Lifecycle,
+    name: labels.forms.status,
     prop: 'lifecycle',
     customCellName: 'lifecycleCell'
   },
   {
-    name: InvitationLabels.MemberClass,
-    prop: 'memberclass',
+    name: labels.forms.member,
+    prop: 'memberclasses',
     customCellName: 'emptyCell'
   },
   {
-    name: InvitationLabels.DeadLine,
+    name: labels.forms.revision,
     prop: 'joindeadline',
     customCellName: 'emptyCell'
   },
   {
-    name: InvitationLabels.Count,
+    name: labels.forms.revision,
     prop: 'instancecount',
     customCellName: 'emptyCell'
   },
   {
-    name: InvitationLabels.Limit,
+    name: labels.forms.revision,
     prop: 'instancelimit',
     customCellName: 'emptyCell'
   },
   {
-    name: InvitationLabels.Interactive,
+    name: labels.forms.manage,
     prop: 'interactive',
     customCellName: 'emptyCell'
   },
@@ -177,28 +135,24 @@ export const invitationColumns: SKColumn<InvitationResponse>[] = [
     customCellName: 'actions'
   }
 ];
-export const memberColumns: SKColumn<MemberResponse>[] = [
+
+export const memberColumns: SKColumn<MemberSiteResponse>[] = [
   {
-    name: MemberLabels.Name,
+    name: labels.forms.name,
     prop: 'name'
   },
   {
-    name: MemberLabels.Lifecycle,
+    name: labels.forms.status,
     prop: 'lifecycle',
     customCellName: 'lifecycleCell'
   },
   {
-    name: MemberLabels.SiteClass,
-    prop: 'siteclass',
-    customCellName: 'emptyCell'
-  },
-  {
-    name: MemberLabels.FirstActiveTime,
+    name: labels.forms.revision,
     prop: 'firstactivetime',
     customCellName: 'dateCell'
   },
   {
-    name: MemberLabels.LastHeartbeat,
+    name: labels.forms.revision,
     prop: 'lastheartbeat',
     customCellName: 'dateCell'
   },
@@ -209,16 +163,9 @@ export const memberColumns: SKColumn<MemberResponse>[] = [
   }
 ];
 
-export const DeploymentStatusColorMap = {
-  [DeploymentStates.NotReady]: VarColors.Red100,
-  [DeploymentStates.ReadyBootstrap]: VarColors.Orange200,
-  [DeploymentStates.ReadyAutomatic]: VarColors.Purple500,
-  [DeploymentStates.Deployed]: VarColors.Green500
-};
-
 export const DeploymentStatusColorHexMap = {
-  [DeploymentStates.NotReady]: HexColors.Red100,
-  [DeploymentStates.ReadyBootstrap]: HexColors.Orange200,
-  [DeploymentStates.ReadyAutomatic]: HexColors.Purple500,
-  [DeploymentStates.Deployed]: HexColors.Green500
+  [DeploymentStates.NotReady]: hexColors.Red500,
+  [DeploymentStates.ReadyBootstrap]: hexColors.Orange100,
+  [DeploymentStates.ReadyAutomatic]: hexColors.Purple500,
+  [DeploymentStates.Deployed]: hexColors.Green500
 };

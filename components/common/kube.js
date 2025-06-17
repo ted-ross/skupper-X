@@ -234,24 +234,34 @@ exports.DeleteService = async function(name) {
 }
 
 exports.GetRoutes = async function() {
-    let list = await customApi.listNamespacedCustomObject(
-        'route.openshift.io',
-        'v1',
-        namespace,
-        'routes'
-    );
-    return list.body.items;
+    try {
+        let list = await customApi.listNamespacedCustomObject(
+            'route.openshift.io',
+            'v1',
+            namespace,
+            'routes'
+        );
+        return list.body.items;
+    } catch (error) {
+        // Routes are not available (not running on OpenShift)
+        return [];
+    }
 }
 
 exports.DeleteRoute = async function(name) {
-    Log(`Kube - Deleting route ${name}`);
-    await customApi.deleteNamespacedCustomObject(
-        'route.openshift.io',
-        'v1',
-        namespace,
-        'routes',
-        name
-    );
+    try {
+        Log(`Kube - Deleting route ${name}`);
+        await customApi.deleteNamespacedCustomObject(
+            'route.openshift.io',
+            'v1',
+            namespace,
+            'routes',
+            name
+        );
+    } catch (error) {
+        // Routes are not available (not running on OpenShift)
+        Log(`Route deletion skipped - OpenShift routes not available: ${name}`);
+    }
 }
 
 exports.LoadDeployment = async function(name) {

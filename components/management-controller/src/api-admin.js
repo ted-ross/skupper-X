@@ -466,6 +466,7 @@ const deleteBackbone = async function(req, res) {
     return returnStatus;
 }
 
+// This api is only used by the Console (no compose-web-app )
 const deleteBackboneSite = async function(req, res) {
     var returnStatus = 204;
     const sid = req.params.sid;
@@ -476,25 +477,25 @@ const deleteBackboneSite = async function(req, res) {
             throw(Error('Site-Id is not a valid uuid'));
         }
 
-        const result = await client.query("SELECT ClaimAccess, PeerAccess, MemberAccess, ManageAccess, Certificate from InteriorSites WHERE Id = $1", [sid]);
+        //
+        // FIXED: Delete all of the site's access points using correct foreign key relationship
+        // Previously this function tried to access non-existent columns (ClaimAccess, PeerAccess, etc.)
+        // from InteriorSites table. Now we correctly delete all BackboneAccessPoints that belong
+        // to this site using the InteriorSite foreign key.
+        //
+        const result = await client.query("SELECT certificate from InteriorSites WHERE Id = $1",[sid]);
         if (result.rowCount == 1) {
             const row = result.rows[0];
 
             //
             // Delete all of the site's access points
             //
-            for (const ingress of INGRESS_LIST) {
-                const colName = `${ingress}access`;
-                if (row[colName]) {
-                    const apResult = await client.query("DELETE FROM BackboneAccessPoints WHERE Id = $1 Returning Certificate", [row[colName]]);
-                    if (apResult.rowCount == 1) {
-                        const row = apResult.rows[0];
-                        if (row.certificate) {
-                            await client.query("DELETE FROM TlsCertificates WHERE Id = $1", [row.certificate]);
-                        }
-                    }
-                }
+        const apResult = await client.query("DELETE FROM BackboneAccessPoints WHERE InteriorSite = $1 RETURNING Certificate",[sid]);
+        for (const row of apResult.rows) {
+            if (row.certificate) {
+                await client.query("DELETE FROM TlsCertificates WHERE Id = $1", [row.certificate]);
             }
+        }
 
             //
             // Delete the site.  Note that involved inter-router links will be automatically deleted by the database.

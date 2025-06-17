@@ -1,23 +1,15 @@
 import { Bullseye, Spinner } from '@patternfly/react-core';
 
-import { getTestsIds } from '@config/testIds';
-
 const SkIsLoading = function ({ customSize = '150px' }) {
   return (
     <div
+      className="pf-u-position-absolute pf-u-w-100 pf-u-h-100 pf-u-left-0 pf-u-right-0 pf-u-top-0 pf-u-bottom-0"
       style={{
-        position: 'absolute',
-        width: '100%',
-        height: '100%',
         backgroundColor: 'rgba(3, 3, 3, 0.1)',
-        left: 0,
-        right: 0,
-        top: 0,
-        bottom: 0,
         zIndex: 1
       }}
     >
-      <Bullseye data-testid={getTestsIds.loadingView()}>
+      <Bullseye>
         <Spinner diameter={customSize} />
       </Bullseye>
     </div>

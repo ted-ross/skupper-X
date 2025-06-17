@@ -1,6 +1,6 @@
 import { KeyboardEvent, MouseEvent as ReactMouseEvent, useCallback, useState, useMemo } from 'react';
 
-import { Card, CardBody, CardHeader, Flex, Text, TextContent, Title } from '@patternfly/react-core';
+import { Card, CardBody, CardHeader, Flex, Content, Title } from '@patternfly/react-core';
 import { SearchIcon } from '@patternfly/react-icons';
 import {
   InnerScrollContainer,
@@ -15,10 +15,9 @@ import {
   Tr
 } from '@patternfly/react-table';
 
-import { getValueFromNestedProperty } from '@core/utils/getValueFromNestedProperty';
-
 import SkPagination from './SkPagination';
 import { NonNullableValue, SKTableProps } from './SkTable.interfaces';
+import { getValueFromNestedProperty } from '../../utils/getValueFromNestedProperty';
 import EmptyData from '../EmptyData';
 
 const FIRST_PAGE_NUMBER = 1;
@@ -34,6 +33,8 @@ const SkTable = function <T>({
   alwaysShowPagination = true,
   paginationPageSize = PAGINATION_PAGE_SIZE,
   paginationTotalRows = rows.length,
+  emptyStateMessage,
+  emptyStateDescription,
   ...props
 }: SKTableProps<T>) {
   const [activeSortIndex, setActiveSortIndex] = useState<number>();
@@ -146,14 +147,14 @@ const SkTable = function <T>({
     <Card isFullHeight={isFullHeight}>
       {title && (
         <CardHeader>
-          <TextContent>
+          <Content>
             <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }}>
               <Title headingLevel="h3">{title}</Title>
               {!isPaginationEnabled && (
-                <Text>{`${paginationTotalRows || rows.length} ${rows.length === 1 ? 'item' : 'items'}`}</Text>
+                <Content component="p">{`${paginationTotalRows || rows.length} ${rows.length === 1 ? 'item' : 'items'}`}</Content>
               )}
             </Flex>
-          </TextContent>
+          </Content>
         </CardHeader>
       )}
 
@@ -165,7 +166,7 @@ const SkTable = function <T>({
                 {skColumns.map(({ name, prop, columnDescription, isStickyColumn, modifier }, index) => (
                   <Th
                     colSpan={1}
-                    key={name}
+                    key={name || `column-${index}`}
                     modifier={modifier}
                     isStickyColumn={isStickyColumn}
                     sort={(prop && shouldSort && getSortParams(index)) || undefined}
@@ -179,6 +180,7 @@ const SkTable = function <T>({
                           }
                         : undefined
                     }
+                    screenReaderText={!name ? 'Actions' : undefined}
                   >
                     {name}
                   </Th>
@@ -190,7 +192,7 @@ const SkTable = function <T>({
               {skRows.length === 0 && (
                 <Tr>
                   <Td colSpan={12}>
-                    <EmptyData icon={SearchIcon} />
+                    <EmptyData icon={SearchIcon} message={emptyStateMessage} description={emptyStateDescription} />
                   </Td>
                 </Tr>
               )}
@@ -215,7 +217,7 @@ const SkTable = function <T>({
                             )}
                             {!Component && (
                               <TableText wrapModifier={modifier === 'nowrap' ? 'fitContent' : 'truncate'}>
-                                {(format && format(value)) || value}
+                                {String((format && format(value)) || value || '-')}
                               </TableText>
                             )}
                           </Td>
