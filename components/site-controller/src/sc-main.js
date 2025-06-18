@@ -34,15 +34,16 @@ const claim        = require('./claim.js');
 const memberapi    = require('./api-member.js');
 const Log          = require('./common/log.js').Log;
 const Flush        = require('./common/log.js').Flush;
-const pods         = require('./pod-connector.js');
 
-const VERSION              = '0.1.2';
+const VERSION              = '0.1.3';
 const STANDALONE_NAMESPACE = process.env.SKX_STANDALONE_NAMESPACE;
 const BACKBONE_MODE        = (process.env.SKX_BACKBONE || 'NO') == 'YES';
+const SIDECAR_MODE         = (process.env.SIDECAR_MODE || 'NO') == 'YES';
 var   site_id              = process.env.SKUPPERX_SITE_ID || 'unknown';
 
 Log(`Skupper-X Site controller version ${VERSION}`);
 Log(`Backbone : ${BACKBONE_MODE}`);
+Log(`Sidecar  : ${SIDECAR_MODE}`)
 if (STANDALONE_NAMESPACE) {
     Log(`Standalone Namespace : ${STANDALONE_NAMESPACE}`);
 }
@@ -78,7 +79,6 @@ exports.Main = async function() {
             await ingress.Start(site_id);
         }
         await syncKube.Start(site_id, conn, BACKBONE_MODE);
-        await pods.Start();
         Log("[Site controller initialization completed successfully]");
     } catch (error) {
         Log(`Site controller initialization failed: ${error.message}`)

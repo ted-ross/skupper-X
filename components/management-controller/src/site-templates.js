@@ -238,9 +238,11 @@ spec:
     type: RollingUpdate
   template:
     metadata:
+{{- if .targetKube }}
       annotations:
         prometheus.io/port: "9090"
         prometheus.io/scrape: "true"
+{{- end }}
       labels:
         app.kubernetes.io/name: {{.deploymentName}}
         app.kubernetes.io/part-of: skupperx

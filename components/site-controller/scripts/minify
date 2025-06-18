@@ -6,12 +6,12 @@ mkdir app/src
 mkdir app/src/common
 cp index.js app/index.js
 #uglifyjs index.js -c -m -o app/index.js
-for MODULE in api-member ingress links sc-apiserver sc-main claim router-port sync-site-kube hash pod-connector
+for MODULE in api-member claim hash ingress links router-port sc-apiserver sc-main sync-site-kube
 do
     cp src/$MODULE.js app/src/$MODULE.js
 #    uglifyjs src/$MODULE.js --toplevel -c -m -o app/src/$MODULE.js
 done
-for MODULE in common amqp kube protocol log router util state-sync
+for MODULE in amqp common kube log protocol router state-sync util
 do
     cp ../common/$MODULE.js app/src/common/$MODULE.js
 #    uglifyjs ../common/$MODULE.js --toplevel -c -m -o app/src/common/$MODULE.js
