@@ -17,7 +17,7 @@
 ## under the License.
 ##
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+FROM registry.access.redhat.com/ubi10/ubi-minimal:latest
 RUN microdnf -y install nodejs shadow-utils jq
 WORKDIR /usr/src/app
 COPY package*.json ./

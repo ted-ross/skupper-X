@@ -133,10 +133,10 @@ const checkClaimState = async function() {
     var claimSecret;
     var siteId;
 
-    try {
-        claimConfigMap = await kube.LoadConfigmap(CLAIM_CONFIG_MAP_NAME);
+    claimConfigMap = await kube.LoadConfigmap(CLAIM_CONFIG_MAP_NAME);
+    if (claimConfigMap) {
         claimState.interactive = claimConfigMap.data.interactive == 'true';
-    } catch (error) {}
+    }
 
     try {
         const memberConfigMap = await kube.LoadConfigmap(common.MEMBER_CONFIG_MAP_NAME);

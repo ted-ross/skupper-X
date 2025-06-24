@@ -29,7 +29,8 @@ const apiserver    = require('./sc-apiserver.js');
 const syncKube     = require('./sync-site-kube.js');
 const router       = require('./common/router.js');
 const links        = require('./links.js');
-const ingress      = require('./ingress.js');
+const ingress_v1   = require('./ingress.js');
+const ingress_v2   = require('./ingress-v2.js');
 const claim        = require('./claim.js');
 const memberapi    = require('./api-member.js');
 const Log          = require('./common/log.js').Log;
@@ -38,12 +39,12 @@ const Flush        = require('./common/log.js').Flush;
 const VERSION              = '0.1.3';
 const STANDALONE_NAMESPACE = process.env.SKX_STANDALONE_NAMESPACE;
 const BACKBONE_MODE        = (process.env.SKX_BACKBONE || 'NO') == 'YES';
-const SIDECAR_MODE         = (process.env.SIDECAR_MODE || 'NO') == 'YES';
+const PLATFORM             = process.env.SKX_PLATFORM || 'unknown';
 var   site_id              = process.env.SKUPPERX_SITE_ID || 'unknown';
 
 Log(`Skupper-X Site controller version ${VERSION}`);
 Log(`Backbone : ${BACKBONE_MODE}`);
-Log(`Sidecar  : ${SIDECAR_MODE}`)
+Log(`Platform : ${PLATFORM}`)
 if (STANDALONE_NAMESPACE) {
     Log(`Standalone Namespace : ${STANDALONE_NAMESPACE}`);
 }
@@ -76,7 +77,11 @@ exports.Main = async function() {
         await router.Start(conn);
         await links.Start(BACKBONE_MODE);
         if (BACKBONE_MODE) {
-            await ingress.Start(site_id);
+            if (PLATFORM == 'sk2') {
+                await ingress_v2.Start(site_id);
+            } else {
+                await ingress_v1.Start(site_id);
+            }
         }
         await syncKube.Start(site_id, conn, BACKBONE_MODE);
         Log("[Site controller initialization completed successfully]");

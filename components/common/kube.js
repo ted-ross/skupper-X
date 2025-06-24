@@ -37,6 +37,7 @@ var configMapWatch;
 var routeWatch;
 var serviceWatch;
 var podWatch;
+var routerAccessWatch;
 var watchErrorCount = 0;
 var lastWatchError;
 var namespace = 'default';
@@ -74,12 +75,13 @@ exports.Start = async function (k8s_mod, fs_mod, yaml_mod, standalone_namespace)
     v1AppApi  = kc.makeApiClient(k8s.AppsV1Api);
     customApi = kc.makeApiClient(k8s.CustomObjectsApi);
 
-    secretWatch      = new k8s.Watch(kc);
-    certificateWatch = new k8s.Watch(kc);
-    configMapWatch   = new k8s.Watch(kc);
-    routeWatch       = new k8s.Watch(kc);
-    serviceWatch     = new k8s.Watch(kc);
-    podWatch         = new k8s.Watch(kc);
+    secretWatch       = new k8s.Watch(kc);
+    certificateWatch  = new k8s.Watch(kc);
+    configMapWatch    = new k8s.Watch(kc);
+    routeWatch        = new k8s.Watch(kc);
+    serviceWatch      = new k8s.Watch(kc);
+    podWatch          = new k8s.Watch(kc);
+    routerAccessWatch = new k8s.Watch(kc);
 
     try {
         if (standalone_namespace) {
@@ -94,178 +96,195 @@ exports.Start = async function (k8s_mod, fs_mod, yaml_mod, standalone_namespace)
 }
 
 exports.GetIssuers = async function() {
-    let list = await customApi.listNamespacedCustomObject(
-        'cert-manager.io',
-        'v1',
-        namespace,
-        'issuers'
-    );
-    return list.body.items;
+    let list = await customApi.listNamespacedCustomObject({
+        group     : 'cert-manager.io',
+        version   : 'v1',
+        namespace : namespace,
+        plural    : 'issuers',
+    });
+    return list.items;
 }
 
 exports.LoadIssuer = async function(name) {
-    let issuer = await customApi.getNamespacedCustomObject(
-        'cert-manager.io',
-        'v1',
-        namespace,
-        'issuers',
-        name
-    );
-    return issuer.body;
+    return await customApi.getNamespacedCustomObject({
+        group     : 'cert-manager.io',
+        version   : 'v1',
+        namespace : namespace,
+        plural    : 'issuers',
+        name      : name,
+    });
 }
 
 exports.DeleteIssuer = async function(name) {
-    await customApi.deleteNamespacedCustomObject(
-        'cert-manager.io',
-        'v1',
-        namespace,
-        'issuers',
-        name
-    );
+    await customApi.deleteNamespacedCustomObject({
+        group     : 'cert-manager.io',
+        version   : 'v1',
+        namespace : namespace,
+        plural    : 'issuers',
+        name      : name,
+    });
 }
 
 exports.GetCertificates = async function() {
-    let list = await customApi.listNamespacedCustomObject(
-        'cert-manager.io',
-        'v1',
-        namespace,
-        'certificates'
-    );
-    return list.body.items;
+    let list = await customApi.listNamespacedCustomObject({
+        group     : 'cert-manager.io',
+        version   : 'v1',
+        namespace : namespace,
+        plural    : 'certificates',
+    });
+    return list.items;
 }
 
 exports.LoadCertificate = async function(name) {
-    let cert = await customApi.getNamespacedCustomObject(
-        'cert-manager.io',
-        'v1',
-        namespace,
-        'certificates',
-        name
-    );
-    return cert.body;
+    return await customApi.getNamespacedCustomObject({
+        group     : 'cert-manager.io',
+        version   : 'v1',
+        namespace : namespace,
+        plural    : 'certificates',
+        name      : name,
+    });
 }
 
 exports.DeleteCertificate = async function(name) {
-    await customApi.deleteNamespacedCustomObject(
-        'cert-manager.io',
-        'v1',
-        namespace,
-        'certificates',
-        name
-    );
+    await customApi.deleteNamespacedCustomObject({
+        group     : 'cert-manager.io',
+        version   : 'v1',
+        namespace : namespace,
+        plural    : 'certificates',
+        name      : name,
+    });
 }
 
 exports.GetSecrets = async function() {
-    let list = await v1Api.listNamespacedSecret(namespace);
-    return list.body.items;
+    let list = await v1Api.listNamespacedSecret({namespace: namespace});
+    return list.items;
 }
 
 exports.LoadSecret = async function(name) {
-    let secret = await v1Api.readNamespacedSecret(name, namespace);
-    return secret.body;
+    try {
+        return await v1Api.readNamespacedSecret({name: name, namespace: namespace});
+    } catch (e) {}
+    return undefined;
 }
 
 exports.ReplaceSecret = async function(name, obj) {
-    await v1Api.replaceNamespacedSecret(name, namespace, obj);
+    await v1Api.replaceNamespacedSecret({
+        name      : name,
+        namespace : namespace,
+        body      : obj,
+    });
 }
 
 exports.DeleteSecret = async function(name) {
-    await v1Api.deleteNamespacedSecret(name, namespace);
+    await v1Api.deleteNamespacedSecret({name: name, namespace: namespace});
 }
 
 exports.GetConfigmaps = async function() {
-    let list = await v1Api.listNamespacedConfigMap(namespace);
-    return list.body.items;
+    let list = await v1Api.listNamespacedConfigMap({namespace: namespace});
+    return list.items;
 }
 
 exports.LoadConfigmap = async function(name) {
-    let secret = await v1Api.readNamespacedConfigMap(name, namespace);
-    return secret.body;
+    try {
+        return await v1Api.readNamespacedConfigMap({name: name, namespace: namespace});
+    } catch (e) {}
+    return undefined;
 }
 
 exports.ReplaceConfigmap = async function(name, obj) {
-    await v1Api.replaceNamespacedConfigMap(name, namespace, obj);
+    await v1Api.replaceNamespacedConfigMap({name : name, namespace: namespace, body: obj});
 }
 
 exports.DeleteConfigmap = async function(name) {
-    await v1Api.deleteNamespacedConfigMap(name, namespace);
+    await v1Api.deleteNamespacedConfigMap({name: name, namespace: namespace});
 }
 
 exports.GetPods = async function() {
-    let list = await v1Api.listNamespacedPod(namespace);
-    return list.body.items;
+    let list = await v1Api.listNamespacedPod({namespace: namespace});
+    return list.items;
 }
 
 exports.LoadPod = async function(name) {
-    let pod = await v1Api.readNamespacedPod(name, namespace);
-    return pod.body;
+    try {
+        return await v1Api.readNamespacedPod({name: name, namespace: namespace});
+    } catch (e) {}
+    return undefined;
 }
 
 exports.ReplacePod = async function(name, obj) {
-    await v1Api.ReplaceNamespacedPod(name, namespace, obj);
+    await v1Api.ReplaceNamespacedPod({name: name, namespace: namespace, body: obj});
 }
 
 exports.DeletePod = async function(name) {
-    await v1Api.DeleteNamespacedPod(name, namespace);
+    await v1Api.DeleteNamespacedPod({name: name, namespace: namespace});
 }
 
 exports.GetDeployments = async function() {
-    let list = await v1AppApi.listNamespacedDeployment(namespace);
-    return list.body.items;
+    let list = await v1AppApi.listNamespacedDeployment({namespace: namespace});
+    return list.items;
 }
 
 exports.GetServices = async function() {
-    let list = await v1Api.listNamespacedService(namespace);
-    return list.body.items;
+    let list = await v1Api.listNamespacedService({namespace: namespace});
+    return list.items;
 }
 
 exports.LoadService = async function(name) {
-    let service = await v1Api.readNamespacedService(name, namespace);
-    return service.body;
+    try {
+        return await v1Api.readNamespacedService({name: name, namespace: namespace});
+    } catch (e) {}
+    return undefined;
 }
 
 exports.ReplaceService = async function(name, obj) {
-    await v1Api.replaceNamespacedService(name, namespace, obj);
+    await v1Api.replaceNamespacedService({name: name, namespace: namespace, body: obj});
 }
 
 exports.DeleteService = async function(name) {
-    Log(`Kube - Deleting service ${name}`);
-    await v1Api.deleteNamespacedService(name, namespace);
+    await v1Api.deleteNamespacedService({name: name, namespace: namespace});
 }
 
 exports.GetRoutes = async function() {
-    let list = await customApi.listNamespacedCustomObject(
-        'route.openshift.io',
-        'v1',
-        namespace,
-        'routes'
-    );
-    return list.body.items;
+    let list = await customApi.listNamespacedCustomObject({
+        group     : 'route.openshift.io',
+        version   : 'v1',
+        namespace : namespace,
+        plural    : 'routes',
+    });
+    return list.items;
 }
 
 exports.DeleteRoute = async function(name) {
-    Log(`Kube - Deleting route ${name}`);
-    await customApi.deleteNamespacedCustomObject(
-        'route.openshift.io',
-        'v1',
-        namespace,
-        'routes',
-        name
-    );
+    await customApi.deleteNamespacedCustomObject({
+        group     : 'route.openshift.io',
+        version   : 'v1',
+        namespace : namespace,
+        plural    : 'routes',
+        name      : name,
+    });
 }
 
 exports.LoadDeployment = async function(name) {
-    let dep = await v1AppApi.readNamespacedDeployment(name, namespace);
-    return dep.body;
+    return await v1AppApi.readNamespacedDeployment({name: name, namespace: namespace});
 }
 
 exports.DeleteDeployment = async function(name) {
-    await v1AppApi.deleteNamespacedDeployment(name, namespace);
+    await v1AppApi.deleteNamespacedDeployment({name: name, namespace: namespace});
 }
 
 exports.GetPods = async function() {
-    let pods = await v1Api.listNamespacedPod(namespace)
-    return pods.body.items;
+    let pods = await v1Api.listNamespacedPod({namespace: namespace})
+    return pods.items;
+}
+
+exports.GetSites = async function() {
+    let list = await customApi.listNamespacedCustomObject({
+        group     : 'skupper.io',
+        version   : '/v2alpha1',
+        namespace : namespace,
+        plural    : 'sites',
+    });
+    return list.items;
 }
 
 var secretWatches = [];
@@ -434,6 +453,33 @@ exports.WatchPods = function(callback) {
     podWatches.push(callback);
     if (podWatches.length == 1) {
         startWatchPods();
+    }
+}
+
+var routerAccessWatches = [];
+const startWatchRouterAccesses = function() {
+    routerAccessWatch.watch(
+        `/apis/skupper.io/v2alpha1/namespaces/${namespace}/routeraccesses`,
+        {},
+        (type, apiObj, watchObj) => {
+            for (const callback of routerAccessWatches) {
+                callback(type, apiObj);
+            }
+        },
+        (err) => {
+            if (err) {
+                watchErrorCount++;
+                lastWatchError = `Pods: ${err}`;
+            }
+            startWatchRouterAccesses();
+        }
+    )
+}
+
+exports.startWatchRouterAccesses = function(callback) {
+    routerAccessWatches.push(callback);
+    if (routerAccessWatches.length == 1) {
+        startWatchRouterAccesses();
     }
 }
 
