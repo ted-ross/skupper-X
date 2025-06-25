@@ -116,7 +116,7 @@ spec:
           ports:
           - protocol: TCP
             port: {{$affif.port}}
-      {{end}}
+      {{-end}}
   - affinity: [connector]
     targetPlatforms: [sk2]
     description: "Interface to Skupper-v2 connectors on kubernetes sites"
@@ -151,7 +151,7 @@ spec:
           ports:
           - protocol: TCP
             port: {{$affif.port}}
-      {{end}}
+      {{-end}}
 
 ##
 ## NearestPrime transaction processor
@@ -414,6 +414,8 @@ spec:
       keyPrefix: pg
       protocol: postgres
       connectorType: selector
+      networkPolicyOnAcceptor: true
+      networkPolicyOnConnector: true
     bindings:
     - interface: connector
       block: worker

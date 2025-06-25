@@ -918,11 +918,11 @@ const generateDerivativeData = function(application, buildLog, blockTypes) {
         // Generate an allocateToSite flag for appropriate blocks.
         //
         // Appropriate if:
-        //    - The allocateToSite flag is TRUE for the block type
+        //    - The allocation for the block type is 'independent'
         //    - The block is not composite
         //
         const btype = libraryBlock.getType();
-        if (blockTypes[btype].allocatetosite && !libraryBlock.isComposite()) {
+        if (blockTypes[btype].allocation == 'independent' && !libraryBlock.isComposite()) {
             block.addDerivative('allocateToSite', true);
         }
     }
@@ -1300,9 +1300,9 @@ const getBlockTypes = async function(req, res) {
         let btmap = {};
         for (const row of result.rows) {
             btmap[row.name] = {
-                allownorth     : row.allownorth,
-                allowsouth     : row.allowsouth,
-                allocatetosite : row.allocatetosite,
+                allownorth : row.allownorth,
+                allowsouth : row.allowsouth,
+                allocation : row.allocation,
             };
         }
         res.status(returnStatus).json(btmap);

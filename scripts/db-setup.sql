@@ -328,14 +328,16 @@ CREATE TYPE DeploymentLifecycle AS ENUM ('created', 'deploy-warnings', 'deploy-e
 
 CREATE TYPE BlockBodyStyle AS ENUM ('simple', 'composite');
 
+CREATE TYPE BlockAllocation AS ENUM ('independent', 'dependent', 'none');
+
 --
 -- Block Types
 --
 CREATE TABLE BlockTypes (
-    Name           text PRIMARY KEY,
-    AllowNorth     boolean,
-    AllowSouth     boolean,
-    AllocateToSite boolean
+    Name        text PRIMARY KEY,
+    AllowNorth  boolean,
+    AllowSouth  boolean,
+    Allocation  BlockAllocation
 );
 
 CREATE TABLE InterfaceRoles (
@@ -426,13 +428,13 @@ INSERT INTO TargetPlatforms (ShortName, LongName) VALUES
     ('docker-sk2', 'Docker+SkupperV2'),
     ('linux-sk2',  'Linux+SkupperV2');
 
-INSERT INTO BlockTypes (Name, AllowNorth, AllowSouth, AllocateToSite) VALUES
-    ('skupperx.io/component', true,  false, true),
-    ('skupperx.io/connector', false, true,  false),
-    ('skupperx.io/toplevel',  false, false, false),
-    ('skupperx.io/mixed',     true,  true,  false),
-    ('skupperx.io/ingress',   true,  false, true),
-    ('skupperx.io/egress',    false, true,  false);
+INSERT INTO BlockTypes (Name, AllowNorth, AllowSouth, Allocation) VALUES
+    ('skupperx.io/component', true,  false, 'independent'),
+    ('skupperx.io/connector', false, true,  'dependent'),
+    ('skupperx.io/toplevel',  false, false, 'none'),
+    ('skupperx.io/mixed',     true,  true,  'dependent'),
+    ('skupperx.io/ingress',   true,  false, 'independent'),
+    ('skupperx.io/egress',    false, true,  'dependent');
 
 INSERT INTO InterfaceRoles (Name) VALUES
     ('accept'),  ('connect'),

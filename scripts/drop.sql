@@ -36,6 +36,7 @@ DROP TABLE WebSessions;
 DROP TABLE Users;
 DROP TABLE Configuration;
 
+DROP TYPE BlockAllocation;
 DROP TYPE BlockBodyStyle;
 DROP TYPE DeploymentLifecycle;
 DROP TYPE ApplicationLifecycle;

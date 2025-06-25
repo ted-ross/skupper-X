@@ -27,7 +27,7 @@ export async function LibraryEditSimple(panel, block, blockType) {
         return;
     }
     var simpleBody = await result.json();
-    const showAffinity = !blockType.allocatetosite;
+    const showAffinity = blockType.allocation == 'dependent';
 
     let columns  = ['', 'Platforms'];
     let colCount = 4;
