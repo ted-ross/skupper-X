@@ -1277,7 +1277,13 @@ const listLibraryBlocks = async function(req, res) {
     const client = await db.ClientFromPool();
     try {
         await client.query("BEGIN");
-        const result = await client.query("SELECT Id, Type, Name, Provider, BodyStyle, Revision, Created FROM LibraryBlocks");
+        let where = "";
+        let whereData = [];
+        if (req.query.type) {
+            where = " WHERE type = $1"
+            whereData = [req.query.type];
+        }
+        const result = await client.query("SELECT Id, Type, Name, Provider, BodyStyle, Revision, Created FROM LibraryBlocks" + where, whereData);
         res.status(returnStatus).json(result.rows);
         await client.query("COMMIT");
     } catch (error) {

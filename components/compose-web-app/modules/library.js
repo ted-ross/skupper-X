@@ -19,7 +19,7 @@
 
 import { toLibraryTab } from "../page.js";
 import { LibraryTestBuild } from "./library-build.js";
-import { LibraryEditComposite } from "./library-composite.js";
+import { CompositeEditor } from "./composite-editor/frame.js";
 import { LibraryConfiguration } from "./library-config.js";
 import { LibraryHistory } from "./library-history.js";
 import { LibraryEditInterfaces } from "./library-interfaces.js";
@@ -188,6 +188,7 @@ async function LibTabSheet(lbid, blockTypes, interfaceRoles, libraryBlocks) {
     layout = document.createElement('table');
     LayoutRow(layout, ['Revision:',    `${block.revision}`]);
     LayoutRow(layout, ['Create Time:', block.created]);
+    LayoutRow(layout, ['Allocation:',  blockTypes[block.type].allocation]);
     headerDiv2.appendChild(layout);
 
     headerDiv.appendChild(headerDiv1);
@@ -210,7 +211,7 @@ async function LibTabSheet(lbid, blockTypes, interfaceRoles, libraryBlocks) {
             enabled      : true,
             selectAction : async (body) => {
                 if (block.bodystyle == 'composite') {
-                    LibraryEditComposite(body, block, libraryBlocks, blockTypes);
+                    CompositeEditor(body, block, libraryBlocks, blockTypes);
                 } else {
                     LibraryEditSimple(body, block, blockType);
                 }

@@ -289,6 +289,25 @@ export async function LibraryEditComposite(panel, block, libraryBlocks, blockTyp
         }
     });
 
+    //
+    // Set up the drap/drop action on the blocks panel
+    //
+    blocksDiv.ondragover = (ev) => {
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = "copy";
+    };
+
+    blocksDiv.ondrop = (ev) => {
+        ev.preventDefault();
+        const libraryBlockName = ev.dataTransfer.getData("text/plain");
+        console.log(`onDrop(${libraryBlockName})`);
+        // TODO - stuff here
+        const library = libraryBlocks[libraryBlockName];
+        const instance = new Instance(library, undefined, blockTypes[library.type]);
+        composite.instances[instance.getName()] = instance;
+        InsertInstance(instance.getName(), onSelectChange, )
+    }
+
     panel.appendChild(outerDiv);
 }
 
@@ -506,6 +525,12 @@ async function SetupLibrary(libraryDiv, libraryBlocks, onSelectChange) {
     let selectList = [];
     for (const name of Object.keys(libraryBlocks)) {
         let blockDiv = BlockDiv(name, 'Library');
+        blockDiv.draggable = true;
+        blockDiv.ondragstart = (ev) => {
+            ev.dataTransfer.dropEffect = "copy";
+            ev.dataTransfer.setData("text/plain", name);
+        };
+
         let selected = false;
         blockDiv.onclick = () => {
             selected = !selected;
@@ -549,6 +574,34 @@ function UpdateInstanceDiv(entry, newState, onChange, entryList) {
     }
 }
 
+async function InsertInstance(name, onSelectChange, instanceDivs, blocksDiv) {
+    let blockDiv = BlockDiv(name, 'Instance');
+    let entry = {
+        instanceName : name,
+        isSuper      : false,
+        div          : blockDiv,
+        lastState    : UNSELECTED,
+        selectState  : UNSELECTED,
+    };
+    blockDiv.onclick = () => {
+        if (entry.selectState == UNSELECTED) {
+            UpdateInstanceDiv(entry, SELECTED_LEFT, onSelectChange, instanceDivs);
+        } else {
+            UpdateInstanceDiv(entry, UNSELECTED, onSelectChange);
+        }
+    };
+    blockDiv.oncontextmenu = (e) => {
+        e.preventDefault();
+        if (entry.selectState == UNSELECTED) {
+            UpdateInstanceDiv(entry, SELECTED_RIGHT, onSelectChange, instanceDivs);
+        } else {
+            UpdateInstanceDiv(entry, UNSELECTED, onSelectChange);
+        }
+    }
+    instanceDivs.push(entry);
+    blocksDiv.appendChild(blockDiv);
+}
+
 async function SetupInstanceBlocks(blocksDiv, composite, libraryBlocks, onSelectChange) {
     let instanceDivs = [];
     let blockDiv = BlockDiv('SUPER', 'Instance');
@@ -574,31 +627,7 @@ async function SetupInstanceBlocks(blocksDiv, composite, libraryBlocks, onSelect
     instanceDivs.push(superEntry);
     blocksDiv.appendChild(blockDiv);
     for (const name of Object.keys(composite.instances)) {
-        blockDiv = BlockDiv(name, 'Instance');
-        let entry = {
-            instanceName : name,
-            isSuper      : false,
-            div          : blockDiv,
-            lastState    : UNSELECTED,
-            selectState  : UNSELECTED,
-        };
-        blockDiv.onclick = () => {
-            if (entry.selectState == UNSELECTED) {
-                UpdateInstanceDiv(entry, SELECTED_LEFT, onSelectChange, instanceDivs);
-            } else {
-                UpdateInstanceDiv(entry, UNSELECTED, onSelectChange);
-            }
-        };
-        blockDiv.oncontextmenu = (e) => {
-            e.preventDefault();
-            if (entry.selectState == UNSELECTED) {
-                UpdateInstanceDiv(entry, SELECTED_RIGHT, onSelectChange, instanceDivs);
-            } else {
-                UpdateInstanceDiv(entry, UNSELECTED, onSelectChange);
-            }
-        }
-        instanceDivs.push(entry);
-        blocksDiv.appendChild(blockDiv);
+        await InsertInstance(name, onSelectChange, instanceDivs, blocksDiv);
     }
 
     return instanceDivs;

@@ -82,3 +82,5 @@
  - ~~Design the kube-state representation of the above data~~
  - ~~Implement APIs to access the full application definition~~
  - Consider pre-loading a directory tree of sync-state in the management controller and separating the sync processing from the database (to reduce load on the DB)
+ - Add transitive dependency - A "mixed" block might be dragged in by a South interface but have a North interface that recursively drags in another dependent block.
+ - Consider un-constraining interface roles.  Just make them arbitrary strings, defined by connector writers.  Alternatively, allow users to add to the role list.  Namespaced roles??  too much??
