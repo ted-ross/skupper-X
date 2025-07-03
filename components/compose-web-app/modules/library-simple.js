@@ -137,12 +137,12 @@ async function TemplatePanel(div, body, template, toDeleteRows, unexpandRow, blo
     if (showAffinity) {
         affinityItems = [];
         const result = await fetch(`/compose/v1alpha1/library/blocks/${block.id}/interfaces`);
-        const iflist = await result.json();
-        for (const iface of (iflist || [])) {
+        const ifmap = await result.json();
+        for (const [iname, iface] of Object.entries((ifmap || {}))) {
             affinityItems.push({
-                id       : iface.name,
-                text     : `${iface.name} (${iface.role})`,
-                selected : template.affinity.indexOf(iface.name) >= 0,
+                id       : iname,
+                text     : `${iname} (${iface.role})`,
+                selected : template.affinity.indexOf(iname) >= 0,
             });
         }
         let afflist = MultiSelectWithCheckbox(affinityItems);
