@@ -45,11 +45,10 @@ export async function LibraryEditInterfaces(panel, block, blockType, interfaceRo
         return;
     }
 
-    let iflist = await result.json();
-    if (!iflist) {
-      iflist = [];
+    let ifmap = await result.json();
+    if (!ifmap) {
+      ifmap = {};
     }
-    let ifmap = list2map(iflist);
 
     let layout = SetupTable(['', 'Interface Name', 'Role', 'Polarity', 'Max Bindings', 'Data', '']);
     const entries = Object.entries(ifmap);

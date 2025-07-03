@@ -773,32 +773,28 @@ const validateBlock = async function(block, validTypes, validRoles, blockRevisio
     }
 
     if (block.spec.interfaces) {
-        for (const iface of block.spec.interfaces) {
-            if (!iface.name) {
-                return `Interface in block ${name} with no name`;
-            }
-
+        for (const [iname, iface] of Object.entries(block.spec.interfaces)) {
             if (!iface.role || !(validRoles.indexOf(iface.role) >= 0)) {
-                return `Invalid role '${iface.role}' in block ${name}, interface ${iface.name}`;
+                return `Invalid role '${iface.role}' in block ${name}, interface ${iname}`;
             }
 
             if (iface.polarity === undefined) {
                 if (polarityMandatory) {
-                    return `Missing mandatory polarity for interface ${iface.name}, block ${name}`;
+                    return `Missing mandatory polarity for interface ${iname}, block ${name}`;
                 }
 
                 iface.polarity = defaultPolarityNorth ? 'north' : 'south';
             } else {
                 if (iface.polarity != 'north' && iface.polarity != 'south') {
-                    return `Polarity must be 'north' or 'south' for interface ${iface.name}, block ${name}`
+                    return `Polarity must be 'north' or 'south' for interface ${iname}, block ${name}`
                 }
 
                 if (iface.polarity == 'north' && !allowNorth) {
-                    return `North polarity not permitted for interface ${iface.name}, block ${name}`;
+                    return `North polarity not permitted for interface ${iname}, block ${name}`;
                 }
 
                 if (iface.polarity == 'south' && !allowSouth) {
-                    return `South polarity not permitted for interface ${iface.name}, block ${name}`;
+                    return `South polarity not permitted for interface ${iname}, block ${name}`;
                 }
             }
         }

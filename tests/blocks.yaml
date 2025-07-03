@@ -76,10 +76,10 @@ spec:
       type: numeric
       description: Minimum expected network latency
   interfaces:
-  - name: acceptor
-    role: accept
-  - name: connector
-    role: connect
+    acceptor:
+      role: accept
+    connector:
+      role: connect
   bodyStyle: simple
   body:
   - affinity: [acceptor]
@@ -175,15 +175,15 @@ spec:
       type: string
       default: nearestprime
   interfaces:
-  - name: postgres
-    role: connect
-    data:
-      host: database
-      port: 5432
-  - name: control
-    role: accept
-    data:
-      port: 8000
+    postgres:
+      role: connect
+      data:
+        host: database
+        port: 5432
+    control:
+      role: accept
+      data:
+        port: 8000
   bodyStyle: simple
   body:
   - targetPlatforms: [sk2, podman-sk2]
@@ -259,15 +259,15 @@ spec:
       type: string
       default: "15"
   interfaces:
-  - name: postgres
-    role: accept
-    maxBindings: unlimited
-    data:
-      port: 5432
-  - name: files
-    role: mount
-    data:
-      volumeSize: 5Gi
+    postgres:
+      role: accept
+      maxBindings: unlimited
+      data:
+        port: 5432
+    files:
+      role: mount
+      data:
+        volumeSize: 5Gi
   bodyStyle: simple
   body:
   - template: |
@@ -325,8 +325,8 @@ spec:
       type: string
       default: 5Gi
   interfaces:
-  - name: mountpoint
-    role: mount
+    mountpoint:
+      role: mount
   bodyStyle: simple
   body:
   - affinity: mountpoint
@@ -365,23 +365,23 @@ metadata:
 type: skupperx.io/component
 spec:
   interfaces:
-  - name: postgres
-    role: accept
+    postgres:
+      role: accept
   bodyStyle: composite
   body:
-  - name: database
-    block: postgres/engine
-    siteClasses:
-    - hq
-    bindings:
-    - interface: postgres
-      super: postgres
-  - name: store
-    block: postgres/volume
-    bindings:
-    - interface: mountpoint
-      block: database
-      blockInterface: files
+    database:
+      block: postgres/engine
+      siteClasses:
+      - hq
+      bindings:
+        postgres:
+          super: postgres
+    store:
+      block: postgres/volume
+      bindings:
+        mountpoint:
+          block: database
+          blockInterface: files
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
@@ -391,38 +391,38 @@ metadata:
 type: skupperx.io/component
 spec:
   interfaces:
-  - name: request
-    role: accept
+    request:
+      role: accept
   bodyStyle: composite
   body:
-  - name: database
-    block: postgres/subsystem
-    siteClasses:
-    - hq
-  - name: worker
-    block: nearestprime
-    config:
-      replicas: 2
-    siteClasses:
-    - worker
-    bindings:
-    - interface: control
-      super: request
-  - name: worker-to-database
-    block: library/tcp-connection
-    config:
-      keyPrefix: pg
-      protocol: postgres
-      connectorType: selector
-      networkPolicyOnAcceptor: true
-      networkPolicyOnConnector: true
-    bindings:
-    - interface: connector
-      block: worker
-      blockInterface: postgres
-    - interface: acceptor
-      block: database
-      blockInterface: postgres
+    database:
+      block: postgres/subsystem
+      siteClasses:
+      - hq
+    worker:
+      block: nearestprime
+      config:
+        replicas: 2
+      siteClasses:
+      - worker
+      bindings:
+        control:
+          super: request
+    worker-to-database:
+      block: library/tcp-connection
+      config:
+        keyPrefix: pg
+        protocol: postgres
+        connectorType: selector
+        networkPolicyOnAcceptor: true
+        networkPolicyOnConnector: true
+      bindings:
+        connector:
+          block: worker
+          blockInterface: postgres
+        acceptor:
+          block: database
+          blockInterface: postgres
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
@@ -433,28 +433,28 @@ type: skupperx.io/toplevel
 spec:
   bodyStyle: composite
   body:
-  - name: mainApp
-    block: nearestprime/main
-    siteClasses:
-    - hq
-  - name: requestIngress
-    block: nearestprime/ingress
-    siteClasses:
-    - hq
-  - name: request-ingress-to-main
-    block: library/tcp-connection
-    config:
-      keyPrefix: http-ingress
-      protocol: http
-      connectorType: selector
-      networkPolicyOnConnector: false
-    bindings:
-    - interface: acceptor
-      block: mainApp
-      blockInterface: request
-    - interface: connector
-      block: requestIngress
-      blockInterface: connector
+    mainApp:
+      block: nearestprime/main
+      siteClasses:
+      - hq
+    requestIngress:
+      block: nearestprime/ingress
+      siteClasses:
+      - hq
+    request-ingress-to-main:
+      block: library/tcp-connection
+      config:
+        keyPrefix: http-ingress
+        protocol: http
+        connectorType: selector
+        networkPolicyOnConnector: false
+      bindings:
+        acceptor:
+          block: mainApp
+          blockInterface: request
+        connector:
+          block: requestIngress
+          blockInterface: connector
 
 ---
 apiVersion: skupperx.io/compose/v1alpha1
@@ -467,11 +467,11 @@ spec:
     serviceName: np-control.test
     namePrefix: control
   interfaces:
-  - name: connector
-    role: connect
-    data:
-      host: nprime
-      port: 8000
+    connector:
+      role: connect
+      data:
+        host: nprime
+        port: 8000
   bodyStyle: simple
   body:
   - template: |

@@ -18,6 +18,11 @@
 */
 
 const API_PREFIX = '/compose/v1alpha1/library/';
+export const BLOCK_TYPE_COMPONENT = 'skupperx.io/component';
+export const BLOCK_TYPE_CONNECTOR = 'skupperx.io/connector';
+export const BLOCK_TYPE_TOP       = 'skupperx.io/toplevel';
+export const BLOCK_TYPE_INGRESS   = 'skupperx.io/ingress';
+export const BLOCK_TYPE_EGRESS    = 'skupperx.io/egress';
 
 export class LibraryCache {
     constructor() {
@@ -42,8 +47,33 @@ export class LibraryCache {
             const blocks = await result.json();
             this.blocksByType[byType] = {};
             for (const block of blocks) {
+                block._complete = false;
                 this.blocksByType[block.name] = block;
             }
+        }
+    }
+
+    async getBlocks(byType) {
+        await this._fetchBlocks(byType);
+        return this.blocksByType[byType];
+    }
+
+    async getBlock(byName) {
+        await this._fetchBlocks(BLOCK_TYPE_COMPONENT);
+        let block = this.blocksByType[BLOCK_TYPE_COMPONENT];
+        if (block) {
+            if (!block._complete) {
+                const configResult = await fetch(API_PREFIX + `blocks/${block.id}/config`);
+                block.config = await configResult.json();
+                const ifResult = await fetch(API_PREFIX + `blocks/${block.id}/interfaces`);
+                block.interfaces = await ifResult.json();
+                const bodyResult = await fetch(API_PREFIX + `blocks/${block.id}/body`);
+                block.body = await bodyResult.json();
+                block._complete = true;
+            }
+            return block;
+        } else {
+            throw new Error(`Component block '${byName}' not found in the library`);
         }
     }
 }
