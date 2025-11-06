@@ -19,14 +19,6 @@
 
 import { LibraryCache } from "./library-cache.js";
 
-function toMap(fromList) {
-    result = {};
-    for (const item of fromList) {
-        result[item.name] = item;
-    }
-    return result;
-}
-
 export class CompositeBlock {
     constructor(name, blockName) {
         this.name      = name;
@@ -48,11 +40,28 @@ class Block {
     constructor(name, libBlock) {
         this.name       = name;
         this.libBlock   = libBlock;
-        this.config     = {};
-        this.interfaces = toMap(interfaces);
+        this.config     = libBlock.config;
+        this.interfaces = {};
+        for (const [name, spec] of Object.entries(libBlock.interfaces)) {
+            this.interfaces[name] = new Interface(name, spec);
+        }
     }
 
     getBody() {
         return this.libBlock.body;
+    }
+}
+
+class Interface {
+    constructor(name, spec) {
+        this.name = name;
+        this.spec = spec;
+    }
+}
+
+class Binding {
+    constructor(iface1, iface2) {
+        self.iface1 = iface1;
+        self.iface2 = iface2;
     }
 }

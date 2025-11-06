@@ -19,10 +19,11 @@
 --   interiorRouter  Generate a client certificate for an interior router, signed by the interiorCA
 --   accessPoint     Generate a server certificate for an access point, served by one or more interior routers
 --   vanCA           Generate a CA for an application network, signed by the rootCA
+--   vanCredential   Generate a client certificate for a VAN to use to connect to the management backbone
 --   memberClaim     Generate a claim certificate for invitees, signed by the vanCA
 --   vanSite         Generate a client certificate for a joining member site, signed by the vanCA
 --
-CREATE TYPE CertificateRequestType AS ENUM ('mgmtController', 'backboneCA', 'interiorRouter', 'accessPoint', 'vanCA', 'memberClaim', 'vanSite');
+CREATE TYPE CertificateRequestType AS ENUM ('mgmtController', 'backboneCA', 'interiorRouter', 'accessPoint', 'vanCA', 'vanCredential', 'memberClaim', 'vanSite');
 
 --
 -- AccessPointType
@@ -30,8 +31,9 @@ CREATE TYPE CertificateRequestType AS ENUM ('mgmtController', 'backboneCA', 'int
 --   peer    Ingress for peer backbone router (inter-router) access
 --   member  Ingress for member (edge) access
 --   manage  Ingress for the management (normal) controller
+--   agent   Ingress for VAN agents (normal)
 --
-CREATE TYPE AccessPointType AS ENUM ('claim', 'peer', 'member', 'manage');
+CREATE TYPE AccessPointType AS ENUM ('claim', 'peer', 'member', 'manage', 'agent');
 
 --
 -- LifecycleType
@@ -124,14 +126,15 @@ CREATE TABLE TargetPlatforms (
 --
 -- Interior backbone networks
 --
+-- There can be only one backbone that is designated as the management backbone
+--
 CREATE TABLE Backbones (
     Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     Name text UNIQUE,
     Lifecycle LifecycleType DEFAULT 'new',
     Failure text,
     Certificate UUID REFERENCES TlsCertificates,
-
-    MultiTenant boolean DEFAULT true
+    ManagementBackbone boolean UNIQUE NULLS DISTINCT CHECK (ManagementBackbone = true)
 );
 
 --
@@ -214,6 +217,16 @@ CREATE TABLE ApplicationNetworks (
     StartTime timestamptz DEFAULT now(),
     EndTime timestamptz,
     DeleteDelay interval second (0) DEFAULT '0 minutes'
+);
+
+CREATE TABLE NetworkCredentials (
+    Id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    Name text,
+    Lifecycle LifecycleType DEFAULT 'new',
+    Failure text,
+    Certificate UUID REFERENCES TlsCertificates,
+
+    MemberOf UUID REFERENCES ApplicationNetworks ON DELETE CASCADE
 );
 
 --
@@ -311,6 +324,7 @@ CREATE TABLE CertificateRequests (
     InteriorSite UUID REFERENCES InteriorSites (Id) ON DELETE CASCADE,
     AccessPoint UUID REFERENCES BackboneAccessPoints (Id) ON DELETE CASCADE,
     ApplicationNetwork UUID REFERENCES ApplicationNetworks (Id) ON DELETE CASCADE,
+    NetworkCredential UUID REFERENCES NetworkCredentials (Id) ON DELETE CASCADE,
     Invitation UUID REFERENCES MemberInvitations (Id) ON DELETE CASCADE,
     Site UUID REFERENCES MemberSites (Id) ON DELETE CASCADE
 );
@@ -422,6 +436,7 @@ INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 
 INSERT INTO WebSessions (Id, UserId) VALUES (gen_random_uuid(), 1);
 
 INSERT INTO TargetPlatforms (ShortName, LongName) VALUES
+    ('m-server',   'Co-located with the management server'),
     ('kube',       'Kubernetes'),
     ('sk2',        'Kubernetes+SkupperV2'),
     ('podman-sk2', 'Podman+SkupperV2'),
@@ -442,6 +457,15 @@ INSERT INTO InterfaceRoles (Name) VALUES
     ('produce'), ('consume'),
     ('request'), ('respond'),
     ('mount'),   ('manage');
+
+DO $$
+DECLARE
+    bbid uuid;
+BEGIN
+    INSERT INTO Backbones (Name, ManagementBackbone) VALUES ('_management', true) RETURNING Id into bbid;
+    INSERT INTO InteriorSites (Name, Backbone, TargetPlatform) VALUES ('_local', bbid, 'm-server');
+END $$;
+
 
 
 /*

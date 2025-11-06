@@ -29,12 +29,68 @@ export async function BuildVanTable() {
     const section  = document.getElementById("sectiondiv");
     let   panel    = document.createElement('div');
     section.appendChild(panel);
-    var layout;
+    var exlayout;
+    var mtlayout;
+    var externalList = [];
+    var internalList = [];
+    for (const item of listdata) {
+        if (item.managementbackbone) {
+            externalList.push(item);
+        } else {
+            internalList.push(item);
+        }
+    }
 
-    if (listdata.length > 0) {
-        layout = SetupTable(['Name', 'Backbone', 'Status', 'Start Time', 'End Time']);
-        for (const item of listdata) {
-            let row = layout.insertRow();
+    let externalTitle = document.createElement('h2');
+    externalTitle.textContent = 'Externally Created Networks';
+    panel.appendChild(externalTitle);
+
+    if (externalList.length > 0) {
+        exlayout = SetupTable(['Name', 'Status', 'Actions']);
+        for (const item of externalList) {
+            let row = exlayout.insertRow();
+            row._vanid = item.id;
+            let anchor = document.createElement('a');
+            anchor.innerHTML = item.name;
+            anchor.href = '#';
+            anchor.addEventListener('click', async () => {
+                await VanDetail(item.id);
+            });
+
+            let getYaml = document.createElement('a');
+            getYaml.innerHTML = "fetch-yaml";
+            getYaml.href = '#';
+
+            let launchConsole = document.createElement('a');
+            launchConsole.innerHTML = "console";
+            launchConsole.href = '#';
+
+            row.insertCell().appendChild(anchor);             // 0
+            row.insertCell().textContent = 'Never Connected'; // 1
+            row.insertCell().appendChild(getYaml);
+            row.insertCell().appendChild(launchConsole);
+        }
+        panel.appendChild(exlayout);
+    } else {
+        let empty = document.createElement('i');
+        empty.textContent = 'No External VANs Found';
+        panel.appendChild(empty);
+    }
+
+    let exbutton = document.createElement('button');
+    exbutton.addEventListener('click', async () => { await ExternalVanForm(); });
+    exbutton.textContent = 'Onboard Externally-Created VAN...';
+    panel.appendChild(document.createElement('p'));
+    panel.appendChild(exbutton);
+
+    let internalTitle = document.createElement('h2');
+    internalTitle.textContent = 'Multi-Tenant Networks';
+    panel.appendChild(internalTitle);
+
+    if (internalList.length > 0) {
+        mtlayout = SetupTable(['Name', 'Backbone', 'Status', 'Start Time', 'End Time']);
+        for (const item of internalList) {
+            let row = mtlayout.insertRow();
             row._vanid = item.id;
             let anchor = document.createElement('a');
             anchor.innerHTML = item.name;
@@ -48,18 +104,18 @@ export async function BuildVanTable() {
             row.insertCell().textContent = item.starttime;                  // 3
             row.insertCell().textContent = item.endtime || 'until deleted'; // 4
         }
-        panel.appendChild(layout);
+        panel.appendChild(mtlayout);
     } else {
         let empty = document.createElement('i');
-        empty.textContent = 'No VANs Found';
+        empty.textContent = 'No Multi-Tenant VANs Found';
         panel.appendChild(empty);
     }
 
-    let button = document.createElement('button');
-    button.addEventListener('click', async () => { await VanForm(); });
-    button.textContent = 'Create VAN...';
+    let mtbutton = document.createElement('button');
+    mtbutton.addEventListener('click', async () => { await MultiTenantVanForm(); });
+    mtbutton.textContent = 'Create Multi-Tenant VAN...';
     panel.appendChild(document.createElement('p'));
-    panel.appendChild(button);
+    panel.appendChild(mtbutton);
 
     await PollTable(panel, 5000, [
         {
@@ -67,7 +123,7 @@ export async function BuildVanTable() {
             items : [
                 async (van) => {
                     let result = true;
-                    for (const row of layout.rows) {
+                    for (const row of mtlayout.rows) {
                         if (row._vanid == van.id) {
                             const lifecycleCell = row.cells[2];
 
@@ -90,7 +146,68 @@ export async function BuildVanTable() {
     ]);
 }
 
-async function VanForm() {
+async function ExternalVanForm() {
+    let section = document.getElementById("sectiondiv");
+    section.innerHTML = '<h2>Onboard a Virtual Application Network</h2>';
+
+    let errorbox = document.createElement('pre');
+    errorbox.className = 'errorBox';
+
+    let vanName = document.createElement('input');
+    vanName.type = 'text';
+
+    var bbManagement;
+    const bbResult = await fetch('/api/v1alpha1/backbones');
+    const bbList   = await bbResult.json();
+    for (const bb of bbList) {
+        if (bb.managementbackbone) {
+            bbManagement = bb;
+            break;
+        }
+    }
+
+    const form = await FormLayout(
+        //
+        // Form fields
+        //
+        [
+            ['VAN Name:', vanName],
+        ],
+
+        //
+        // Submit button behavior
+        //
+        async () => {
+            let body = {
+                name     : vanName.value,
+            };
+            const response = await fetch(`api/v1alpha1/backbones/${bbManagement.id}/vans`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(body),
+            });
+
+            if (response.ok) {
+                await toVanTab();
+            } else {
+                errorbox.textContent = await response.text();
+            }
+        },
+
+        //
+        // Cancel button behavior
+        //
+        async () => { await toVanTab(); }
+    );
+
+    section.appendChild(form);
+    section.appendChild(errorbox);
+    vanName.focus();
+}
+
+async function MultiTenantVanForm() {
     let section = document.getElementById("sectiondiv");
     section.innerHTML = '<h2>Create a Virtual Application Network</h2>';
 
@@ -104,10 +221,12 @@ async function VanForm() {
     const bbResult = await fetch('/api/v1alpha1/backbones');
     const bbList   = await bbResult.json();
     for (const bb of bbList) {
-        let option = document.createElement('option');
-        option.textContent = bb.name;
-        option.value       = bb.id;
-        bbSelector.appendChild(option);
+        if (!bb.managementbackbone) {
+            let option = document.createElement('option');
+            option.textContent = bb.name;
+            option.value       = bb.id;
+            bbSelector.appendChild(option);
+        }
     }
 
     let startTimeGroup = document.createElement('div');
@@ -220,18 +339,18 @@ async function VanDetail(vanId) {
     let tabsheet = await TabSheet([
         {
             title        : 'VAN Details',
-            selectAction : async (panel) => { DetailTab(panel, van); },
+            selectAction : async (panel) => { await DetailTab(panel, van); },
             enabled      : true,
         },
         {
             title        : 'Invitations',
-            selectAction : async (panel) => { InvitationsTab(panel, van); },
-            enabled      : true,
+            selectAction : async (panel) => { await InvitationsTab(panel, van); },
+            enabled      : !van.managementbackbone,
         },
         {
             title        : 'Members',
-            selectAction : async (panel) => { MembersTab(panel, van); },
-            enabled      : true,
+            selectAction : async (panel) => { await MembersTab(panel, van); },
+            enabled      : !van.managementbackbone,
         },
     ]);
 

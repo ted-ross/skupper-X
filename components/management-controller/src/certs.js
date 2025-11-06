@@ -149,7 +149,8 @@ const processNewNetworks = async function() {
         await client.query('BEGIN');
         const result = await client.query(
             "SELECT ApplicationNetworks.*, Backbones.Lifecycle as bblc, Backbones.Certificate as bbca FROM ApplicationNetworks " + 
-            "JOIN Backbones ON ApplicationNetworks.Backbone = Backbones.Id WHERE ApplicationNetworks.Lifecycle = 'new' and Backbones.Lifecycle = 'ready' LIMIT 1"
+            "JOIN Backbones ON ApplicationNetworks.Backbone = Backbones.Id " +
+            "WHERE ApplicationNetworks.Lifecycle = 'new' and Backbones.Lifecycle = 'ready' LIMIT 1"
         );
         if (result.rowCount == 1) {
             const row = result.rows[0];
@@ -283,6 +284,41 @@ const processNewMemberSites = async function() {
     }
 }
 
+
+const processNewNetworkCredentials = async function() {
+    var reschedule_delay = 2000;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query('BEGIN');
+        const result = await client.query(
+            "SELECT NetworkCredentials.*, ApplicationNetworks.Lifecycle as vanlc, Backbones.Certificate as vanca " +
+            "FROM NetworkCredentials " + 
+            "JOIN ApplicationNetworks ON NetworkCredentials.MemberOf = ApplicationNetworks.Id " +
+            "JOIN Backbones ON Backbones.id = ApplicationNetworks.Backbone " +
+            "WHERE NetworkCredentials.Lifecycle = 'new' and ApplicationNetworks.Lifecycle = 'ready' LIMIT 1"
+        );
+        if (result.rowCount == 1) {
+            const row = result.rows[0];
+            Log(`New Network Credential: ${row.name}`);
+            var duration_ms = db.IntervalMilliseconds(config.DefaultCertExpiration());
+            await client.query(
+                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, NetworkCredential, Issuer) VALUES(gen_random_uuid(), 'vanCredential', now(), now(), $1, $2, $3)",
+                [duration_ms / 3600000, row.id, row.vanca]
+            );
+            await client.query("UPDATE NetworkCredentials SET Lifecycle = 'skx_cr_created' WHERE Id = $1", [row.id]);
+            reschedule_delay = 0;
+        }
+        await client.query('COMMIT');
+    } catch (err) {
+        Log(`Rolling back new-network-credential transaction: ${err.stack}`);
+        await client.query('ROLLBACK');
+        reschedule_delay = 10000;
+    } finally {
+        client.release();
+        setTimeout(processNewNetworkCredentials, reschedule_delay);
+    }
+}
+
 //
 // processCertificateRequests
 //
@@ -324,6 +360,12 @@ const processNewCertificateRequests = async function() {
                     is_ca  = true;
                     issuer = row.issuer;
                     usage  = 'signing';
+                    break;
+                case 'vanCredential':
+                    name   = `skx-van-cred-${row.id}`;
+                    is_ca  = false;
+                    issuer = row.issuer;
+                    usage  = 'client auth';
                     break;
                 case 'interiorRouter':
                     name   = `skx-interior-${row.id}`;
@@ -414,6 +456,10 @@ const secretAdded = async function(dblink, secret) {
                 ref_table  = 'ApplicationNetworks';
                 ref_id     = cert_request.applicationnetwork;
                 is_ca      = true;
+            } else if (cert_request.networkcredential) {
+                ref_table  = 'NetworkCredentials';
+                ref_id     = cert_request.networkcredential;
+                is_ca      = false;
             } else if (cert_request.invitation) {
                 ref_table  = 'MemberInvitations';
                 ref_id     = cert_request.invitation;
@@ -599,6 +645,7 @@ exports.Start = async function() {
     setTimeout(processNewBackbones, 1000);
     setTimeout(processNewAccessPoints, 1000);
     setTimeout(processNewNetworks, 1000);
+    setTimeout(processNewNetworkCredentials, 1000);
     setTimeout(processNewInteriorSites, 1000);
     setTimeout(processNewInvitations, 1000);
     setTimeout(processNewMemberSites, 1000);

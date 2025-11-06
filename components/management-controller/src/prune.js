@@ -89,7 +89,7 @@ exports.DeleteOrphanCertificates = async function() {
             }
         }
 
-        for (const table of ['ManagementControllers', 'Backbones', 'BackboneAccessPoints', 'InteriorSites', 'ApplicationNetworks', 'MemberInvitations', 'MemberSites']) {
+        for (const table of ['ManagementControllers', 'Backbones', 'BackboneAccessPoints', 'InteriorSites', 'ApplicationNetworks', 'NetworkCredentials', 'MemberInvitations', 'MemberSites']) {
             const result = await client.query(`SELECT Id, Certificate FROM ${table}`);
             for (const row of result.rows) {
                 if (row.certificate) {

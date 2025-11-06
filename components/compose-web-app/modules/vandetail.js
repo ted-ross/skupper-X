@@ -31,35 +31,46 @@ export async function DetailTab(parent, van) {
     layout.setAttribute('cellPadding', '4');
 
     LayoutRow(layout, ['VAN Name:', van.name]);
-    LayoutRow(layout, ['TLS Status:', van.lifecycle == 'failed' ? `${van.lifecycle} - ${van.failure}` : van.lifecycle]);
-    LayoutRow(layout, ['Start Time:', van.starttime]);
-    LayoutRow(layout, ['End Time:', van.endtime]);
-    //LayoutRow(layout, ['Delete Delay:', van.deletedelay]);
 
-    const tlsResult = await fetch(`/api/v1alpha1/tls-certificates/${van.certificate}`);
-    if (tlsResult.ok) {
-        const cert = await tlsResult.json();
-        LayoutRow(layout, ['CA Expiration:', cert.expiration]);
-        LayoutRow(layout, ['CA Renewal Time:', cert.renewaltime]);
-    }
+    if (van.managementbackbone) {
+        LayoutRow(layout, ['Status:', 'Never Connected']);
+        LayoutRow(layout, ['Onboard Time:', van.starttime]);
 
-    let evict = document.createElement('button');
-    evict.textContent = 'Evict VAN...';
-    evict.onclick = async () => {
-        let confirm = await ConfirmDialog(
-            'Eviction will cause all VAN members to be disconnected and all invitations to be expired',
-            'Confirm Eviction',
-            async () => {
-                const response = await fetch(`/api/v1alpha1/vans/${van.id}/evict`, { method : 'PUT' });
-                if (!response.ok) {
-                    let error = await response.text();
-                    errorbox.textContent = error;
+        let yaml = document.createElement('a');
+        yaml.innerHTML = 'download...';
+        yaml.href      = '#';
+        LayoutRow(layout, ['Onboard Configuration:', yaml]);
+    } else {
+        LayoutRow(layout, ['Start Time:', van.starttime]);
+        LayoutRow(layout, ['TLS Status:', van.lifecycle == 'failed' ? `${van.lifecycle} - ${van.failure}` : van.lifecycle]);
+        LayoutRow(layout, ['End Time:', van.endtime]);
+        //LayoutRow(layout, ['Delete Delay:', van.deletedelay]);
+
+        const tlsResult = await fetch(`/api/v1alpha1/tls-certificates/${van.certificate}`);
+        if (tlsResult.ok) {
+            const cert = await tlsResult.json();
+            LayoutRow(layout, ['CA Expiration:', cert.expiration]);
+            LayoutRow(layout, ['CA Renewal Time:', cert.renewaltime]);
+        }
+
+        let evict = document.createElement('button');
+        evict.textContent = 'Evict VAN...';
+        evict.onclick = async () => {
+            let confirm = await ConfirmDialog(
+                'Eviction will cause all VAN members to be disconnected and all invitations to be expired',
+                'Confirm Eviction',
+                async () => {
+                    const response = await fetch(`/api/v1alpha1/vans/${van.id}/evict`, { method : 'PUT' });
+                    if (!response.ok) {
+                        let error = await response.text();
+                        errorbox.textContent = error;
+                    }
                 }
-            }
-        );
-        panel.appendChild(confirm);
-    };
-    LayoutRow(layout, [evict]);
+            );
+            panel.appendChild(confirm);
+        };
+        LayoutRow(layout, [evict]);
+    }
 
     let deleteVan = document.createElement('button');
     deleteVan.textContent = 'Delete VAN...';

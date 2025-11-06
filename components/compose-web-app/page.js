@@ -53,7 +53,7 @@ export async function toBackboneTab() {
 export async function toVanTab() {
     unboldTabs();
     document.getElementById("tab-van").style.fontWeight  = 'bold';
-    document.getElementById("sectiondiv").innerHTML = `<h2>Virtual Application Networks</h2>`;
+    document.getElementById("sectiondiv").innerHTML = '';
     await BuildVanTable();
 }
 

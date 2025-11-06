@@ -35,14 +35,13 @@ const createBackbone = async function(req, res) {
     try {
         const [fields, files] = await form.parse(req);
         const norm = util.ValidateAndNormalizeFields(fields, {
-            'name'        : {type: 'string', optional: false},
-            'multitenant' : {type: 'bool',   optional: true, default: true},
+            'name' : {type: 'string', optional: false},
         });
 
         const client = await db.ClientFromPool();
         try {
             await client.query("BEGIN");
-            const result = await client.query("INSERT INTO Backbones(Name, LifeCycle, MultiTenant) VALUES ($1, 'partial', $2) RETURNING Id", [norm.name, norm.multitenant]);
+            const result = await client.query("INSERT INTO Backbones(Name, LifeCycle) VALUES ($1, 'partial') RETURNING Id", [norm.name]);
             await client.query("COMMIT");
 
             returnStatus = 201;
@@ -622,9 +621,9 @@ const listBackbones = async function(req, res) {
                 throw(Error('Backbone-Id is not a valid uuid'));
             }
 
-            result = await client.query("SELECT Id, Name, Lifecycle, Failure, MultiTenant FROM Backbones WHERE Id = $1", [bid]);
+            result = await client.query("SELECT Id, Name, Lifecycle, Failure, ManagementBackbone FROM Backbones WHERE Id = $1", [bid]);
         } else {
-            result = await client.query("SELECT Id, Name, Lifecycle, Failure, MultiTenant FROM Backbones");
+            result = await client.query("SELECT Id, Name, Lifecycle, Failure, ManagementBackbone FROM Backbones");
         }
 
         if (bid) {

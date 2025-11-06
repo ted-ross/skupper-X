@@ -24,6 +24,7 @@ DROP TABLE CertificateRequests;
 DROP TABLE MemberSites;
 DROP TABLE EdgeLinks;
 DROP TABLE MemberInvitations;
+DROP TABLE NetworkCredentials;
 DROP TABLE ApplicationNetworks;
 DROP TABLE ManagementControllers;
 DROP TABLE InterRouterLinks;

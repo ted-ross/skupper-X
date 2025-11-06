@@ -46,6 +46,7 @@ const createVan = async function(bid, req, res) {
 
         const client = await db.ClientFromPool();
         try {
+            returnStatus = 500;
             await client.query("BEGIN");
 
             //
@@ -57,6 +58,16 @@ const createVan = async function(bid, req, res) {
                 existingNames.push(row.name);
             }
             const uniqueName = util.UniquifyName(norm.name, existingNames);
+
+            //
+            // Determine if the backbone is the management backbone
+            //
+            const bbResult = await client.query("SELECT ManagementBackbone FROM Backbones WHERE Id = $1", [bid]);
+            if (bbResult.rowCount != 1) {
+                returnStatus = 400;
+                throw new Error('Invalid backbone ID');
+            }
+            const isManagementBackbone = bbResult.rows[0].managementbackbone;
 
             var extraCols = "";
             var extraVals = "";
@@ -82,15 +93,24 @@ const createVan = async function(bid, req, res) {
             //
             // Create the application network
             //
-            const result = await client.query(`INSERT INTO ApplicationNetworks(Name, Backbone${extraCols}) VALUES ($1, $2${extraVals}) RETURNING Id`, [uniqueName, bid]);
+            const result = await client.query(
+                `INSERT INTO ApplicationNetworks(Name, Backbone${extraCols}) VALUES ($1, $2${extraVals}) RETURNING Id`,
+                [uniqueName, bid]
+            );
             const vanId = result.rows[0].id;
-            await client.query("COMMIT");
 
+            //
+            // If this is the onboarding of an external network (on the managemetn backbone), create network credentials for the VAN.
+            //
+            if (isManagementBackbone) {
+                const result = await client.query("INSERT INTO NetworkCredentials (Name, MemberOf) VALUES ($1, $2)", [uniqueName, vanId]);
+            }
+
+            await client.query("COMMIT");
             returnStatus = 201;
             res.status(returnStatus).json({id: vanId});
         } catch (error) {
             await client.query("ROLLBACK");
-            returnStatus = 500
             res.status(returnStatus).send(error.message);
         } finally {
             client.release();
@@ -199,8 +219,11 @@ const readVan = async function(res, vid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT ApplicationNetworks.*, Backbones.Id as backboneid, Backbones.Name as backbonename FROM ApplicationNetworks " +
-                                          "JOIN Backbones ON ApplicationNetworks.Backbone = Backbones.Id WHERE ApplicationNetworks.Id = $1", [vid]);
+        const result = await client.query(
+            "SELECT ApplicationNetworks.*, Backbones.Id as backboneid, Backbones.Name as backbonename, Backbones.ManagementBackbone " +
+            "FROM ApplicationNetworks " +
+            "JOIN Backbones ON ApplicationNetworks.Backbone = Backbones.Id WHERE ApplicationNetworks.Id = $1", [vid]
+        );
         if (result.rowCount == 1) {
             res.status(returnStatus).json(result.rows[0]);
         } else {
@@ -262,7 +285,9 @@ const listVans = async function(res, bid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT Id, Name, LifeCycle, Failure, StartTime, EndTime, DeleteDelay FROM ApplicationNetworks WHERE Backbone = $1", [bid]);
+        const result = await client.query(
+            "SELECT Id, Name, LifeCycle, Failure, StartTime, EndTime, DeleteDelay FROM ApplicationNetworks WHERE Backbone = $1", [bid]
+        );
         res.status(returnStatus).json(result.rows);
     } catch (error) {
         returnStatus = 500
@@ -277,8 +302,12 @@ const listAllVans = async function(res, bid) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
-        const result = await client.query("SELECT ApplicationNetworks.Id, Backbone, Backbones.Name as backbonename, ApplicationNetworks.Name, ApplicationNetworks.LifeCycle, ApplicationNetworks.Failure, StartTime, EndTime, DeleteDelay FROM ApplicationNetworks " +
-                                          "JOIN Backbones ON Backbones.Id = Backbone");
+        const result = await client.query(
+            "SELECT ApplicationNetworks.Id, Backbone, Backbones.Name as backbonename, Backbones.ManagementBackbone, ApplicationNetworks.Name, " +
+            "ApplicationNetworks.LifeCycle, ApplicationNetworks.Failure, StartTime, EndTime, DeleteDelay " +
+            "FROM ApplicationNetworks " +
+            "JOIN Backbones ON Backbones.Id = Backbone"
+        );
         res.status(returnStatus).json(result.rows);
     } catch (error) {
         returnStatus = 500
