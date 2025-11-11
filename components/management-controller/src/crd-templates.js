@@ -89,3 +89,26 @@ rules:
 `;
 }
 
+exports.NetworkCRYaml = function(networkId) {
+    return `---
+apiVersion: skupper.io/v2alpha1
+kind: ManagedSite
+metadata:
+  name: network
+spec:
+  networkId: ${networkId}
+`;
+}
+
+exports.NetworkLinkCRYaml = function(host, port, secret) {
+    return `---
+apiVersion: skupper.io/v2alpha1
+kind: ManagementLink
+metadata:
+  name: management-link
+spec:
+  hostname: ${host}
+  port: ${port}
+  tlsCredentials: ${secret}
+`;
+}

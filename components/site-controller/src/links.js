@@ -158,6 +158,7 @@ const sync_listeners = async function() {
                 var role    = 'normal';
                 var profile = key;
                 var strip   = 'both';
+                var create_autolink = false;
                 switch (value.kind) {
                 case 'claim':
                 case 'manage':
@@ -171,6 +172,11 @@ const sync_listeners = async function() {
                 case 'member':
                     role  = 'edge';
                     strip = 'no';
+                    break;
+
+                case 'van':
+                    role = 'inter-network';
+                    create_autolink = true;
                     break;
 
                 default:
@@ -189,6 +195,14 @@ const sync_listeners = async function() {
                     requireEncryption: true,
                     requireSsl:        true,
                 });
+
+                if (create_autolink) {
+                    await router.CreateAutoLink(lname, {
+                        connection:      lname,
+                        direction:       'in',
+                        externalAddress: '_topo/mbone',
+                    });
+                }
             }
         }
 
@@ -198,6 +212,9 @@ const sync_listeners = async function() {
         for (const lname of Object.keys(listener_map)) {
             Log(`Deleting router listener ${lname}`);
             await router.DeleteListener(lname);
+            try {
+                await router.DeleteAutoLink(lname);
+            } catch(e) {}
         }
     } catch (err) {
         Log(`Exception in sync_listeners: ${err.stack}`);

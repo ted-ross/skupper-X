@@ -75,7 +75,7 @@ export async function FormLayout(items, action, cancel, submitText, cancelText, 
     // Captions right-justified on the left, form-inputs left-justified on the right.
     //
     let layout = document.createElement('table');
-    layout.setAttribute('cellPadding', '4');
+    layout.setAttribute('cellPadding', '2');
 
     for (const [caption, element] of items) {
         let row  = layout.insertRow();
@@ -90,7 +90,13 @@ export async function FormLayout(items, action, cancel, submitText, cancelText, 
             cell.appendChild(caption);
         }
         cell = row.insertCell();
-        cell.appendChild(element);
+        if (typeof(element) == "string") {
+            let eo = document.createElement('div');
+            eo.textContent = element;
+            cell.appendChild(eo);
+        } else {
+            cell.appendChild(element);
+        }
     }
 
     if (action || cancel) {

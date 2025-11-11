@@ -40,11 +40,11 @@ body {
     overflow-y: scroll;
 }
 .nav {            
-    width: 10%;             
+    width: 15%;             
     background: #d4d7dc;
 }
 .section {
-    width: 90%;
+    width: 85%;
 }
 .nav ul {
     list-style: none; 

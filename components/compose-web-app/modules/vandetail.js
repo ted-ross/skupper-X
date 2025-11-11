@@ -35,11 +35,15 @@ export async function DetailTab(parent, van) {
     if (van.managementbackbone) {
         LayoutRow(layout, ['Status:', 'Never Connected']);
         LayoutRow(layout, ['Onboard Time:', van.starttime]);
+        LayoutRow(layout, ['Network ID:', van.vanid]);
 
-        let yaml = document.createElement('a');
-        yaml.innerHTML = 'download...';
-        yaml.href      = '#';
-        LayoutRow(layout, ['Onboard Configuration:', yaml]);
+        let site = document.createElement('i');
+        site.innerHTML = 'none';
+        LayoutRow(layout, ['Connected Site:', site])
+
+        let backupsites = document.createElement('i');
+        backupsites.innerHTML = 'none';
+        LayoutRow(layout, ['Backup Sites:', backupsites])
     } else {
         LayoutRow(layout, ['Start Time:', van.starttime]);
         LayoutRow(layout, ['TLS Status:', van.lifecycle == 'failed' ? `${van.lifecycle} - ${van.failure}` : van.lifecycle]);

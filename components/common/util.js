@@ -115,10 +115,10 @@ exports.ValidateAndNormalizeFields = function(fields, table) {
             break;
 
         case 'accesskind' :
-            if (value == 'claim' || value == 'peer' || value == 'member' || value == 'manage') {
+            if (value == 'claim' || value == 'peer' || value == 'member' || value == 'manage' || value == 'van') {
                 normalized[key] = value;
             } else {
-                throw(Error(`Expected [claim, peer, member, manage] for ${key}`));
+                throw(Error(`Expected [claim, peer, member, manage, van] for ${key}`));
             }
             break;
 

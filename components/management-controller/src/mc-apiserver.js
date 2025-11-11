@@ -116,7 +116,7 @@ const fetchInvitationKube = async function (iid, res) {
             text += siteTemplates.ServiceAccountYaml();
             text += siteTemplates.MemberRoleYaml();
             text += siteTemplates.RoleBindingYaml();
-            text += siteTemplates.ConfigMapYaml('edge', null, row.vanid);
+            text += siteTemplates.ConfigMapYaml('edge', null, row.vanid, row.vanid);
             text += siteTemplates.DeploymentYaml(iid, false, 'kube');
             text += siteTemplates.SiteApiServiceYaml();
             text += siteTemplates.SecretYaml(secret, 'skupperx-claim', false);
@@ -161,7 +161,7 @@ const fetchBackboneSiteKube = async function (siteId, res) {
             text += siteTemplates.ServiceAccountYaml();
             text += siteTemplates.BackboneRoleYaml();
             text += siteTemplates.RoleBindingYaml();
-            text += siteTemplates.ConfigMapYaml('interior', result.rows[0].sitename);
+            text += siteTemplates.ConfigMapYaml('interior', result.rows[0].sitename, null, 'mbone');
             text += siteTemplates.DeploymentYaml(siteId, true, 'kube');
             text += siteTemplates.SecretYaml(secret, `skx-site-${siteId}`, common.INJECT_TYPE_SITE, `tls-site-${siteId}`);
 
@@ -306,6 +306,66 @@ const fetchBackboneLinksOutgoingKube = async function (bsid, res) {
     return returnStatus;
 }
 
+const getVanConfigConnecting = async function(vid, apid, res) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        const result = await client.query(
+            "SELECT VanId, ObjectName FROM ApplicationNetworks " +
+            "JOIN NetworkCredentials ON NetworkCredentials.MemberOf = ApplicationNetworks.Id " +
+            "JOIN TlsCertificates ON TlsCertificates.Id = NetworkCredentials.Certificate " +
+            "WHERE ApplicationNetworks.Id = $1",
+            [vid]);
+        const apResult = await client.query(
+            "SELECT hostname, port FROM BackboneAccessPoints " +
+            "WHERE Id = $1",
+            [apid]
+        );
+        if (result.rowCount == 0 || apResult.rowCount == 0) {
+            returnStatus = 404;
+            res.status(returnStatus).send('Network or Access Point not found');
+        } else {
+            const van    = result.rows[0];
+            const ap     = apResult.rows[0];
+            const secret = await kube.LoadSecret(van.objectname);
+            const text = crdTemplates.NetworkCRYaml(van.vanid)
+                + crdTemplates.NetworkLinkCRYaml(ap.hostname, ap.port, van.objectname)
+                + siteTemplates.SecretYaml(secret, van.objectname);
+            res.status(returnStatus).send(text);
+        }
+    } catch (err) {
+        returnStatus = 400;
+        res.status(returnStatus).send(err.message);
+    } finally {
+        client.release();
+    }
+
+    return returnStatus;
+}
+
+const getVanConfigNonConnecting = async function(vid, res) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        const result = await client.query("SELECT VanId FROM ApplicationNetworks WHERE id = $1", [vid]);
+        if (result.rowCount == 0) {
+            returnStatus = 404;
+            res.status(returnStatus).send('Network not found');
+        } else {
+            const van = result.rows[0];
+            const text = crdTemplates.NetworkCRYaml(van.vanid);
+            res.status(returnStatus).send(text);
+        }
+    } catch (err) {
+        returnStatus = 400;
+        res.status(returnStatus).send(err.message);
+    } finally {
+        client.release();
+    }
+
+    return returnStatus;
+}
+
 exports.AddHostToAccessPoint = async function(siteId, apid, hostname, port) {
     let retval = 1;
     const client = await db.ClientFromPool();
@@ -419,6 +479,7 @@ exports.Start = async function() {
     app.get(API_PREFIX + 'backbonesite/:bsid/:target', async (req, res) => {
         switch (req.params.target) {
             case 'sk2'  : await fetchBackboneSiteSkupper2(req.params.bsid, res);   break;
+            case 'm-server':
             case 'kube' : await fetchBackboneSiteKube(req.params.bsid, res);  break;
             default:
                 res.status(400).send(`Unsupported target: ${req.params.target}`);
@@ -446,6 +507,14 @@ exports.Start = async function() {
 
     app.get(API_PREFIX + 'targetplatforms', async (req, res) => {
         await getTargetPlatforms(req, res);
+    });
+
+    app.get(API_PREFIX + 'vans/:vid/config/connecting/:apid', async (req, res) => {
+        await getVanConfigConnecting(req.params.vid, req.params.apid, res);
+    });
+
+    app.get(API_PREFIX + 'vans/:vid/config/nonconnecting', async (req, res) => {
+        await getVanConfigNonConnecting(req.params.vid, res);
     });
 
     app.use(bodyParser.text({ type: ['application/yaml'] }));

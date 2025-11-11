@@ -155,7 +155,7 @@ const processNewNetworks = async function() {
         if (result.rowCount == 1) {
             const row = result.rows[0];
             Log(`New Application Network: ${row.name}`);
-            const van_id = row.id.substr(-5);
+            const van_id = 'v' + row.id.substr(-5);
             var   duration_ms;
 
             if (row.endtime) {

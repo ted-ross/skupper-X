@@ -116,19 +116,20 @@ async function BackboneDetail(bbid) {
     section.appendChild(panel);
 
     const result = await fetch(`api/v1alpha1/backbones/${bbid}`);
-    const data   = await result.json();
+    const backbone   = await result.json();
 
-    panel.innerHTML = `<b>Backbone: ${data.name}</b>`;
+    panel.innerHTML = `<b>Backbone: ${backbone.name}</b>`;
 
     let fields = [];
+    fields.push(['Management Backbone:', backbone.managementbackbone ? 'Yes' : 'No']);
     let status = document.createElement('pre');
     // The content of this element will be filled in by the poller
-    if (data.failure) {
-        status.textContent += `, failure: ${data.failure}`;
+    if (backbone.failure) {
+        status.textContent += `, failure: ${backbone.failure}`;
     }
     fields.push(['Status:', status]);
 
-    if (data.lifecycle == 'partial') {
+    if (backbone.lifecycle == 'partial') {
         let activateButton = document.createElement('button');
         activateButton.textContent = 'Activate';
         activateButton.addEventListener('click', async () => {
@@ -172,11 +173,11 @@ async function BackboneDetail(bbid) {
         },
     ]);
 
-    await BackboneSites(bbid, panel);
+    await BackboneSites(backbone, panel);
 }
 
-async function BackboneSites(bbid, panel) {
-    const siteResult = await fetch(`/api/v1alpha1/backbones/${bbid}/sites`);
+async function BackboneSites(backbone, panel) {
+    const siteResult = await fetch(`/api/v1alpha1/backbones/${backbone.id}/sites`);
     const sites      = await siteResult.json();
     var   layout;
 
@@ -214,12 +215,12 @@ async function BackboneSites(bbid, panel) {
                     let apDiv = document.createElement('div');
                     apDiv.className = 'subtable';
                     subcell.appendChild(apDiv);
-                    await SiteAccessPoints(apDiv, site.id);
+                    await SiteAccessPoints(apDiv, backbone, site.id);
 
                     let linkDiv = document.createElement('div');
                     linkDiv.className = 'subtable';
                     subcell.appendChild(linkDiv);
-                    await SiteLinks(linkDiv, bbid, site.id);
+                    await SiteLinks(linkDiv, backbone, site.id);
                 } else {
                     layout.deleteRow(site._row.rowIndex + 1);
                 }
@@ -235,7 +236,7 @@ async function BackboneSites(bbid, panel) {
     }
 
     let button = document.createElement('button');
-    button.addEventListener('click', async () => { await SiteForm(bbid); });
+    button.addEventListener('click', async () => { await SiteForm(backbone); });
     button.textContent = 'Create Site...';
     panel.appendChild(document.createElement('p'));
     panel.appendChild(button);
@@ -245,7 +246,7 @@ async function BackboneSites(bbid, panel) {
     //
     await PollTable(panel, 5000, [
         {
-            path  : `/api/v1alpha1/backbones/${bbid}/sites`,
+            path  : `/api/v1alpha1/backbones/${backbone.id}/sites`,
             items : [
                 async (site) => {
                     for (const row of layout.rows) {
@@ -415,7 +416,7 @@ async function SitePanel(div, site) {
     div.appendChild(layout);
 }
 
-async function SiteAccessPoints(div, siteId) {
+async function SiteAccessPoints(div, backbone, siteId) {
     const max_hostname = 50;
     div.innerHTML = '<b>Access Points (incoming):</b><p />';
     const result = await fetch(`/api/v1alpha1/backbonesites/${siteId}/accesspoints`);
@@ -480,15 +481,15 @@ async function SiteAccessPoints(div, siteId) {
     }
 
     let button = document.createElement('button');
-    button.addEventListener('click', async () => { await AccessPointForm(div, siteId) });
+    button.addEventListener('click', async () => { await AccessPointForm(div, backbone, siteId) });
     button.textContent = 'Create Access Point...';
     div.appendChild(document.createElement('p'));
     div.appendChild(button);
 }
 
-async function SiteLinks(div, bbid, siteId) {
+async function SiteLinks(div, backbone, siteId) {
     div.innerHTML = '<b>Inter-Router Links (outgoing):</b><p />';
-    const apResult = await fetch(`/api/v1alpha1/backbones/${bbid}/accesspoints`);
+    const apResult = await fetch(`/api/v1alpha1/backbones/${backbone.id}/accesspoints`);
     const apList   = await apResult.json();
     const result   = await fetch(`/api/v1alpha1/backbonesites/${siteId}/links`);
     const linklist = await result.json();
@@ -511,13 +512,13 @@ async function SiteLinks(div, bbid, siteId) {
     }
 
     let button = document.createElement('button');
-    button.addEventListener('click', async () => { await LinkForm(div, bbid, siteId) });
+    button.addEventListener('click', async () => { await LinkForm(div, backbone, siteId) });
     button.textContent = 'Create Link...';
     div.appendChild(document.createElement('p'));
     div.appendChild(button);
 }
 
-async function SiteForm(bbid) {
+async function SiteForm(backbone) {
     let section = document.getElementById("sectiondiv");
     section.innerHTML = '<b>Create a Backbone Site</b>';
 
@@ -553,7 +554,7 @@ async function SiteForm(bbid) {
         // Submit button behavior
         //
         async () => {
-            const response = await fetch(`api/v1alpha1/backbones/${bbid}/sites`, {
+            const response = await fetch(`api/v1alpha1/backbones/${backbone.id}/sites`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -565,7 +566,7 @@ async function SiteForm(bbid) {
             });
 
             if (response.ok) {
-                await BackboneDetail(bbid);
+                await BackboneDetail(backbone.id);
             } else {
                 errorbox.textContent = await response.text();
             }
@@ -574,7 +575,7 @@ async function SiteForm(bbid) {
         //
         // Cancel button behavior
         //
-        async () => { await BackboneDetail(bbid); }
+        async () => { await BackboneDetail(backbone.id); }
     );
 
     section.appendChild(form);
@@ -582,7 +583,7 @@ async function SiteForm(bbid) {
     siteName.focus();
 }
 
-async function AccessPointForm(div, siteId) {
+async function AccessPointForm(div, backbone, siteId) {
     div.innerHTML = '<b>Create an Access Point</b>';
 
     let errorbox = document.createElement('pre');
@@ -592,7 +593,8 @@ async function AccessPointForm(div, siteId) {
     apName.type = 'text';
 
     let kindSelector = document.createElement('select');
-    for (const k of ['claim', 'member', 'peer', 'manage']) {
+    const choices = backbone.managementbackbone ? ['van', 'manage', 'peer'] : ['claim', 'member', 'peer', 'manage'];
+    for (const k of  choices) {
         let option = document.createElement('option');
         option.value = k;
         option.textContent = k;
@@ -632,7 +634,7 @@ async function AccessPointForm(div, siteId) {
             });
 
             if (response.ok) {
-                await SiteAccessPoints(div, siteId);
+                await SiteAccessPoints(div, backbone, siteId);
             } else {
                 errorbox.textContent = await response.text();
             }
@@ -641,23 +643,23 @@ async function AccessPointForm(div, siteId) {
         //
         // Cancel button behavior
         //
-        async () => { await SiteAccessPoints(div, siteId); }
+        async () => { await SiteAccessPoints(div, backbone, siteId); }
     );
 
     div.appendChild(form);
     div.appendChild(errorbox);
 }
 
-async function LinkForm(div, bbid, siteId) {
+async function LinkForm(div, backbone, siteId) {
     div.innerHTML = '<b>Create an inter-router link</b>';
 
     let errorbox = document.createElement('pre');
     errorbox.className = 'errorBox';
 
     let peerSelector = document.createElement('select');
-    const siteResult = await fetch(`/api/v1alpha1/backbones/${bbid}/sites`);
+    const siteResult = await fetch(`/api/v1alpha1/backbones/${backbone.id}/sites`);
     const siteList   = await siteResult.json();
-    const apResult   = await fetch(`/api/v1alpha1/backbones/${bbid}/accesspoints`);
+    const apResult   = await fetch(`/api/v1alpha1/backbones/${backbone.id}/accesspoints`);
     const apList     = await apResult.json();
 
     //
@@ -719,7 +721,7 @@ async function LinkForm(div, bbid, siteId) {
             });
 
             if (response.ok) {
-                await SiteLinks(div, bbid, siteId);
+                await SiteLinks(div, backbone, siteId);
             } else {
                 errorbox.textContent = await response.text();
             }
@@ -728,7 +730,7 @@ async function LinkForm(div, bbid, siteId) {
         //
         // Cancel button behavior
         //
-        async () => { await SiteLinks(div, bbid, siteId); }
+        async () => { await SiteLinks(div, backbone, siteId); }
     );
 
     div.appendChild(form);

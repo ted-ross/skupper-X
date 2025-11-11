@@ -21,6 +21,7 @@ import { InvitationsTab } from "./invitations.js";
 import { MembersTab } from "./members.js";
 import { TabSheet } from "./tabsheet.js";
 import { FormLayout, PollTable, SetupTable } from "./util.js";
+import { ConfigTab } from "./vanconfig.js";
 import { DetailTab } from "./vandetail.js";
 
 export async function BuildVanTable() {
@@ -57,17 +58,12 @@ export async function BuildVanTable() {
                 await VanDetail(item.id);
             });
 
-            let getYaml = document.createElement('a');
-            getYaml.innerHTML = "fetch-yaml";
-            getYaml.href = '#';
-
             let launchConsole = document.createElement('a');
             launchConsole.innerHTML = "console";
             launchConsole.href = '#';
 
             row.insertCell().appendChild(anchor);             // 0
             row.insertCell().textContent = 'Never Connected'; // 1
-            row.insertCell().appendChild(getYaml);
             row.insertCell().appendChild(launchConsole);
         }
         panel.appendChild(exlayout);
@@ -341,6 +337,11 @@ async function VanDetail(vanId) {
             title        : 'VAN Details',
             selectAction : async (panel) => { await DetailTab(panel, van); },
             enabled      : true,
+        },
+        {
+            title        : 'Configuration',
+            selectAction : async (panel) => { await ConfigTab(panel, van); },
+            enabled      : van.managementbackbone,
         },
         {
             title        : 'Invitations',

@@ -131,6 +131,18 @@ exports.DeleteListener = async function(name) {
     await exports.DeleteManagementEntity('io.skupper.router.listener', name, QUERY_TIMEOUT_SECONDS);
 }
 
+exports.ListAutoLinks = async function(attributes = []) {
+    return await exports.ListManagementEntity('io.skupper.router.router.config.autoLink', QUERY_TIMEOUT_SECONDS, attributes);
+}
+
+exports.CreateAutoLink = async function(name, obj) {
+    await exports.CreateManagementEntity('io.skupper.router.router.config.autoLink', name, obj, QUERY_TIMEOUT_SECONDS);
+}
+
+exports.DeleteAutoLink = async function(name) {
+    await exports.DeleteManagementEntity('io.skupper.router.router.config.autoLink', name, QUERY_TIMEOUT_SECONDS);
+}
+
 exports.NotifyApiReady = async function(onApiReady) {
     if (ready) {
         onApiReady();

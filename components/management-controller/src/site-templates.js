@@ -143,7 +143,7 @@ roleRef:
 `;
 }
 
-exports.ConfigMapYaml = function(mode, sitename, vanId = null) {
+exports.ConfigMapYaml = function(mode, sitename, vanId = null, networkId = null) {
     return `---
 apiVersion: v1
 kind: ConfigMap
@@ -157,9 +157,15 @@ data:
             {
                 "id": "${sitename ? sitename : 'skx-${HOSTNAME}'}",
                 "mode": "${mode}",
-${vanId ? `                "vanId": "${vanId}",` : ''}
                 "helloMaxAgeSeconds": "3",
                 "metadata": "{\\"version\\":\\"1.4.3\\",\\"platform\\":\\"kubernetes\\"}"
+            }
+        ],
+        [
+            "network",
+            {
+${networkId ? `                "networkId":"${networkId}"${vanId ? ',' : ''}` : ''}
+${vanId ? `                "tenantId":"${vanId}"` : ''}
             }
         ],
         [
@@ -401,8 +407,6 @@ exports.SecretYaml = function(certificate, profile_name, inject, stateKey) {
             name: profile_name,
             annotations: {
                 [common.META_ANNOTATION_SKUPPERX_CONTROLLED] : 'true',
-                [common.META_ANNOTATION_STATE_DIR]           : 'remote',
-                [common.META_ANNOTATION_STATE_KEY]           : stateKey,
             },
         },
         data: certificate.data,
@@ -411,7 +415,11 @@ exports.SecretYaml = function(certificate, profile_name, inject, stateKey) {
     if (inject) {
         secret.metadata.annotations[common.META_ANNOTATION_TLS_INJECT] = inject;
     }
-    secret.metadata.annotations[common.META_ANNOTATION_STATE_HASH] = exports.HashOfSecret(secret);
+    if (stateKey) {
+        secret.metadata.annotations[common.META_ANNOTATION_STATE_DIR] = 'remote';
+        secret.metadata.annotations[common.META_ANNOTATION_STATE_KEY] = stateKey;
+        secret.metadata.annotations[common.META_ANNOTATION_STATE_HASH] = exports.HashOfSecret(secret);
+    }
 
     return "---\n" + yaml.dump(secret);
 }

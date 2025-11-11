@@ -27,7 +27,7 @@
 //     skx/state-type: accesspoint
 //     skx/state-id:   <The database ID of the source BackboneAccessPoint>
 //   data:
-//     kind: [claim|peer|member|manage]
+//     kind: [claim|peer|member|manage|van]
 //
 // The output of this module:
 //   Kubernetes Service: skx-router, with a port for each access point
@@ -195,7 +195,12 @@ const reconcile_kube_service = async function() {
 
 const do_reconcile_routes = async function() {
     reconcile_routes_scheduled = false;
-    const all_routes = await kube.GetRoutes();
+    var all_routes = [];
+    try {
+        all_routes = await kube.GetRoutes();
+    } catch(e) {
+    }
+
     let routes = {};
 
     for (const candidate of all_routes) {
