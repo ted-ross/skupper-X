@@ -17,7 +17,7 @@
  under the License.
 */
 
-import { ConfirmDialog, LayoutRow } from "./util.js";
+import { ConfirmDialog, countLines, LayoutRow } from "./util.js";
 
 export async function ConfigTab(parent, van) {
     parent.innerHTML = '';
@@ -50,13 +50,25 @@ export async function ConfigTab(parent, van) {
     apSelector.onchange = async (ev) => {
         if (apSelector.selectedIndex == 0) {
             textbox.textContent = '';
+            textbox.setAttribute('rows', 5);
+            download.hidden = true;
         } else {
             const configResult = await fetch(`/api/v1alpha1/vans/${van.id}/config/connecting/${apSelector.value}`);
             textbox.textContent = await configResult.text();
+            textbox.setAttribute('rows', countLines(textbox.textContent));
+            download.href = `/api/v1alpha1/vans/${van.id}/config/connecting/${apSelector.value}`;
+            download.download = `connecting.yaml`;
+            download.hidden = false;
         }
     };
 
     let textbox = document.createElement('textarea');
+    textbox.readOnly = true;
+    textbox.setAttribute('rows', 5);
+
+    let download = document.createElement('a');
+    download.innerHTML = 'download configuration';
+    download.hidden = true;
 
     let typeSelector = document.createElement('select');
     for (const t of [
@@ -74,23 +86,32 @@ export async function ConfigTab(parent, van) {
                 apSelector.hidden = true;
                 apSelector.selectedIndex = 0;
                 textbox.textContent = '';
+                textbox.setAttribute('rows', 5);
+                download.hidden = true;
                 break;
             case 1:
                 apSelector.hidden = true;
                 apSelector.selectedIndex = 0;
                 const config1Result = await fetch(`/api/v1alpha1/vans/${van.id}/config/nonconnecting`);
                 textbox.textContent = await config1Result.text();
+                textbox.setAttribute('rows', countLines(textbox.textContent));
+                download.href = `/api/v1alpha1/vans/${van.id}/config/nonconnecting`;
+                download.download = 'nonconnecting.yaml';
+                download.hidden = false;
                 break;
             case 2:
                 apSelector.hidden = false;
                 textbox.textContent = '';
+                textbox.setAttribute('rows', 5);
+                download.hidden = true;
                 break;
         }
     };
     LayoutRow(layout, [typeSelector]);
     LayoutRow(layout, [apSelector]);
-    LayoutRow(layout, [textbox]);
+    LayoutRow(layout, [download]);
 
     panel.appendChild(layout);
+    panel.appendChild(textbox);
     panel.appendChild(errorbox);
 }
