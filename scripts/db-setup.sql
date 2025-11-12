@@ -284,6 +284,15 @@ CREATE TABLE MemberSites (
 );
 
 --
+-- Revoked client certificates
+--
+CREATE TABLE TlsClientRevocations (
+    CertificateId UUID PRIMARY KEY REFERENCES TlsCertificates, -- Certificate revoked
+    Expiration timestamptz,                                    -- When this revocation can be removed
+    Reason text                                                -- Reason for the revocation
+);
+
+--
 -- Pending requests for certificate generation
 --
 CREATE TABLE CertificateRequests (

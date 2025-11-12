@@ -21,6 +21,7 @@ DROP TABLE LibraryBlocks;
 DROP TABLE InterfaceRoles;
 DROP TABLE BlockTypes;
 DROP TABLE CertificateRequests;
+DROP TABLE TlsClientRevocations;
 DROP TABLE MemberSites;
 DROP TABLE EdgeLinks;
 DROP TABLE MemberInvitations;
