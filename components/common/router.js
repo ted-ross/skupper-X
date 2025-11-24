@@ -143,6 +143,10 @@ exports.DeleteAutoLink = async function(name) {
     await exports.DeleteManagementEntity('io.skupper.router.router.config.autoLink', name, QUERY_TIMEOUT_SECONDS);
 }
 
+exports.ListAddresses = async function(attributes = []) {
+    return await exports.ListManagementEntity('io.skupper.router.router.address', QUERY_TIMEOUT_SECONDS, attributes);
+}
+
 exports.NotifyApiReady = async function(onApiReady) {
     if (ready) {
         onApiReady();

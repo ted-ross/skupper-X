@@ -216,7 +216,9 @@ CREATE TABLE ApplicationNetworks (
     VanId text,
     StartTime timestamptz DEFAULT now(),
     EndTime timestamptz,
-    DeleteDelay interval second (0) DEFAULT '0 minutes'
+    DeleteDelay interval second (0) DEFAULT '0 minutes',
+    Connected boolean,
+    LastHeartbeat timestamptz
 );
 
 CREATE TABLE NetworkCredentials (

@@ -50,7 +50,7 @@ const inject_profile = async function(name, secret) {
         caCertFile:     path + 'ca.crt',
         certFile:       path + 'tls.crt',
         privateKeyFile: path + 'tls.key',
-        uidFormat:      'c',
+        uidFormat:      'n',
     };
 
     Log(`Creating new SslProfile: ${name}`);

@@ -19,25 +19,26 @@
 
 "use strict";
 
-const k8s         = require('@kubernetes/client-node');
-const yaml        = require('yaml');
-const fs          = require('fs');
-const rhea        = require('rhea');
-const bbLinks     = require('./backbone-links.js');
-const certs       = require('./certs.js');
-const prune       = require('./prune.js');
-const db          = require('./db.js');
-const kube        = require('./common/kube.js');
-const config      = require('./config.js');
-const apiserver   = require('./mc-apiserver.js');
-const sync        = require('./sync-management.js');
-const amqp        = require('./common/amqp.js');
-const claims      = require('./claim-server.js');
-const compose     = require('./compose.js');
-const Log         = require('./common/log.js').Log;
-const Flush       = require('./common/log.js').Flush;
+const k8s          = require('@kubernetes/client-node');
+const yaml         = require('yaml');
+const fs           = require('fs');
+const rhea         = require('rhea');
+const bbLinks      = require('./backbone-links.js');
+const externalVans = require('./external-vans.js');
+const certs        = require('./certs.js');
+const prune        = require('./prune.js');
+const db           = require('./db.js');
+const kube         = require('./common/kube.js');
+const config       = require('./config.js');
+const apiserver    = require('./mc-apiserver.js');
+const sync         = require('./sync-management.js');
+const amqp         = require('./common/amqp.js');
+const claims       = require('./claim-server.js');
+const compose      = require('./compose.js');
+const Log          = require('./common/log.js').Log;
+const Flush        = require('./common/log.js').Flush;
 
-const VERSION        = '0.1.2';
+const VERSION        = '0.1.3';
 const STANDALONE_NS  = process.env.SKX_STANDALONE_NAMESPACE;
 const CONTROLLER     = process.env.SKX_CONTROLLER_NAME || process.env.HOSTNAME || 'main-controller';
 
@@ -59,6 +60,7 @@ exports.Main = async function() {
         await amqp.Start(rhea);
         await apiserver.Start();
         await bbLinks.Start(CONTROLLER);
+        await externalVans.Start();
         await sync.Start();
         await claims.Start();
         await compose.Start();

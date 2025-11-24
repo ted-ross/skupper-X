@@ -63,7 +63,7 @@ export async function BuildVanTable() {
             launchConsole.href = '#';
 
             row.insertCell().appendChild(anchor);             // 0
-            row.insertCell().textContent = 'Never Connected'; // 1
+            row.insertCell().textContent = item.connected ? 'connected' : 'not connected'; // 1
             row.insertCell().appendChild(launchConsole);
         }
         panel.appendChild(exlayout);
@@ -75,7 +75,7 @@ export async function BuildVanTable() {
 
     let exbutton = document.createElement('button');
     exbutton.addEventListener('click', async () => { await ExternalVanForm(); });
-    exbutton.textContent = 'Onboard Externally-Created VAN...';
+    exbutton.textContent = 'Create Externally-Created VAN...';
     panel.appendChild(document.createElement('p'));
     panel.appendChild(exbutton);
 

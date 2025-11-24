@@ -71,7 +71,7 @@ spec:
       serviceAccountName: skupperx-management-controller
       containers:
         - name: skupperx-management-controller
-          image: quay.io/tedlross/skupperx-management-controller:skx-0.1.1
+          image: quay.io/tedlross/skupperx-management-controller:skx-0.1.3
           imagePullPolicy: "Always"
           ports:
             - containerPort: 8085

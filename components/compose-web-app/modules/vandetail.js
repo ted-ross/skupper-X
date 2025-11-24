@@ -33,13 +33,13 @@ export async function DetailTab(parent, van) {
     LayoutRow(layout, ['VAN Name:', van.name]);
 
     if (van.managementbackbone) {
-        LayoutRow(layout, ['Status:', 'Never Connected']);
+        LayoutRow(layout, ['Status:', van.connected ? 'Connected' : 'Not Connected']);
         LayoutRow(layout, ['Onboard Time:', van.starttime]);
         LayoutRow(layout, ['Network ID:', van.vanid]);
 
         let site = document.createElement('i');
         site.innerHTML = 'none';
-        LayoutRow(layout, ['Connected Site:', site])
+        LayoutRow(layout, ['Active Site:', site])
 
         let backupsites = document.createElement('i');
         backupsites.innerHTML = 'none';

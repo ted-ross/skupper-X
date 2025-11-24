@@ -304,7 +304,7 @@ const listAllVans = async function(res, bid) {
     try {
         const result = await client.query(
             "SELECT ApplicationNetworks.Id, Backbone, Backbones.Name as backbonename, Backbones.ManagementBackbone, ApplicationNetworks.Name, " +
-            "ApplicationNetworks.LifeCycle, ApplicationNetworks.Failure, StartTime, EndTime, DeleteDelay " +
+            "ApplicationNetworks.LifeCycle, ApplicationNetworks.Failure, StartTime, EndTime, DeleteDelay, Connected " +
             "FROM ApplicationNetworks " +
             "JOIN Backbones ON Backbones.Id = Backbone"
         );

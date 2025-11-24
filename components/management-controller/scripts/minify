@@ -1,0 +1,20 @@
+#!/bin/bash
+set +x
+rm -rf app
+mkdir app
+mkdir app/src
+mkdir app/src/common
+cp index.js app/index.js
+#uglifyjs index.js -c -m -o app/index.js
+for MODULE in api-admin api-user backbone-links certs claim-server compose config crd-templates db external-vans gotemplate ident mc-apiserver mc-main prune site-deployment-state site-templates sync-application sync-management
+do
+    cp src/$MODULE.js app/src/$MODULE.js
+#    uglifyjs src/$MODULE.js --toplevel -c -m -o app/src/$MODULE.js
+done
+for MODULE in amqp common kube log protocol router state-sync util
+do
+    cp ../common/$MODULE.js app/src/common/$MODULE.js
+#    uglifyjs ../common/$MODULE.js --toplevel -c -m -o app/src/common/$MODULE.js
+done
+mkdir app/src/compose-web-app
+cp -r ../compose-web-app/* app/src/compose-web-app

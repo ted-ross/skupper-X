@@ -287,5 +287,5 @@ exports.CompleteMember = async function(memberId) {
 
 exports.Start = async function() {
     Log('[Claim-Server module starting]');
-    await bbLinks.RegisterHandler(onLinkAdded, onLinkDeleted);
+    await bbLinks.RegisterHandler(onLinkAdded, onLinkDeleted, false, true);
 }

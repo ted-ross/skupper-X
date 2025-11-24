@@ -17,12 +17,15 @@
 ## under the License.
 ##
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+FROM registry.access.redhat.com/ubi10/ubi-minimal:latest
 RUN microdnf -y install nodejs shadow-utils
 WORKDIR /usr/src/app
 COPY package*.json ./
 RUN npm ci --omit=dev
-COPY app ./
+COPY app/index.js ./
+COPY app/src/*.js ./src/
+COPY app/src/common/*.js ./src/common/
+COPY app/src/compose-web-app ./compose-web-app
 RUN useradd --uid 10000 runner
 USER 10000
 EXPOSE 8085
