@@ -19,27 +19,26 @@
 
 "use strict";
 
-const express    = require('express');
-const morgan     = require('morgan');
-const session    = require('express-session');
-const kcConnect  = require('keycloak-connect');
-const cors       = require('cors');
-const formidable = require('formidable');
-const yaml       = require('js-yaml');
-const bodyParser = require('body-parser');
-const crypto     = require('crypto');
-const db         = require('./db.js');
-const siteTemplates = require('./site-templates.js');
-const crdTemplates  = require('./crd-templates.js');
-const kube       = require('./common/kube.js');
-const Log        = require('./common/log.js').Log;
-const sync       = require('./sync-management.js');
-const adminApi   = require('./api-admin.js');
-const userApi    = require('./api-user.js');
-const util       = require('./common/util.js');
-const common     = require('./common/common.js');
-const path       = require('path');
-const compose    = require('./compose.js');
+import express    from 'express';
+import morgan     from 'morgan';
+import session    from 'express-session';
+import kcConnect  from 'keycloak-connect';
+import cors       from 'cors';
+import formidable from 'formidable';
+import yaml       from 'js-yaml';
+import bodyParser from 'body-parser';
+import crypto     from 'crypto';
+import db         from './db.js';
+import siteTemplates from './site-templates.js';
+import crdTemplates  from './crd-templates.js';
+import kube       from './common/kube.js';
+import { Log }    from './common/log.js';
+import sync       from './sync-management.js';
+import adminApi   from './api-admin.js';
+import userApi    from './api-user.js';
+import util       from './common/util.js';
+import common     from './common/common.js';
+import compose    from './compose.js';
 
 const API_PREFIX = '/api/v1alpha1/';
 const API_PORT   = 8085;
@@ -366,7 +365,7 @@ const getVanConfigNonConnecting = async function(vid, res) {
     return returnStatus;
 }
 
-exports.AddHostToAccessPoint = async function(siteId, apid, hostname, port) {
+export async function AddHostToAccessPoint(siteId, apid, hostname, port) {
     let retval = 1;
     const client = await db.ClientFromPool();
     try {
@@ -419,7 +418,7 @@ const postBackboneIngress = async function (bsid, req, res) {
                 'port' : {type: 'number', optional: false},
             });
 
-            count += await exports.AddHostToAccessPoint(bsid, apid, norm.host, norm.port);
+            count += await AddHostToAccessPoint(bsid, apid, norm.host, norm.port);
         }
 
         if (count == 0) {
@@ -454,17 +453,13 @@ const getTargetPlatforms = async function (req, res) {
     return returnStatus;
 }
 
-exports.Start = async function() {
+export async function Start() {
     Log('[API Server module started]');
     app.use(cors());
     //app.set('trust proxy', true );
     //app.use(keycloak.middleware());
 
     //app.get('/', keycloak.protect('realm:van-owner'));
-
-    // Serve the frontend build from the './console' directory
-    const consoleBuildPath = path.join(__dirname, 'console');
-    app.use(express.static(consoleBuildPath));
 
     morgan.token('ts', (req, res) => {
         return new Date().toISOString();
