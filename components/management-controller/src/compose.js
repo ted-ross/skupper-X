@@ -102,9 +102,9 @@ class ProcessLog {
 }
 
 class BlockInterface {
-    constructor(ownerRef, ifaceSpec, blockType, buildLog) {
+    constructor(ownerRef, ifaceName, ifaceSpec, blockType, buildLog) {
         this.ownerRef      = ownerRef;
-        this.name          = ifaceSpec.name;
+        this.name          = ifaceName;
         this.role          = ifaceSpec.role;
         this.polarity      = ifaceSpec.polarity == 'north';
         this.blockType     = blockType;
@@ -180,8 +180,8 @@ class InstanceBlock {
     _buildInterfaces(buildLog) {
         const ilist = this.libraryBlock.interfaces();
         if (ilist) {
-            for (const iface of ilist) {
-                this.interfaces[iface.name] = new BlockInterface(this, iface, iface.blockType || this.libraryBlock.nameNoRev(), buildLog);
+            for (const [iname, iface] of Object.entries(ilist)) {
+                this.interfaces[iname] = new BlockInterface(this, iname, iface, iface.blockType || this.libraryBlock.nameNoRev(), buildLog);
             }
         }
     }
@@ -609,16 +609,16 @@ class Application {
             //
             // This is a composite block.  Begin by creating instances of all of the block's children.
             //
-            for (const child of body) {
-                if (!child.name || !child.block) {
-                    buildLog.error(`Invalid item in composite blocks for ${instanceName}`)
+            for (const [name, child] of Object.entries(body)) {
+                if (!child.block) {
+                    buildLog.error(`Invalid item ${name} in composite blocks for ${instanceName}`)
                 }
                 const libraryChild = this.libraryBlocks[child.block];
                 if (!libraryChild) {
                     buildLog.error(`Composite component ${instanceName} references a nonexistent library block ${child.block}`)
                 }
                 const subConfig = child.config || {};
-                const subPath = path + child.name;
+                const subPath = path + name;
                 let instanceBlock = new InstanceBlock(subConfig);
                 this.instanceBlocks[subPath] = instanceBlock;
                 instanceBlock.buildFromApi(libraryChild, subPath, buildLog);
@@ -637,10 +637,10 @@ class Application {
             //
             // Iterate again through the children and look for bindings.
             //
-            for (const child of body) {
+            for (const [name, child] of Object.entries(body)) {
                 if (child.bindings) {
-                    const childPath = path + child.name;
-                    for (const binding of child.bindings) {
+                    const childPath = path + name;
+                    for (const [iname, binding] of Object.entries(child.bindings)) {
                         if (binding.super) {
                             //
                             // This is a binding to the containing composite block.
@@ -652,7 +652,7 @@ class Application {
                             //
                             // This is a binding between child blocks within this composite.
                             //
-                            const childInterfaceName       = binding.interface;
+                            const childInterfaceName       = iname;
                             const remoteBlockPath          = path + binding.block;
                             const remoteBlockInterfaceName = binding.blockInterface;
 
@@ -683,8 +683,8 @@ class Application {
     findBaseInterface(instanceBlock, interfaceName, buildLog) {
         const spec = instanceBlock.object().spec;
         if (spec.interfaces) {
-            for (const specif of spec.interfaces) {
-                if (specif.name == interfaceName) {
+            for (const [sname, specif] of Object.entries(spec.interfaces)) {
+                if (sname == interfaceName) {
                     //
                     // We have verified that the instance has an interface with the desired name.
                     // If this is a monolithic block, return the interface instance for this interface, otherwise
@@ -695,12 +695,12 @@ class Application {
                         // The referenced block is a composite.  We must find a sub-block that binds to this interface.
                         // Note that the name of the sub-block interface may differ from the interface on this block.
                         //
-                        for (const cblock of spec.body) {
+                        for (const [cbname, cblock] of Object.entries(spec.body)) {
                             if (cblock.bindings) {
-                                for (const cbinding of cblock.bindings) {
+                                for (const [iname, cbinding] of Object.entries(cblock.bindings)) {
                                     if (cbinding.super == interfaceName) {
-                                        const recurseBlock         = this.instanceBlocks[instanceBlock.name + '/' + cblock.name];
-                                        const recurseInterfaceName = cbinding.interface;
+                                        const recurseBlock         = this.instanceBlocks[instanceBlock.name + '/' + cbname];
+                                        const recurseInterfaceName = iname;
                                         const result = this.findBaseInterface(recurseBlock, recurseInterfaceName, buildLog);
 
                                         //
@@ -889,7 +889,7 @@ const loadLibraryBlock = async function(client, library, blockName, buildLog) {
     //
     const body = yaml.load(revisionBlock.specbody);
     if (body && revisionBlock.bodystyle == BODY_STYLE_COMPOSITE) {
-        for (const subblock of body) {
+        for (const subblock of Object.values(body)) {
             await loadLibraryBlock(client, library, subblock.block, buildLog)
         }
     }
@@ -1551,7 +1551,7 @@ const buildApplication = async function(apid, req, res) {
             res.status(returnStatus).send("Build Failed - See build log for details");
         } else {
             returnStatus = 400;
-            res.status(returnStatus).send(error.message);
+            res.status(returnStatus).send(error.stack);
         }
     } finally {
         client.release();
