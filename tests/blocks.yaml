@@ -270,7 +270,8 @@ spec:
         volumeSize: 5Gi
   bodyStyle: simple
   body:
-  - template: |
+  - targetPlatforms: [sk2, kube]
+    template: |
       ---
       apiVersion: apps/v1
       kind: Deployment
@@ -330,6 +331,7 @@ spec:
   bodyStyle: simple
   body:
   - affinity: mountpoint
+    targetPlatforms: [sk2, kube]
     template: |
       ---
       apiVersion: v1
@@ -474,7 +476,8 @@ spec:
         port: 8000
   bodyStyle: simple
   body:
-  - template: |
+  - targetPlatforms: [sk2, kube]
+    template: |
       ---
       apiVersion: networking.k8s.io/v1
       kind: Ingress

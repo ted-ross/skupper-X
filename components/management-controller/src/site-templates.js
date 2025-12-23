@@ -217,7 +217,8 @@ exports.DeploymentYaml = function(bsid, backboneMode, target) {
         backboneMode       : backboneMode ? 'YES' : 'NO',
         siteId             : bsid,
         targetV2           : target == 'sk2',
-        targetKube         : target == 'kube',
+        targetKube         : target == 'kube' || target == 'm-server',
+        platform           : target,
     };
     const template =
 `---
@@ -322,6 +323,8 @@ spec:
           value: {{.siteId}}
         - name: SKX_BACKBONE
           value: "{{.backboneMode}}"
+        - name: SKX_PLATFORM
+          value: "{{.platform}}"
         - name: NODE_ENV
           value: production
         - name: SIDECAR_MODE

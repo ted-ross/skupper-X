@@ -1634,6 +1634,124 @@ const getApplicationBuildLog = async function(apid, req, res) {
     return returnStatus;
 }
 
+const getApplicationImage = async function(apid, req, res) {
+    var   returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try {
+        await client.query("BEGIN");
+        //
+        // Get the application and ensure that it is in build-complete state.
+        //
+        const appResult = await client.query(
+            "SELECT Lifecycle FROM Applications WHERE Id = $1", [apid]
+        );
+
+        if (appResult.rowCount == 0) {
+            throw new Error(`Application with id ${apid} not found`);
+        }
+
+        if (appResult.rows[0].lifecycle != 'build-complete') {
+            throw new Error(`Application lifecycle is ${appResult.rows[0].lifecycle}`);
+        }
+
+        //
+        // Fetch all of the instance blocks for this application
+        //
+        const instanceResult = await client.query(
+            "SELECT * FROM InstanceBlocks WHERE Application = $1", [apid]
+        );
+        const instances = instanceResult.rows;
+
+        //
+        // Collect the set of library blocks referenced by the instances
+        //
+        let libraryReferencers = {};
+        for (const instance of instances) {
+            if (!libraryReferencers[instance.libraryblock]) {
+                libraryReferencers[instance.libraryblock] = []
+            }
+            libraryReferencers[instance.libraryblock].push(instance.instancename);
+        }
+
+        //
+        // Fetch the library blocks in the set
+        //
+        let libraryBlocks = {};
+        for (const lbid of Object.keys(libraryReferencers)) {
+            const lbResult = await client.query(
+                "SELECT * FROM LibraryBlocks WHERE Id = $1", [lbid]
+            );
+            if (lbResult.rowCount == 0) {
+                throw new Error(`Nonexistent library block (${lbid}) referenced by ${libraryReferencers[lbid]}`);
+            }
+            libraryBlocks[lbid] = lbResult.rows[0];
+        }
+
+        //
+        // Fetch the interface bindings in the application
+        //
+        let interfaceBindings = [];
+        const ibResult = await client.query(
+            "SELECT * FROM Bindings WHERE Application = $1", [apid]
+        );
+        for (const row of ibResult.rows) {
+            interfaceBindings.push(row);
+        }
+
+        //
+        // Generate an image file with the libaray blocks, configured intance blocks, and interface bindings
+        //
+        let imageDocument = {
+            libraries : {},
+            instances : {},
+            bindings  : [],
+        };
+
+        for (const lblock of Object.values(libraryBlocks)) {
+            if (lblock.bodystyle == 'simple') {
+                imageDocument.libraries[`${lblock.name};${lblock.revision}`] = {
+                    config     : yaml.load(lblock.config),
+                    interfaces : yaml.load(lblock.interfaces),
+                    specbody   : yaml.load(lblock.specbody),
+                };
+            }
+        }
+
+        for (const instance of instances) {
+            const lb = libraryBlocks[instance.libraryblock];
+            if (lb.bodystyle == 'simple') {
+                imageDocument.instances[instance.instancename] = {
+                    libraryblock : `${lb.name};${lb.revision}`,
+                    config       : JSON.parse(instance.config),
+                    metadata     : JSON.parse(instance.metadata),
+                    derivative   : JSON.parse(instance.derivative),
+                };
+            }
+        }
+
+        for (const binding of interfaceBindings) {
+            imageDocument.bindings.push({
+                northblock : binding.northblock,
+                northinterface : binding.northinterface,
+                southblock     : binding.southblock,
+                southinterface : binding.southinterface,
+            });
+        }
+
+        const yamlDocument = yaml.dump(imageDocument);
+        res.status(returnStatus).send(yamlDocument);
+        await client.query("COMMIT");
+    } catch (error) {
+        Log(`Exception in getApplicationImage: ${error.message}`);
+        await client.query("ROLLBACK");
+        returnStatus = 400;
+        res.status(returnStatus).send(error.message);
+    } finally {
+        client.release();
+    }
+    return returnStatus;
+}
+
 const deleteApplication = async function(apid, req, res) {
     var   returnStatus = 200;
     const client = await db.ClientFromPool();
@@ -2027,6 +2145,10 @@ exports.ApiInit = function(app) {
 
     app.get(COMPOSE_PREFIX + 'applications/:apid/log', async (req, res) => {
         await getApplicationBuildLog(req.params.apid, req, res);
+    });
+
+    app.get(COMPOSE_PREFIX + 'applications/:apid/image', async (req, res) => {
+        await getApplicationImage(req.params.apid, req, res);
     });
 
     app.delete(COMPOSE_PREFIX + 'applications/:apid', async (req, res) => {

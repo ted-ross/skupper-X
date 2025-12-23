@@ -140,7 +140,7 @@ const fetchInvitationKube = async function (iid, res) {
     return returnStatus;
 }
 
-const fetchBackboneSiteKube = async function (siteId, res) {
+const fetchBackboneSiteKube = async function (siteId, platform, res) {
     var returnStatus = 200;
     const client = await db.ClientFromPool();
     try {
@@ -161,7 +161,7 @@ const fetchBackboneSiteKube = async function (siteId, res) {
             text += siteTemplates.BackboneRoleYaml();
             text += siteTemplates.RoleBindingYaml();
             text += siteTemplates.ConfigMapYaml('interior', result.rows[0].sitename, null, 'mbone');
-            text += siteTemplates.DeploymentYaml(siteId, true, 'kube');
+            text += siteTemplates.DeploymentYaml(siteId, true, platform);
             text += siteTemplates.SecretYaml(secret, `skx-site-${siteId}`, common.INJECT_TYPE_SITE, `tls-site-${siteId}`);
 
             const links = await sync.GetBackboneLinks_TX(client, siteId);
@@ -405,7 +405,7 @@ export async function AddHostToAccessPoint(siteId, apid, hostname, port) {
 
 const postBackboneIngress = async function (bsid, req, res) {
     var returnStatus = 201;
-    const form = new formidable.IncomingForm();
+    const form = formidable();
     try {
         let count = 0;
         const [fields, files] = await form.parse(req);
@@ -475,7 +475,7 @@ export async function Start() {
         switch (req.params.target) {
             case 'sk2'  : await fetchBackboneSiteSkupper2(req.params.bsid, res);   break;
             case 'm-server':
-            case 'kube' : await fetchBackboneSiteKube(req.params.bsid, res);  break;
+            case 'kube' : await fetchBackboneSiteKube(req.params.bsid, req.params.target, res);  break;
             default:
                 res.status(400).send(`Unsupported target: ${req.params.target}`);
         }
@@ -485,6 +485,7 @@ export async function Start() {
         switch (req.params.target) {
             case 'sk2'  :
             case 'kube' :
+            case 'm-server' :
                 await fetchBackboneAccessPointsKube(req.params.bsid, res);
                 break;
             default:

@@ -92,7 +92,7 @@ rules:
 exports.NetworkCRYaml = function(networkId) {
     return `---
 apiVersion: skupper.io/v2alpha1
-kind: ManagedSite
+kind: Network
 metadata:
   name: network
 spec:
@@ -103,7 +103,7 @@ spec:
 exports.NetworkLinkCRYaml = function(host, port, secret) {
     return `---
 apiVersion: skupper.io/v2alpha1
-kind: ManagementLink
+kind: NetworkLink
 metadata:
   name: management-link
 spec:

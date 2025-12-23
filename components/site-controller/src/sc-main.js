@@ -80,7 +80,7 @@ exports.Main = async function() {
             if (PLATFORM == 'sk2') {
                 await ingress_v2.Start(site_id);
             } else {
-                await ingress_v1.Start(site_id);
+                await ingress_v1.Start(site_id, PLATFORM);
             }
         }
         await syncKube.Start(site_id, conn, BACKBONE_MODE);

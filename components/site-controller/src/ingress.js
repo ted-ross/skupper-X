@@ -49,10 +49,13 @@ const router_port = require('./router-port.js');
 const crypto      = require('crypto');
 const { setTimeout } = require('timers/promises');
 
+const colo_namespace = 'skupperx-colo';
+
 var reconcile_config_map_scheduled = false;
 var reconcile_routes_scheduled     = false;
 var reconcile_service_scheduled    = false;
 var accessPoints = {}; // APID => {kind, routerPort, syncHash, syncData, toDelete}
+var localOnly    = false;
 
 exports.GetTargetPort = function(apid) {
     const ap = accessPoints[apid];
@@ -62,7 +65,7 @@ exports.GetTargetPort = function(apid) {
     return undefined;
 }
 
-const new_access_point = function(apid, kind) {
+const new_access_point = async function(apid, kind) {
     const port = router_port.AllocatePort();
     let value = {
         kind       : kind,
@@ -71,6 +74,15 @@ const new_access_point = function(apid, kind) {
         syncData   : {},
         toDelete   : false,
     };
+
+    if (localOnly) {
+        value.syncData = {
+            host : `${common.ROUTER_SERVICE_NAME}.${colo_namespace}.svc.cluster.local`,
+            port : port,
+        };
+        value.syncHash = ingressHash(value.syncData);
+        await sync.UpdateLocalState(`accessstatus-${apid}`, value.syncHash, value.syncData);
+    }
 
     if (accessPoints[apid]) {
         throw Error(`accessPoint already exists for ${apid}`);
@@ -199,6 +211,7 @@ const do_reconcile_routes = async function() {
     try {
         all_routes = await kube.GetRoutes();
     } catch(e) {
+        return;  // Routes are not supported on this cluster
     }
 
     let routes = {};
@@ -242,7 +255,7 @@ const do_reconcile_routes = async function() {
 }
 
 const reconcile_routes = async function() {
-    if (!reconcile_routes_scheduled) {
+    if (!reconcile_routes_scheduled && !localOnly) {
         reconcile_routes_scheduled = true;
         await setTimeout(200);
         await do_reconcile_routes();
@@ -260,7 +273,6 @@ const ingressHash = function(data) {
 
 exports.GetIngressBundle = function() {
     let bundle = {};
-
     for (const [apid, ap] of Object.entries(accessPoints)) {
         if (ap.syncHash) {
             bundle[apid] = {
@@ -275,7 +287,9 @@ exports.GetIngressBundle = function() {
 
 exports.GetInitialState = async function() {
     await do_reconcile_config_maps();
-    await do_reconcile_routes();
+    if (!localOnly) {
+        await do_reconcile_routes();
+    }
     return exports.GetIngressBundle();
 }
 
@@ -312,7 +326,7 @@ const do_reconcile_config_maps = async function() {
             accessPoints[apid].toDelete = false;
         } else {
             const kind = cm.data.kind;
-            new_access_point(apid, kind);
+            await new_access_point(apid, kind);
             need_service_sync = true;
         }
     }
@@ -387,6 +401,15 @@ const preloadAccessPoints = async function() {
                     syncData   : {},
                     toDelete   : false,
                 };
+
+                if (localOnly) {
+                    accessPoints[apid].syncData = {
+                        host : `${common.ROUTER_SERVICE_NAME}.${colo_namespace}.svc.cluster.local`,
+                        port : servicePort.port
+                    };
+                    accessPoints[apid].syncHash = ingressHash(accessPoints[apid].syncData);
+                }
+
                 router_port.TakePort(servicePort.port);
             }
         }
@@ -394,12 +417,15 @@ const preloadAccessPoints = async function() {
     }
 }
 
-exports.Start = async function(siteId) {
-    Log('[Ingress module started]');
+exports.Start = async function(siteId, platform) {
+    localOnly = platform == 'm-server';
+    Log(`[Ingress module started - localOnly: ${localOnly}]`);
     await preloadAccessPoints();
     await do_reconcile_config_maps();
-    await do_reconcile_routes();
+    if (!localOnly) {
+        await do_reconcile_routes();
+        kube.WatchRoutes(onRouteWatch);
+    }
     kube.WatchConfigMaps(onConfigMapWatch);
-    kube.WatchRoutes(onRouteWatch);
     kube.WatchServices(onServiceWatch);
 }
