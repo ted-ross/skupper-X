@@ -90,11 +90,12 @@ const new_access_point = async function(apid, kind) {
     accessPoints[apid] = value;
 }
 
-const free_access_point = function(apid) {
+const free_access_point = async function(apid) {
     const ap = accessPoints[apid];
     if (ap) {
         router_port.FreePort(ap.routerPort);
         delete accessPoints[apid];
+        await sync.UpdateLocalState(`accessstatus-${apid}`, null, {});
     }
 }
 
@@ -408,6 +409,11 @@ const preloadAccessPoints = async function() {
                         port : servicePort.port
                     };
                     accessPoints[apid].syncHash = ingressHash(accessPoints[apid].syncData);
+                    await sync.UpdateLocalState(
+                        `accessstatus-${apid}`,
+                        accessPoints[apid].syncHash,
+                        accessPoints[apid].syncData
+                    );
                 }
 
                 router_port.TakePort(servicePort.port);

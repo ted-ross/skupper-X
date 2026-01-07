@@ -187,6 +187,13 @@ const onStateChangeBackbone = async function(peerId, stateKey, hash, data) {
     //     Update => delete TLS certificate, update host/port, lifecycle := new
     //
     if (stateKey.substring(0, 13) == 'accessstatus-') {
+        if (!hash) {
+            //
+            // No action needed on the deletion of host/port data which resulted from the deletion of the access point
+            //
+            return;
+        }
+
         const accessId = stateKey.substring(13);
         const client = await db.ClientFromPool();
         try {
