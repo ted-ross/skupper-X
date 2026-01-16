@@ -429,6 +429,7 @@ const secretAdded = async function(dblink, secret) {
         const result = await client.query("SELECT * FROM CertificateRequests WHERE Id = $1", [dblink]);
         var ref_table;
         var ref_id;
+        var ref_label;
         var is_ca = false;
         var alertSiteCertChanged   = false;
         var alertAccessCertChanged = false;
@@ -440,32 +441,40 @@ const secretAdded = async function(dblink, secret) {
             if (cert_request.managementcontroller) {
                 ref_table  = 'ManagementControllers';
                 ref_id     = cert_request.managementcontroller;
+                ref_label  = 'Management Controller';
             } else if (cert_request.backbone) {
                 ref_table  = 'Backbones';
                 ref_id     = cert_request.backbone;
                 is_ca      = true;
+                ref_label  = 'Backbone';
             } else if (cert_request.interiorsite) {
                 ref_table  = 'InteriorSites';
                 ref_id     = cert_request.interiorsite;
+                ref_label  = 'Backbone Site';
                 alertSiteCertChanged = true;
             } else if (cert_request.accesspoint) {
                 ref_table  = 'BackboneAccessPoints';
                 ref_id     = cert_request.accesspoint;
+                ref_label  = 'Access Point';
                 alertAccessCertChanged = true;
             } else if (cert_request.applicationnetwork) {
                 ref_table  = 'ApplicationNetworks';
                 ref_id     = cert_request.applicationnetwork;
                 is_ca      = true;
+                ref_label  = 'VAN';
             } else if (cert_request.networkcredential) {
                 ref_table  = 'NetworkCredentials';
                 ref_id     = cert_request.networkcredential;
                 is_ca      = false;
+                ref_label  = 'VAN Attach';
             } else if (cert_request.invitation) {
                 ref_table  = 'MemberInvitations';
                 ref_id     = cert_request.invitation;
+                ref_label  = 'Member Invitation';
             } else if (cert_request.site) {
                 ref_table  = 'MemberSites';
                 ref_id     = cert_request.site;
+                ref_label  = 'Member Site';
                 alertMemberCompletion = true;
             } else {
                 throw new Error('Unknown Target');
@@ -474,15 +483,20 @@ const secretAdded = async function(dblink, secret) {
             const expiration  = cert_object.status.notAfter    ? new Date(cert_object.status.notAfter) : undefined;
             const renewal     = cert_object.status.renewalTime ? new Date(cert_object.status.renewalTime) : undefined;
             const signed_by   = secret.metadata.annotations['skupper.io/skx-issuerlink'];
+            const get_name    = await client.query(
+                `SELECT name FROM ${ref_table} WHERE Id = $1`,
+                [ref_id]
+            );
+            const label = `${ref_label}: ${get_name.rows[0].name}`;
             if (signed_by == 'root') {
                 await client.query(
-                    "INSERT INTO TlsCertificates (Id, IsCA, ObjectName, Expiration, RenewalTime) VALUES ($1, $2, $3, $4, $5)",
-                    [dblink, is_ca, secret.metadata.name, expiration, renewal]
+                    "INSERT INTO TlsCertificates (Id, IsCA, ObjectName, Expiration, RenewalTime, Label) VALUES ($1, $2, $3, $4, $5, $6)",
+                    [dblink, is_ca, secret.metadata.name, expiration, renewal, label]
                 );
             } else {
                 await client.query(
-                    "INSERT INTO TlsCertificates (Id, IsCA, ObjectName, Expiration, RenewalTime, SignedBy) VALUES ($1, $2, $3, $4, $5, $6)",
-                    [dblink, is_ca, secret.metadata.name, expiration, renewal, signed_by]
+                    "INSERT INTO TlsCertificates (Id, IsCA, ObjectName, Expiration, RenewalTime, Label, SignedBy) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                    [dblink, is_ca, secret.metadata.name, expiration, renewal, label, signed_by]
                 );
             }
             await client.query(`UPDATE ${ref_table} SET Certificate = $1, Lifecycle = 'ready' WHERE Id = $2`, [dblink, ref_id]);

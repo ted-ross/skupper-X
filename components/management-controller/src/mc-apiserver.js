@@ -27,7 +27,7 @@ import cors       from 'cors';
 import formidable from 'formidable';
 import yaml       from 'js-yaml';
 import bodyParser from 'body-parser';
-import crypto     from 'crypto';
+import { X509Certificate } from 'crypto';
 import db         from './db.js';
 import siteTemplates from './site-templates.js';
 import crdTemplates  from './crd-templates.js';
@@ -365,6 +365,85 @@ const getVanConfigNonConnecting = async function(vid, res) {
     return returnStatus;
 }
 
+const getCertsSignedBy = async function(req, res) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try{
+        await client.query("BEGIN");
+        const ca = req.query.signedby;
+        if (ca && !util.IsValidUuid(ca)) {
+            throw new Error(`Malformed signedby reference: ${ca}`);
+        }
+        if (ca) {
+            const ca_result = await client.query("SELECT isca FROM tlsCertificates WHERE id = $1", [ca]);
+            if (ca_result.rowCount == 0 || !ca_result.rows[0].isca) {
+                throw new Error(`signedby certificate is not an issuer`);
+            }
+        }
+        var result;
+        if (ca) {
+            result = await client.query(
+                "SELECT * FROM tlsCertificates WHERE signedBy = $1",
+                [ca]
+            );
+        } else {
+            result = await client.query(
+                "SELECT * FROM tlsCertificates WHERE signedBy IS NULL"
+            );
+        }
+        res.status(returnStatus).json(result.rows);
+        await client.query("COMMIT");
+    } catch (err) {
+        await client.query("ROLLBACK");
+        returnStatus = 400;
+        res.status(returnStatus).send(err.message);
+    } finally {
+        client.release();
+    }
+}
+
+const getCertDetail = async function(cid, res) {
+    var returnStatus = 200;
+    const client = await db.ClientFromPool();
+    try{
+        await client.query("BEGIN");
+        if (!util.IsValidUuid(cid)) {
+            throw new Error(`Malformed certificate ID: ${cid}`);
+        }
+        const result = await client.query(
+            "SELECT objectname, label, isca FROM tlsCertificates WHERE id = $1",
+            [cid]
+        );
+        if (result.rowCount == 0) {
+            throw new Error('Not Found');
+        }
+        const cert   = result.rows[0];
+        const secret = await kube.LoadSecret(cert.objectname);
+        const buffer = Buffer.from(secret.data['tls.crt'], 'base64');
+        const x509   = new X509Certificate(buffer.toString('utf-8'));
+        const data   = {
+            label : cert.label,
+            isca  : cert.isca,
+            x509  : {
+                subject      : x509.subject,
+                issuer       : x509.issuer,
+                validFrom    : x509.validFrom,
+                validTo      : x509.validTo,
+                serialNumber : x509.serialNumber,
+                fingerprint  : x509.fingerprint,
+        },
+        }
+        res.status(returnStatus).json(data);
+        await client.query("COMMIT");
+    } catch (err) {
+        await client.query("ROLLBACK");
+        returnStatus = 400;
+        res.status(returnStatus).send(err.message);
+    } finally {
+        client.release();
+    }
+}
+
 export async function AddHostToAccessPoint(siteId, apid, hostname, port) {
     let retval = 1;
     const client = await db.ClientFromPool();
@@ -511,6 +590,14 @@ export async function Start() {
 
     app.get(API_PREFIX + 'vans/:vid/config/nonconnecting', async (req, res) => {
         await getVanConfigNonConnecting(req.params.vid, res);
+    });
+
+    app.get(API_PREFIX + 'certs', async (req, res) => {
+        await getCertsSignedBy(req, res);
+    });
+
+    app.get(API_PREFIX + 'certs/:cid', async (req, res) => {
+        await getCertDetail(req.params.cid, res);
     });
 
     app.use(bodyParser.text({ type: ['application/yaml'] }));

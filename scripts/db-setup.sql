@@ -107,7 +107,8 @@ CREATE TABLE TlsCertificates (
     SignedBy UUID REFERENCES TlsCertificates,  -- NULL => signed by the Root Issuer
     Expiration timestamptz,
     RenewalTime timestamptz,
-    Generation integer DEFAULT 0
+    Generation integer DEFAULT 0,
+    Label text
 );
 
 --
