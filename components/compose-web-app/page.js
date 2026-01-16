@@ -19,6 +19,7 @@
 
 import { BuildApplicationTable } from "./modules/app_old.js";
 import { BuildBackboneTable } from "./modules/backbone.js";
+import { BuildCertTable } from "./modules/certificates.js";
 import { BuildDeploymentTable } from "./modules/deploy.js";
 import { BuildLibraryTable } from "./modules/library.js";
 import { BuildVanTable } from "./modules/van.js";
@@ -38,6 +39,7 @@ function unboldTabs() {
     document.getElementById("tab-home").style.fontWeight = 'normal';
     document.getElementById("tab-bone").style.fontWeight = 'normal';
     document.getElementById("tab-van").style.fontWeight  = 'normal';
+    document.getElementById("tab-cert").style.fontWeight  = 'normal';
     document.getElementById("tab-lib").style.fontWeight  = 'normal';
     document.getElementById("tab-app").style.fontWeight  = 'normal';
     document.getElementById("tab-dep").style.fontWeight  = 'normal';
@@ -55,6 +57,13 @@ export async function toVanTab() {
     document.getElementById("tab-van").style.fontWeight  = 'bold';
     document.getElementById("sectiondiv").innerHTML = '';
     await BuildVanTable();
+}
+
+export async function toCertTab() {
+    unboldTabs();
+    document.getElementById("tab-cert").style.fontWeight  = 'bold';
+    document.getElementById("sectiondiv").innerHTML = '';
+    await BuildCertTable();
 }
 
 export async function toLibraryTab() {

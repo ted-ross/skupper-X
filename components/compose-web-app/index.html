@@ -7,11 +7,12 @@
     <link rel="stylesheet" href="css/page.css">
     <link rel="stylesheet" href="css/editor.css">
     <script type="module">
-        import { Start, SetHeight, toBackboneTab, toVanTab, toLibraryTab, toApplicationTab, toDeploymentTab } from "./page.js";
+        import { Start, SetHeight, toBackboneTab, toVanTab, toCertTab, toLibraryTab, toApplicationTab, toDeploymentTab } from "./page.js";
         globalThis.Start            = Start;
         globalThis.SetHeight        = SetHeight;
         globalThis.toBackboneTab    = toBackboneTab;
         globalThis.toVanTab         = toVanTab;
+        globalThis.toCertTab        = toCertTab;
         globalThis.toLibraryTab     = toLibraryTab;
         globalThis.toApplicationTab = toApplicationTab;
         globalThis.toDeploymentTab  = toDeploymentTab;
@@ -31,6 +32,7 @@
                         <ul>
                             <li><a id="tab-bone" href="#" onclick="toBackboneTab()">Backbones</a></li>
                             <li><a id="tab-van"  href="#" onclick="toVanTab()">VANs</a></li>
+                            <li><a id="tab-cert"  href="#" onclick="toCertTab()">TLS Certificates</a></li>
                         </ul>
                     </li>
                     <li>Compose:</li>
