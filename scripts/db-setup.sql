@@ -74,7 +74,8 @@ CREATE TABLE Configuration (
     DefaultCaExpiration interval,
     DefaultCertExpiration interval,
     SiteDataplaneImage text,
-    SiteControllerImage text
+    SiteControllerImage text,
+    CertOrganization text
 );
 
 --
@@ -441,8 +442,8 @@ CREATE TABLE SiteData (
 --
 -- Pre-populate the database with some test data.
 --
-INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpiration, BackboneCaExpiration, SiteDataplaneImage, SiteControllerImage)
-    VALUES (0, 'skupperx-root', '30 days', '1 week', '1 year', 'quay.io/tedlross/skupper-router:multi-van', 'quay.io/tedlross/skupperx-site-controller:skx-0.1.3');
+INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpiration, BackboneCaExpiration, SiteDataplaneImage, SiteControllerImage, CertOrganization)
+    VALUES (0, 'skupperx-root', '30 days', '1 week', '1 year', 'quay.io/tedlross/skupper-router:multi-van', 'quay.io/tedlross/skupperx-site-controller:skx-0.1.3', 'enterprise.com');
 INSERT INTO Users (Id, DisplayName, Email, PasswordHash) VALUES (1, 'Ted Ross', 'tross@redhat.com', '18f4e1168a37a7a2d5ac2bff043c12c862d515a2cbb9ab5fe207ab4ef235e129c1a475ffca25c4cb3831886158c3836664d489c98f68c0ac7af5a8f6d35e04fa');
 INSERT INTO WebSessions (Id, UserId) VALUES (gen_random_uuid(), 1);
 

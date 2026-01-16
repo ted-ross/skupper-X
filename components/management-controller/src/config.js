@@ -28,6 +28,7 @@ var changeListeners = [];
 exports.RootIssuer              = () => config.rootissuer;
 exports.DefaultCaExpiration     = () => config.defaultcaexpiration;
 exports.DefaultCertExpiration   = () => config.defaultcertexpiration;
+exports.CertOrganization        = () => config.certorganization;
 exports.BackboneExpiration      = () => config.backbonecaexpiration;
 exports.SiteDataplaneImage      = () => config.sitedataplaneimage;
 exports.SiteControllerImage     = () => config.sitecontrollerimage;
