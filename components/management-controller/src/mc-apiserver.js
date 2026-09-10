@@ -43,6 +43,8 @@ import { StartWatchServer } from "./watch-server.js";
 import ViteExpress from "vite-express";
 import { createManagementOidcAuth } from "./auth/management-oidc.js";
 import { NotifyTransaction, RegisterNotification } from "./notify.js";
+import { RotateCertificate } from "./certs.js";
+import { getTlsRotationMeta, overlayDualTrustCa } from "./tls-rotation.js";
 
 const __dirname = import.meta.dirname;
 /** Deployed image: sources live in `/app/src`, console bundle in `/app/console/dist`. Monorepo dev: `components/console` (two levels up from `components/management-controller/src`). */
@@ -70,6 +72,12 @@ const sessionParser = session({
 const vanProxy = {}; // { Id: { vanId, backboneName } }
 
 app.use(sessionParser);
+
+async function secretResourceForSync(client, certId, secret, profileName, inject, stateKey) {
+    const data = await overlayDualTrustCa(client, certId, secret.data);
+    const tlsMeta = await getTlsRotationMeta(client, certId);
+    return resourceTemplates.Secret({ ...secret, data }, profileName, inject, stateKey, tlsMeta);
+}
 
 const link_config_map_yaml = function (name, data) {
     const configMap = {
@@ -151,7 +159,9 @@ const fetchBackboneSiteSkupper2 = async function (req, res) {
             output.push(resourceTemplates.RoleBinding());
             output.push(resourceTemplates.Deployment(siteId, true, "sk2"));
             output.push(
-                resourceTemplates.Secret(
+                await secretResourceForSync(
+                    client,
+                    site.certificate,
                     secret,
                     `vms-site-${siteId}`,
                     common.INJECT_TYPE_SITE,
@@ -211,7 +221,7 @@ const fetchBackboneAccessPointsKube = async function (req, res) {
 
             const output = [];
             const ap_result = await client.query(
-                "SELECT TlsCertificates.ObjectName, BackboneAccessPoints.Id as apid, Lifecycle, Kind FROM BackboneAccessPoints " +
+                "SELECT TlsCertificates.Id as certid, TlsCertificates.ObjectName, BackboneAccessPoints.Id as apid, Lifecycle, Kind FROM BackboneAccessPoints " +
                     "JOIN TlsCertificates ON TlsCertificates.Id = Certificate " +
                     "WHERE BackboneAccessPoints.InteriorSite = $1",
                 [bsid]
@@ -224,7 +234,9 @@ const fetchBackboneAccessPointsKube = async function (req, res) {
                 }
                 const secret = await LoadSecret(ap.objectname);
                 output.push(
-                    resourceTemplates.Secret(
+                    await secretResourceForSync(
+                        client,
+                        ap.certid,
                         secret,
                         `vms-access-${ap.apid}`,
                         common.INJECT_TYPE_ACCESS_POINT,
@@ -274,7 +286,7 @@ const getVanConfigConnecting = async function (req, res) {
     try {
         const { result, apResult } = await queryWithContext(req, client, async (client) => {
             const result = await client.query(
-                "SELECT VanId, ObjectName FROM ApplicationNetworks " +
+                "SELECT VanId, ObjectName, TlsCertificates.Id AS certificate FROM ApplicationNetworks " +
                     "JOIN NetworkCredentials ON NetworkCredentials.MemberOf = ApplicationNetworks.Id " +
                     "JOIN TlsCertificates ON TlsCertificates.Id = NetworkCredentials.Certificate " +
                     "WHERE ApplicationNetworks.Id = $1",
@@ -293,10 +305,18 @@ const getVanConfigConnecting = async function (req, res) {
             const van = result.rows[0];
             const ap = apResult.rows[0];
             const secret = await LoadSecret(van.objectname);
+            const data = await overlayDualTrustCa(client, van.certificate, secret.data);
+            const tlsMeta = await getTlsRotationMeta(client, van.certificate);
             const output = [
                 resourceTemplates.NetworkCR(van.vanid),
                 resourceTemplates.NetworkLinkCR(ap.hostname, ap.port, van.objectname),
-                resourceTemplates.Secret(secret, van.objectname),
+                resourceTemplates.Secret(
+                    { ...secret, data },
+                    van.objectname,
+                    undefined,
+                    undefined,
+                    tlsMeta
+                ),
             ];
             if (exposeNetworkObserverConsole) {
                 const routingKey = `skupper-console-${van.vanid}`;
@@ -373,12 +393,18 @@ const getCertsSignedBy = async function (req, res) {
                 if (ca_result.rowCount == 0 || !ca_result.rows[0].isca) {
                     throw new Error(`signedby certificate is not an issuer`);
                 }
-                return await client.query("SELECT * FROM tlsCertificates WHERE signedBy = $1", [
-                    ca,
-                ]);
+                return await client.query(
+                    "SELECT t.*, EXISTS(SELECT 1 FROM TlsCertificates s WHERE s.Supercedes = t.Id) AS superseded " +
+                        "FROM tlsCertificates t WHERE signedBy = $1",
+                    [ca]
+                );
             }
-            return await client.query("SELECT * FROM tlsCertificates WHERE signedBy IS NULL");
+            return await client.query(
+                "SELECT t.*, EXISTS(SELECT 1 FROM TlsCertificates s WHERE s.Supercedes = t.Id) AS superseded " +
+                    "FROM tlsCertificates t WHERE signedBy IS NULL"
+            );
         });
+        res._watch = [{ table: "TlsCertificates" }];
         res.status(returnStatus).json(result.rows);
     } catch (err) {
         returnStatus = 400;
@@ -429,6 +455,21 @@ const getCertDetail = async function (req, res) {
         res.status(returnStatus).send(err.message);
     } finally {
         client.release();
+    }
+};
+
+const rotateCert = async function (req, res) {
+    try {
+        if (!util.IsValidUuid(req.params.cid)) {
+            throw Object.assign(new Error(`Malformed certificate ID: ${req.params.cid}`), {
+                statusCode: 400,
+            });
+        }
+        const cert = await RotateCertificate(req.params.cid);
+        res.status(202).json(cert);
+    } catch (err) {
+        const returnStatus = err.statusCode || 400;
+        res.status(returnStatus).send(err.message);
     }
 };
 
@@ -646,6 +687,14 @@ export async function Initialize(router, auth) {
         auth.protect("realm:certificate-manager"),
         async (req, res) => {
             await getCertDetail(req, res);
+        }
+    );
+
+    router.post(
+        API_PREFIX + "certs/:cid/rotate",
+        auth.protect("realm:certificate-manager"),
+        async (req, res) => {
+            await rotateCert(req, res);
         }
     );
 

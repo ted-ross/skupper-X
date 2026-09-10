@@ -41,9 +41,10 @@ import {
     DeletePeer,
 } from "@vms/modules/state-sync";
 import { RegisterHandler } from "./backbone-links.js";
-import { HashOfSecret, HashOfData } from "./resource-templates.js";
+import { HashOfData, HashOfTlsPayload, tlsSyncData } from "./resource-templates.js";
 import { SiteLifecycleChanged_TX } from "./site-deployment-state.js";
 import { NotifyTransaction, RegisterNotification } from "./notify.js";
+import { getTlsRotationMeta, overlayDualTrustCa } from "./tls-rotation.js";
 
 const peers = {}; // {peerId: {pClass: <>, stuff}}
 
@@ -90,6 +91,12 @@ export async function GetBackboneAccessPoints_TX(client, siteId, initialOnly = f
     return data;
 }
 
+async function hashedTlsState(client, certId, secret) {
+    const data = await overlayDualTrustCa(client, certId, secret.data);
+    const tlsMeta = await getTlsRotationMeta(client, certId);
+    return [HashOfTlsPayload(data, tlsMeta), tlsSyncData(data, tlsMeta)];
+}
+
 //=========================================================================================================================
 // Backbone Site Handlers
 //=========================================================================================================================
@@ -132,7 +139,8 @@ async function onNewBackboneSite(peerId) {
         if (!site.colocated) {
             // Don't sync the site secret to colocated sites.
             const secret = await LoadSecret(site.objectname);
-            localState[`tls-site-${peerId}`] = HashOfSecret(secret);
+            const [siteHash] = await hashedTlsState(client, site.certificate, secret);
+            localState[`tls-site-${peerId}`] = siteHash;
         } else {
             // Do sync the list of managed VANs on the site's backbone
             const vanResult = await client.query(
@@ -170,7 +178,7 @@ async function onNewBackboneSite(peerId) {
             }
             if (accessPoint.lifecycle == "ready") {
                 const tlsResult = await client.query(
-                    "SELECT ObjectName FROM TlsCertificates WHERE Id = $1",
+                    "SELECT Id, ObjectName FROM TlsCertificates WHERE Id = $1",
                     [accessPoint.certificate]
                 );
                 if (tlsResult.rowCount != 1) {
@@ -179,7 +187,8 @@ async function onNewBackboneSite(peerId) {
                     );
                 }
                 const secret = await LoadSecret(tlsResult.rows[0].objectname);
-                localState[`tls-server-${accessPoint.id}`] = HashOfSecret(secret);
+                const [apHash] = await hashedTlsState(client, tlsResult.rows[0].id, secret);
+                localState[`tls-server-${accessPoint.id}`] = apHash;
                 remoteState[`accessstatus-${accessPoint.id}`] = HashOfData({
                     host: accessPoint.hostname,
                     port: accessPoint.port,
@@ -287,15 +296,14 @@ async function getStateTlsBackboneSite(siteId) {
     try {
         await client.query("BEGIN");
         const result = await client.query(
-            "SELECT TlsCertificates.ObjectName FROM InteriorSites " +
+            "SELECT TlsCertificates.Id, TlsCertificates.ObjectName FROM InteriorSites " +
                 "JOIN TlsCertificates ON TlsCertificates.Id = Certificate " +
                 "WHERE InteriorSites.Id = $1",
             [siteId]
         );
         if (result.rowCount == 1) {
             const secret = await LoadSecret(result.rows[0].objectname);
-            hash = HashOfSecret(secret);
-            data = secret.data;
+            [hash, data] = await hashedTlsState(client, result.rows[0].id, secret);
         }
         await client.query("COMMIT");
     } catch (error) {
@@ -315,15 +323,14 @@ async function getStateTlsMemberSite(siteId) {
     try {
         await client.query("BEGIN");
         const result = await client.query(
-            "SELECT TlsCertificates.ObjectName FROM MemberSites " +
+            "SELECT TlsCertificates.Id, TlsCertificates.ObjectName FROM MemberSites " +
                 "JOIN TlsCertificates ON TlsCertificates.Id = Certificate " +
                 "WHERE MemberSites.Id = $1",
             [siteId]
         );
         if (result.rowCount == 1) {
             const secret = await LoadSecret(result.rows[0].objectname);
-            hash = HashOfSecret(secret);
-            data = secret.data;
+            [hash, data] = await hashedTlsState(client, result.rows[0].id, secret);
         }
         await client.query("COMMIT");
     } catch (error) {
@@ -343,15 +350,14 @@ async function getStateTlsServer(apid) {
     try {
         await client.query("BEGIN");
         const result = await client.query(
-            "SELECT TlsCertificates.ObjectName FROM BackboneAccessPoints " +
+            "SELECT TlsCertificates.Id, TlsCertificates.ObjectName FROM BackboneAccessPoints " +
                 "JOIN TlsCertificates ON TlsCertificates.Id = Certificate " +
                 "WHERE BackboneAccessPoints.Id = $1",
             [apid]
         );
         if (result.rowCount == 1) {
             const secret = await LoadSecret(result.rows[0].objectname);
-            hash = HashOfSecret(secret);
-            data = secret.data;
+            [hash, data] = await hashedTlsState(client, result.rows[0].id, secret);
         }
         await client.query("COMMIT");
     } catch (error) {
@@ -538,7 +544,8 @@ async function onNewMember(peerId) {
         }
         const site = siteResult.rows[0];
         const secret = await LoadSecret(site.objectname);
-        localState[`tls-site-${peerId}`] = HashOfSecret(secret);
+        const [memberHash] = await hashedTlsState(client, site.certificate, secret);
+        localState[`tls-site-${peerId}`] = memberHash;
 
         //
         // Find the links from this member site.
@@ -716,19 +723,30 @@ export async function SiteCertificateChanged(certId) {
     const client = await ClientFromPool("system");
     try {
         await client.query("BEGIN");
-        const result = await client.query(
+        const interior = await client.query(
             "SELECT InteriorSites.Id, TlsCertificates.ObjectName FROM InteriorSites " +
                 "JOIN TlsCertificates ON TlsCertificates.Id = InteriorSites.Certificate " +
                 "WHERE Certificate = $1",
             [certId]
         );
-        if (result.rowCount == 1) {
-            const site = result.rows[0];
-            if (peers[site.id]) {
-                const secret = await LoadSecret(site.objectname);
-                const hash = HashOfSecret(secret);
-                await UpdateLocalState(site.id, `tls-site-${site.id}`, hash);
+        let site;
+        if (interior.rowCount == 1) {
+            site = interior.rows[0];
+        } else {
+            const member = await client.query(
+                "SELECT MemberSites.Id, TlsCertificates.ObjectName FROM MemberSites " +
+                    "JOIN TlsCertificates ON TlsCertificates.Id = MemberSites.Certificate " +
+                    "WHERE MemberSites.Certificate = $1",
+                [certId]
+            );
+            if (member.rowCount == 1) {
+                site = member.rows[0];
             }
+        }
+        if (site && peers[site.id]) {
+            const secret = await LoadSecret(site.objectname);
+            const [hash] = await hashedTlsState(client, certId, secret);
+            await UpdateLocalState(site.id, `tls-site-${site.id}`, hash);
         }
         await client.query("COMMIT");
     } catch (error) {
@@ -757,7 +775,7 @@ export async function AccessCertificateChanged(certId) {
             const row = result.rows[0];
             if (peers[row.id]) {
                 const secret = await LoadSecret(row.objectname);
-                const hash = HashOfSecret(secret);
+                const [hash] = await hashedTlsState(client, certId, secret);
                 await UpdateLocalState(row.id, `tls-server-${row.apid}`, hash);
             }
         }

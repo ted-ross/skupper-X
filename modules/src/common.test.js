@@ -23,6 +23,8 @@ import {
     CLAIM_ASSERT_ADDRESS,
     META_ANNOTATION_VMS_CONTROLLED,
     META_ANNOTATION_STATE_ID,
+    META_ANNOTATION_TLS_ORDINAL,
+    META_ANNOTATION_TLS_LAST_VALID,
     STATE_TYPE_LINK,
     MEMBER_CONFIG_MAP_NAME,
 } from "./common.js";
@@ -36,6 +38,8 @@ describe("common constants", () => {
     it("exports kubernetes annotation keys", () => {
         expect(META_ANNOTATION_VMS_CONTROLLED).toBe("skupper.io/vms-controlled");
         expect(META_ANNOTATION_STATE_ID).toBe("vms/state-id");
+        expect(META_ANNOTATION_TLS_ORDINAL).toBe("vms/tls-ordinal");
+        expect(META_ANNOTATION_TLS_LAST_VALID).toBe("vms/tls-last-valid");
     });
 
     it("exports state and object names", () => {

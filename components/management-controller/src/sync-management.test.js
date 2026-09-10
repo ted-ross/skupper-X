@@ -54,6 +54,7 @@ import {
     GetBackboneAccessPoints_TX,
     SiteDeleted,
     SiteCertificateChanged,
+    AccessCertificateChanged,
     SiteIngressChanged,
     _registerPeerForTest,
 } from "./sync-management.js";
@@ -231,6 +232,39 @@ describe("SiteCertificateChanged", () => {
         expect(LoadSecret).not.toHaveBeenCalled();
         expect(UpdateLocalState).not.toHaveBeenCalled();
     });
+
+    it("updates tls-site state hash for connected member sites", async () => {
+        _registerPeerForTest("member-1", "member");
+
+        mockClient.query.mockImplementation(async (sql) => {
+            if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
+                return {};
+            }
+            if (sql.includes("FROM InteriorSites") && sql.includes("Certificate = $1")) {
+                return { rowCount: 0, rows: [] };
+            }
+            if (sql.includes("FROM MemberSites") && sql.includes("Certificate = $1")) {
+                return {
+                    rowCount: 1,
+                    rows: [{ id: "member-1", objectname: "member-tls-secret" }],
+                };
+            }
+            return { rows: [] };
+        });
+
+        LoadSecret.mockResolvedValue({
+            data: { "tls.crt": Buffer.from("cert").toString("base64") },
+        });
+
+        await SiteCertificateChanged("cert-member");
+
+        expect(LoadSecret).toHaveBeenCalledWith("member-tls-secret");
+        expect(UpdateLocalState).toHaveBeenCalledWith(
+            "member-1",
+            "tls-site-member-1",
+            expect.stringMatching(/^[a-f0-9]{40}$/)
+        );
+    });
 });
 
 describe("SiteIngressChanged", () => {
@@ -269,6 +303,44 @@ describe("SiteIngressChanged", () => {
         expect(UpdateLocalState).toHaveBeenCalledWith(
             "site-2",
             "access-ap-1",
+            expect.stringMatching(/^[a-f0-9]{40}$/)
+        );
+        expect(mockClient.release).toHaveBeenCalled();
+    });
+});
+
+describe("AccessCertificateChanged", () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockClient.query.mockReset();
+    });
+
+    it("updates tls-server state hash for connected backbone sites", async () => {
+        _registerPeerForTest("site-3", "backbone");
+
+        mockClient.query.mockImplementation(async (sql) => {
+            if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
+                return {};
+            }
+            if (sql.includes("FROM BackboneAccessPoints") && sql.includes("Certificate = $1")) {
+                return {
+                    rowCount: 1,
+                    rows: [{ apid: "ap-9", id: "site-3", objectname: "ap-tls-secret" }],
+                };
+            }
+            return { rows: [] };
+        });
+
+        LoadSecret.mockResolvedValue({
+            data: { "tls.crt": Buffer.from("cert").toString("base64") },
+        });
+
+        await AccessCertificateChanged("cert-ap");
+
+        expect(LoadSecret).toHaveBeenCalledWith("ap-tls-secret");
+        expect(UpdateLocalState).toHaveBeenCalledWith(
+            "site-3",
+            "tls-server-ap-9",
             expect.stringMatching(/^[a-f0-9]{40}$/)
         );
         expect(mockClient.release).toHaveBeenCalled();

@@ -29,6 +29,7 @@ import { ClientFromPool } from "./db.js";
 import * as resourceTemplates from "./resource-templates.js";
 import * as common from "@vms/modules/common";
 import { NotifyTransaction, RegisterNotification } from "./notify.js";
+import { getTlsRotationMeta, overlayDualTrustCa } from "./tls-rotation.js";
 
 const coloNamespaces = {}; // {namespace-name: {backbone, site, accesspoint}}
 const backbonesWithNoNamespace = [];
@@ -363,25 +364,15 @@ async function doVisitNamespace(ns) {
         //
         // Ensure that if the site record is in READY or ACTIVE state, the site certificate is installed in namespace (else apply it)
         //
-        // TODO: Check the contents of the secret to see if it needs to be updated (for certificate rotation)
-        //
         if (["ready", "active"].includes(coloNamespaces[ns].site.lifecycle)) {
-            const siteSecretName = `vms-site-${coloNamespaces[ns].site.id}`;
-            const siteSecret = await kube.LoadSecret(siteSecretName, ns);
-            if (!siteSecret) {
-                const cert = await client
-                    .query("SELECT objectname FROM TlsCertificates WHERE Id = $1", [
-                        coloNamespaces[ns].site.certificate,
-                    ])
-                    .then((res) => res.rows[0]);
-                const secret = await kube.LoadSecret(cert.objectname);
-                const resource = resourceTemplates.Secret(
-                    secret,
-                    siteSecretName,
-                    common.INJECT_TYPE_SITE
-                );
-                await kube.ApplyObject(resource, ns);
-            }
+            await syncColoTlsSecret(
+                client,
+                ns,
+                `vms-site-${coloNamespaces[ns].site.id}`,
+                coloNamespaces[ns].site.certificate,
+                common.INJECT_TYPE_SITE,
+                false
+            );
         }
 
         //
@@ -417,17 +408,14 @@ async function doVisitNamespace(ns) {
         // Ensure that if accesspoint is in READY state, the server certificate is installed in namespace (else apply it)
         //
         if (coloNamespaces[ns].accesspoint.lifecycle === "ready") {
-            const apSecret = await kube.LoadSecret(apSecretName, ns);
-            if (!apSecret) {
-                const cert = await client
-                    .query("SELECT objectname FROM TlsCertificates WHERE Id = $1", [
-                        coloNamespaces[ns].accesspoint.certificate,
-                    ])
-                    .then((res) => res.rows[0]);
-                const secret = await kube.LoadSecret(cert.objectname);
-                const resource = resourceTemplates.Secret(secret, apSecretName);
-                await kube.ApplyObject(resource, ns);
-            }
+            await syncColoTlsSecret(
+                client,
+                ns,
+                apSecretName,
+                coloNamespaces[ns].accesspoint.certificate,
+                undefined,
+                false
+            );
         }
 
         await client.query("COMMIT");
@@ -441,6 +429,101 @@ async function doVisitNamespace(ns) {
             coloNamespaces[ns].accesspoint = null;
         }
         Log(`Exception in doVisitNamespace(${ns}): ${error.stack}`);
+    } finally {
+        client.release();
+    }
+}
+
+function tlsDataHash(data) {
+    if (!data) {
+        return "";
+    }
+    return resourceTemplates.HashOfData({
+        "ca.crt": data["ca.crt"] || "",
+        "tls.crt": data["tls.crt"] || "",
+        "tls.key": data["tls.key"] || "",
+    });
+}
+
+async function syncColoTlsSecret(client, ns, secretName, certId, inject, replaceIfChanged) {
+    if (!certId) {
+        return;
+    }
+    const cert = await client
+        .query("SELECT objectname FROM TlsCertificates WHERE Id = $1", [certId])
+        .then((res) => res.rows[0]);
+    if (!cert?.objectname) {
+        return;
+    }
+    const mcSecret = await kube.LoadSecret(cert.objectname);
+    if (!mcSecret?.data) {
+        return;
+    }
+    const data = await overlayDualTrustCa(client, certId, mcSecret.data);
+    const tlsMeta = await getTlsRotationMeta(client, certId);
+    const resource = resourceTemplates.Secret(
+        { ...mcSecret, data },
+        secretName,
+        inject,
+        undefined,
+        tlsMeta
+    );
+    const coloSecret = await kube.LoadSecret(secretName, ns);
+    if (!coloSecret) {
+        await kube.ApplyObject(resource, ns);
+        return;
+    }
+    if (!replaceIfChanged) {
+        return;
+    }
+    if (tlsDataHash(coloSecret.data) === tlsDataHash(resource.data)) {
+        return;
+    }
+    resource.metadata.resourceVersion = coloSecret.metadata.resourceVersion;
+    await kube.ReplaceSecret(secretName, resource, ns);
+}
+
+export async function SyncColoTlsCertificate(certId) {
+    if (!certId) {
+        return;
+    }
+    const client = await ClientFromPool("system");
+    try {
+        const siteResult = await client.query(
+            "SELECT Id FROM InteriorSites WHERE CoLocated = true AND Certificate = $1",
+            [certId]
+        );
+        if (siteResult.rowCount == 1) {
+            const siteId = siteResult.rows[0].id;
+            const ns = siteIndex[siteId];
+            if (ns && coloNamespaces[ns]?.site) {
+                await syncColoTlsSecret(
+                    client,
+                    ns,
+                    `vms-site-${siteId}`,
+                    certId,
+                    common.INJECT_TYPE_SITE,
+                    true
+                );
+            }
+            return;
+        }
+
+        const apResult = await client.query(
+            "SELECT ap.Id FROM BackboneAccessPoints ap " +
+                "JOIN InteriorSites s ON s.Id = ap.InteriorSite " +
+                "WHERE s.CoLocated = true AND ap.Kind = 'manage' AND ap.Certificate = $1",
+            [certId]
+        );
+        if (apResult.rowCount == 1) {
+            const apId = apResult.rows[0].id;
+            const ns = apIndex[apId];
+            if (ns && coloNamespaces[ns]?.accesspoint) {
+                await syncColoTlsSecret(client, ns, "vms-colo-manage", certId, undefined, true);
+            }
+        }
+    } catch (error) {
+        Log(`Exception in SyncColoTlsCertificate: ${error.stack}`);
     } finally {
         client.release();
     }

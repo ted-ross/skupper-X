@@ -22,6 +22,8 @@ import {
     INJECT_TYPE_SITE,
     META_ANNOTATION_VMS_CONTROLLED,
     META_ANNOTATION_TLS_INJECT,
+    META_ANNOTATION_TLS_ORDINAL,
+    META_ANNOTATION_TLS_LAST_VALID,
 } from "@vms/modules/common";
 
 /** @type {Record<string, Function>} */
@@ -65,6 +67,7 @@ vi.mock("@vms/modules/kube", () => ({
     DeleteConfigmap: vi.fn(),
     DeleteDeployment: vi.fn(),
     LoadSecret: vi.fn(),
+    ReplaceSecret: vi.fn(),
     LoadConfigmap: vi.fn(),
     UpdateLink: vi.fn(),
     UpdateNetworkAccess: vi.fn(),
@@ -92,7 +95,15 @@ vi.mock("./ingress-v2.js", () => ({
 }));
 
 import { UpdateLocalState as StateSyncUpdateLocalState } from "@vms/modules/state-sync";
-import { ApplyObject, Controlled, DeleteLink, GetSecrets, UpdateLink } from "@vms/modules/kube";
+import {
+    ApplyObject,
+    Controlled,
+    DeleteLink,
+    GetSecrets,
+    UpdateLink,
+    LoadSecret,
+    ReplaceSecret,
+} from "@vms/modules/kube";
 import { Start, UpdateLocalState } from "./sync-site-kube.js";
 
 describe("UpdateLocalState", () => {
@@ -244,6 +255,70 @@ describe("onStateChange", () => {
                         "vms/state-hash": "new-hash",
                     }),
                 }),
+            })
+        );
+        expect(ApplyObject).not.toHaveBeenCalled();
+    });
+
+    it("creates a TLS secret without ordinal fields in the secret data", async () => {
+        LoadSecret.mockResolvedValue(undefined);
+
+        await stateSyncCallbacks.onStateChange("mgmt-peer", "tls-site-site-1", "hash-tls-1", {
+            "tls.crt": "cert",
+            "tls.key": "key",
+            ordinal: "2",
+            lastValid: "1",
+        });
+
+        expect(ApplyObject).toHaveBeenCalledWith(
+            expect.objectContaining({
+                kind: "Secret",
+                type: "kubernetes.io/tls",
+                metadata: expect.objectContaining({
+                    name: "vms-site-site-1",
+                    annotations: expect.objectContaining({
+                        "vms/state-key": "tls-site-site-1",
+                        [META_ANNOTATION_TLS_INJECT]: INJECT_TYPE_SITE,
+                        [META_ANNOTATION_TLS_ORDINAL]: "2",
+                        [META_ANNOTATION_TLS_LAST_VALID]: "1",
+                    }),
+                }),
+                data: {
+                    "tls.crt": "cert",
+                    "tls.key": "key",
+                },
+            })
+        );
+    });
+
+    it("replaces an existing TLS secret when the hash changes", async () => {
+        LoadSecret.mockResolvedValue({
+            apiVersion: "v1",
+            kind: "Secret",
+            metadata: {
+                name: "vms-site-site-1",
+            },
+            data: { "tls.crt": "old" },
+        });
+
+        await stateSyncCallbacks.onStateChange("mgmt-peer", "tls-site-site-1", "hash-tls-2", {
+            "tls.crt": "new-cert",
+            ordinal: "3",
+            lastValid: "2",
+        });
+
+        expect(ReplaceSecret).toHaveBeenCalledWith(
+            "vms-site-site-1",
+            expect.objectContaining({
+                kind: "Secret",
+                metadata: expect.objectContaining({
+                    annotations: expect.objectContaining({
+                        "vms/state-hash": "hash-tls-2",
+                        [META_ANNOTATION_TLS_ORDINAL]: "3",
+                        [META_ANNOTATION_TLS_LAST_VALID]: "2",
+                    }),
+                }),
+                data: { "tls.crt": "new-cert" },
             })
         );
         expect(ApplyObject).not.toHaveBeenCalled();

@@ -149,6 +149,62 @@ export async function LoadCertificate(name) {
     });
 }
 
+export function kubeStatusCode(err) {
+    const direct = err?.statusCode || err?.code || err?.response?.statusCode;
+    if (typeof direct === "number") {
+        return direct;
+    }
+    const match = /HTTP-Code:\s*(\d+)/.exec(err?.message || "");
+    return match ? Number(match[1]) : direct;
+}
+
+export function markCertificateForRenewal(cert, now = new Date()) {
+    const issuing = {
+        type: "Issuing",
+        status: "True",
+        reason: "ManuallyTriggered",
+        message: "Certificate re-issuance manually triggered",
+        lastTransitionTime: now.toISOString(),
+    };
+    if (cert.metadata?.generation !== undefined) {
+        issuing.observedGeneration = cert.metadata.generation;
+    }
+    const existing = Array.isArray(cert.status?.conditions) ? cert.status.conditions : [];
+    const conditions = existing.filter((condition) => condition.type !== "Issuing");
+    conditions.push(issuing);
+    return {
+        ...cert,
+        status: {
+            ...cert.status,
+            conditions,
+        },
+    };
+}
+
+export async function TriggerCertificateRenewal(name) {
+    const cert = await LoadCertificate(name);
+    const body = markCertificateForRenewal(cert);
+    return await customApi.replaceNamespacedCustomObjectStatus({
+        group: "cert-manager.io",
+        version: "v1",
+        namespace: namespace,
+        plural: "certificates",
+        name: name,
+        body,
+    });
+}
+
+export async function ReplaceCertificate(obj) {
+    return await customApi.replaceNamespacedCustomObject({
+        group: "cert-manager.io",
+        version: "v1",
+        namespace: obj.metadata?.namespace || namespace,
+        plural: "certificates",
+        name: obj.metadata.name,
+        body: obj,
+    });
+}
+
 export async function DeleteCertificate(name) {
     await customApi.deleteNamespacedCustomObject({
         group: "cert-manager.io",
@@ -175,10 +231,10 @@ export async function LoadSecret(name, ns) {
     }
 }
 
-export async function ReplaceSecret(name, obj) {
+export async function ReplaceSecret(name, obj, ns) {
     await v1Api.replaceNamespacedSecret({
         name: name,
-        namespace: namespace,
+        namespace: ns || namespace,
         body: obj,
     });
 }

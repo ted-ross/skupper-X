@@ -27,12 +27,23 @@ import {
     HashOfData,
     HashOfConfigMap,
     HashOfObjectNoChildren,
+    HashOfTlsPayload,
+    tlsSyncData,
+    Secret,
     BackboneSite,
     NetworkCR,
     NetworkLinkCR,
     AccessPointCR,
     Deployment,
 } from "./resource-templates.js";
+import {
+    META_ANNOTATION_TLS_INJECT,
+    META_ANNOTATION_TLS_ORDINAL,
+    META_ANNOTATION_TLS_LAST_VALID,
+    META_ANNOTATION_STATE_HASH,
+    META_ANNOTATION_STATE_KEY,
+    INJECT_TYPE_SITE,
+} from "@vms/modules/common";
 
 describe("resource-templates", () => {
     it("HashOfData is stable regardless of key order", () => {
@@ -50,6 +61,46 @@ describe("resource-templates", () => {
     it("HashOfObjectNoChildren ignores nested objects", () => {
         const hash = HashOfObjectNoChildren({ name: "site", spec: { nested: true } });
         expect(hash).toBe(HashOfData({ name: "site" }));
+    });
+
+    it("tlsSyncData embeds ordinal metadata in the hashed payload", () => {
+        const data = { "tls.crt": "cert" };
+        expect(tlsSyncData(data)).toBe(data);
+        expect(tlsSyncData(data, { lastValid: 0 })).toBe(data);
+        expect(tlsSyncData(data, { ordinal: 2, lastValid: 1 })).toEqual({
+            "tls.crt": "cert",
+            ordinal: "2",
+            lastValid: "1",
+        });
+    });
+
+    it("HashOfTlsPayload matches HashOfData of the sync payload", () => {
+        const data = { "tls.crt": "cert" };
+        expect(HashOfTlsPayload(data)).toBe(HashOfData(data));
+        expect(HashOfTlsPayload(data, { ordinal: 3, lastValid: 1 })).toBe(
+            HashOfData({ "tls.crt": "cert", ordinal: "3", lastValid: "1" })
+        );
+        expect(HashOfTlsPayload(data, { ordinal: 3, lastValid: 1 })).not.toBe(HashOfData(data));
+    });
+
+    it("Secret annotates rotation metadata and hashes the TLS payload", () => {
+        const tlsMeta = { ordinal: 2, lastValid: 0 };
+        const secret = Secret(
+            { data: { "tls.crt": "cert", "tls.key": "key" } },
+            "vms-site-1",
+            INJECT_TYPE_SITE,
+            "tls-site-1",
+            tlsMeta
+        );
+
+        expect(secret.kind).toBe("Secret");
+        expect(secret.metadata.annotations[META_ANNOTATION_TLS_INJECT]).toBe(INJECT_TYPE_SITE);
+        expect(secret.metadata.annotations[META_ANNOTATION_TLS_ORDINAL]).toBe("2");
+        expect(secret.metadata.annotations[META_ANNOTATION_TLS_LAST_VALID]).toBe("0");
+        expect(secret.metadata.annotations[META_ANNOTATION_STATE_KEY]).toBe("tls-site-1");
+        expect(secret.metadata.annotations[META_ANNOTATION_STATE_HASH]).toBe(
+            HashOfTlsPayload(secret.data, tlsMeta)
+        );
     });
 
     it("BackboneSite produces expected CR shape", () => {

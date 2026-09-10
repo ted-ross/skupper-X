@@ -48,8 +48,20 @@ vi.mock("./notify.js", () => ({
     },
 }));
 
+vi.mock("./tls-rotation.js", () => ({
+    overlayDualTrustCa: vi.fn(async (_client, _certId, data) => data),
+    getTlsRotationMeta: vi.fn(async () => ({ ordinal: 2, lastValid: 1 })),
+}));
+
 import { LoadSecret } from "@vms/modules/kube";
 import { CompleteMember, _registerMemberCompletionForTest } from "./claim-server.js";
+import {
+    INJECT_TYPE_SITE,
+    META_ANNOTATION_TLS_INJECT,
+    META_ANNOTATION_TLS_ORDINAL,
+    META_ANNOTATION_TLS_LAST_VALID,
+    META_ANNOTATION_STATE_KEY,
+} from "@vms/modules/common";
 
 describe("CompleteMember", () => {
     it("handles unknown member id without throwing", async () => {
@@ -58,7 +70,7 @@ describe("CompleteMember", () => {
 
     it("stores completion result and invokes callback for pending member", async () => {
         const callback = vi.fn();
-        _registerMemberCompletionForTest("member-1", { callback });
+        const completion = _registerMemberCompletionForTest("member-1", { callback });
 
         mockClient.query.mockImplementation(async (sql) => {
             if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
@@ -94,5 +106,13 @@ describe("CompleteMember", () => {
         expect(callback).toHaveBeenCalled();
         expect(LoadSecret).toHaveBeenCalledWith("tls-secret");
         expect(mockClient.release).toHaveBeenCalled();
+        const siteClient = completion.result[1];
+        expect(siteClient.metadata.name).toBe("vms-site-member-1");
+        expect(siteClient.metadata.annotations[META_ANNOTATION_TLS_INJECT]).toBe(INJECT_TYPE_SITE);
+        expect(siteClient.metadata.annotations[META_ANNOTATION_STATE_KEY]).toBe(
+            "tls-site-member-1"
+        );
+        expect(siteClient.metadata.annotations[META_ANNOTATION_TLS_ORDINAL]).toBe("2");
+        expect(siteClient.metadata.annotations[META_ANNOTATION_TLS_LAST_VALID]).toBe("1");
     });
 });

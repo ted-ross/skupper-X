@@ -143,6 +143,23 @@ export function OpenConnection(
     return conn;
 }
 
+export function OnConnectionClosed(conn, handler) {
+    const amqpConn = conn.amqpConnection;
+    if (amqpConn.options) {
+        amqpConn.options.reconnect = false;
+    }
+    let notified = false;
+    const notify = () => {
+        if (notified) {
+            return;
+        }
+        notified = true;
+        handler(conn);
+    };
+    amqpConn.on("disconnected", notify);
+    amqpConn.on("connection_close", notify);
+}
+
 export function CloseConnection(conn) {
     conn.amqpConnection.close();
 }

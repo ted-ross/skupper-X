@@ -17,7 +17,7 @@
  under the License.
 */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mockClient = {
     query: vi.fn(),
@@ -30,13 +30,21 @@ const notificationHandlers = {};
 /** @type {Array<{ method: string, table: string, id: string }>} */
 const notifyEvents = [];
 
-vi.mock("@vms/modules/kube", () => ({
-    ApplyObject: vi.fn(),
-    LoadCertificate: vi.fn(),
-    WatchSecrets: vi.fn(),
-    WatchCertificates: vi.fn(),
-    GetIssuers: vi.fn(async () => []),
-}));
+vi.mock("@vms/modules/kube", async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        ApplyObject: vi.fn(),
+        LoadCertificate: vi.fn(),
+        LoadSecret: vi.fn(),
+        ReplaceCertificate: vi.fn(),
+        ReplaceSecret: vi.fn(),
+        TriggerCertificateRenewal: vi.fn(),
+        WatchSecrets: vi.fn(),
+        WatchCertificates: vi.fn(),
+        GetIssuers: vi.fn(async () => []),
+    };
+});
 
 vi.mock("./config.js", () => ({
     BackboneExpiration: vi.fn(() => ({ years: 1 })),
@@ -54,6 +62,10 @@ vi.mock("./sync-management.js", () => ({
 
 vi.mock("./claim-server.js", () => ({
     CompleteMember: vi.fn(),
+}));
+
+vi.mock("./colo-sync.js", () => ({
+    SyncColoTlsCertificate: vi.fn(),
 }));
 
 vi.mock("./site-deployment-state.js", () => ({
@@ -88,12 +100,89 @@ vi.mock("./notify.js", () => ({
     },
 }));
 
-import { Start } from "./certs.js";
+import { Start, RotateCertificate } from "./certs.js";
 import { RegisterNotification } from "./notify.js";
-import { ApplyObject } from "@vms/modules/kube";
+import {
+    ApplyObject,
+    LoadCertificate,
+    TriggerCertificateRenewal,
+    WatchSecrets,
+    WatchCertificates,
+} from "@vms/modules/kube";
+import { IntervalMilliseconds } from "./db.js";
+import { DefaultCaExpiration, DefaultCertExpiration } from "./config.js";
+import { META_ANNOTATION_VMS_CONTROLLED } from "@vms/modules/common";
+import { AccessCertificateChanged, SiteCertificateChanged } from "./sync-management.js";
+import { SyncColoTlsCertificate } from "./colo-sync.js";
+import { TEST_UUIDS } from "./test-helpers/mock-db.js";
 
 function transactionSql(sql) {
     return sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK";
+}
+
+function certificateRequestInserts() {
+    return mockClient.query.mock.calls.filter(([sql]) =>
+        typeof sql === "string" ? sql.includes("INSERT INTO CertificateRequests") : false
+    );
+}
+
+function mockCaRotationQueries({
+    backboneId,
+    van,
+    pending = false,
+    insertId = "cr-rotate-van",
+    signedby = "bb-ca",
+} = {}) {
+    mockClient.query.mockImplementation(async (sql) => {
+        if (transactionSql(sql)) {
+            return {};
+        }
+        if (sql.includes("SELECT Id, ObjectName, IsCA FROM TlsCertificates")) {
+            return {
+                rowCount: 1,
+                rows: [{ id: TEST_UUIDS.cert, objectname: "ca-cert", isca: true }],
+            };
+        }
+        if (sql.includes("FOR UPDATE")) {
+            return {
+                rows: [{ id: TEST_UUIDS.cert, isca: true, signedby }],
+            };
+        }
+        if (sql.includes("SELECT 1 FROM TlsCertificates WHERE Supercedes")) {
+            return { rowCount: 0, rows: [] };
+        }
+        if (sql.includes("FROM CertificateRequests WHERE Supercedes")) {
+            return pending
+                ? { rowCount: 1, rows: [{ id: "cr-pending" }] }
+                : { rowCount: 0, rows: [] };
+        }
+        if (sql.includes("FROM Backbones WHERE Certificate")) {
+            return backboneId
+                ? { rowCount: 1, rows: [{ id: backboneId }] }
+                : { rowCount: 0, rows: [] };
+        }
+        if (sql.includes("AS bbca")) {
+            return van ? { rowCount: 1, rows: [van] } : { rowCount: 0, rows: [] };
+        }
+        if (sql.includes("INSERT INTO CertificateRequests")) {
+            return { rows: [{ id: insertId }] };
+        }
+        return { rowCount: 0, rows: [] };
+    });
+}
+
+function controlledTlsSecret(name, dblink, issuerlink = "ca-1") {
+    return {
+        metadata: {
+            name,
+            annotations: {
+                [META_ANNOTATION_VMS_CONTROLLED]: "true",
+                "skupper.io/vms-dblink": dblink,
+                "skupper.io/vms-issuerlink": issuerlink,
+            },
+        },
+        data: { "tls.crt": "cert" },
+    };
 }
 
 describe("certs Start", () => {
@@ -414,6 +503,8 @@ describe("onBackboneAccessPointsChange", () => {
             table: "CertificateRequests",
             id: "cert-req-ap-1",
         });
+        expect(DefaultCertExpiration).toHaveBeenCalled();
+        expect(IntervalMilliseconds).toHaveBeenCalledWith({ days: 7 });
     });
 });
 
@@ -555,5 +646,658 @@ describe("onInteriorSitesChange", () => {
             table: "CertificateRequests",
             id: "cert-req-site-1",
         });
+    });
+});
+
+describe("RotateCertificate", () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockClient.query.mockReset();
+        notifyEvents.length = 0;
+        IntervalMilliseconds.mockImplementation(() => 3600000);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it("rejects a malformed certificate id", async () => {
+        await expect(RotateCertificate("not-a-uuid")).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining("Malformed certificate ID"),
+        });
+        expect(mockClient.query).not.toHaveBeenCalled();
+    });
+
+    it("returns 404 when the certificate does not exist", async () => {
+        mockClient.query.mockResolvedValue({ rowCount: 0, rows: [] });
+        await expect(RotateCertificate(TEST_UUIDS.cert)).rejects.toMatchObject({
+            statusCode: 404,
+            message: "Certificate not found",
+        });
+        expect(mockClient.release).toHaveBeenCalled();
+    });
+
+    it("returns 409 when the certificate has already been superseded", async () => {
+        mockClient.query.mockImplementation(async (sql) => {
+            if (sql.includes("SELECT Id, ObjectName, IsCA FROM TlsCertificates")) {
+                return {
+                    rowCount: 1,
+                    rows: [{ id: TEST_UUIDS.cert, objectname: "site-cert", isca: false }],
+                };
+            }
+            if (sql.includes("WHERE Supercedes = $1")) {
+                return { rowCount: 1, rows: [{ "?column?": 1 }] };
+            }
+            return { rowCount: 0, rows: [] };
+        });
+
+        await expect(RotateCertificate(TEST_UUIDS.cert)).rejects.toMatchObject({
+            statusCode: 409,
+            message: "Certificate has been superseded",
+        });
+        expect(TriggerCertificateRenewal).not.toHaveBeenCalled();
+    });
+
+    it("triggers cert-manager renewal for a current leaf certificate", async () => {
+        mockClient.query.mockImplementation(async (sql) => {
+            if (sql.includes("SELECT Id, ObjectName, IsCA FROM TlsCertificates")) {
+                return {
+                    rowCount: 1,
+                    rows: [{ id: TEST_UUIDS.cert, objectname: "site-cert", isca: false }],
+                };
+            }
+            return { rowCount: 0, rows: [] };
+        });
+        TriggerCertificateRenewal.mockResolvedValue({});
+
+        await expect(RotateCertificate(TEST_UUIDS.cert)).resolves.toEqual({ id: TEST_UUIDS.cert });
+        expect(TriggerCertificateRenewal).toHaveBeenCalledWith("site-cert");
+    });
+
+    it("maps a missing certificate object to 404", async () => {
+        mockClient.query.mockImplementation(async (sql) => {
+            if (sql.includes("SELECT Id, ObjectName, IsCA FROM TlsCertificates")) {
+                return {
+                    rowCount: 1,
+                    rows: [{ id: TEST_UUIDS.cert, objectname: "site-cert", isca: false }],
+                };
+            }
+            return { rowCount: 0, rows: [] };
+        });
+        TriggerCertificateRenewal.mockRejectedValue({ statusCode: 404 });
+
+        await expect(RotateCertificate(TEST_UUIDS.cert)).rejects.toMatchObject({
+            statusCode: 404,
+            message: "Certificate object site-cert not found",
+        });
+    });
+
+    it("enqueues a backbone CA rotation request", async () => {
+        mockClient.query.mockImplementation(async (sql) => {
+            if (transactionSql(sql)) {
+                return {};
+            }
+            if (sql.includes("SELECT Id, ObjectName, IsCA FROM TlsCertificates")) {
+                return {
+                    rowCount: 1,
+                    rows: [{ id: TEST_UUIDS.cert, objectname: "bb-ca", isca: true }],
+                };
+            }
+            if (sql.includes("FOR UPDATE")) {
+                return {
+                    rows: [{ id: TEST_UUIDS.cert, isca: true, signedby: "root-ca" }],
+                };
+            }
+            if (sql.includes("WHERE Supercedes = $1")) {
+                return { rowCount: 0, rows: [] };
+            }
+            if (sql.includes("FROM CertificateRequests WHERE Supercedes")) {
+                return { rowCount: 0, rows: [] };
+            }
+            if (sql.includes("FROM Backbones WHERE Certificate")) {
+                return { rowCount: 1, rows: [{ id: "bb-1" }] };
+            }
+            if (sql.includes("INSERT INTO CertificateRequests")) {
+                return { rows: [{ id: "cr-rotate-1" }] };
+            }
+            return { rowCount: 0, rows: [] };
+        });
+
+        await expect(RotateCertificate(TEST_UUIDS.cert)).resolves.toEqual({ id: TEST_UUIDS.cert });
+        expect(mockClient.query).toHaveBeenCalledWith(
+            expect.stringContaining("'backboneCA'"),
+            expect.arrayContaining(["bb-1", "root-ca", TEST_UUIDS.cert])
+        );
+        expect(TriggerCertificateRenewal).not.toHaveBeenCalled();
+    });
+
+    it("enqueues a van CA rotation request using default CA expiration", async () => {
+        IntervalMilliseconds.mockImplementation((interval) =>
+            interval?.days ? interval.days * 24 * 3600000 : 3600000
+        );
+        mockCaRotationQueries({
+            van: {
+                id: TEST_UUIDS.van,
+                starttime: new Date("2026-01-01T00:00:00Z"),
+                endtime: null,
+                deletedelay: null,
+                bbca: "bb-ca",
+            },
+        });
+
+        await expect(RotateCertificate(TEST_UUIDS.cert)).resolves.toEqual({ id: TEST_UUIDS.cert });
+        expect(DefaultCaExpiration).toHaveBeenCalled();
+        expect(mockClient.query).toHaveBeenCalledWith(expect.stringContaining("'vanCA'"), [
+            720,
+            TEST_UUIDS.van,
+            "bb-ca",
+            TEST_UUIDS.cert,
+        ]);
+        expect(TriggerCertificateRenewal).not.toHaveBeenCalled();
+    });
+
+    it("enqueues a van CA rotation request for the VAN remaining lifetime", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+        mockCaRotationQueries({
+            van: {
+                id: TEST_UUIDS.van,
+                starttime: new Date("2026-01-01T00:00:00Z"),
+                endtime: new Date("2026-01-02T00:00:00Z"),
+                deletedelay: { hours: 1 },
+                bbca: "bb-ca",
+            },
+        });
+
+        await expect(RotateCertificate(TEST_UUIDS.cert)).resolves.toEqual({ id: TEST_UUIDS.cert });
+        expect(mockClient.query).toHaveBeenCalledWith(expect.stringContaining("'vanCA'"), [
+            25,
+            TEST_UUIDS.van,
+            "bb-ca",
+            TEST_UUIDS.cert,
+        ]);
+    });
+
+    it("uses remaining VAN lifetime on rotate instead of the original span", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+        mockCaRotationQueries({
+            van: {
+                id: TEST_UUIDS.van,
+                starttime: new Date("2025-01-01T00:00:00Z"),
+                endtime: new Date("2030-01-01T00:00:00Z"),
+                deletedelay: { hours: 1 },
+                bbca: "bb-ca",
+            },
+        });
+
+        await expect(RotateCertificate(TEST_UUIDS.cert)).resolves.toEqual({ id: TEST_UUIDS.cert });
+        const remainingHours = Math.trunc(
+            (new Date("2030-01-01T00:00:00Z").getTime() -
+                new Date("2026-01-01T00:00:00Z").getTime() +
+                3600000) /
+                3600000
+        );
+        const originalSpanHours = Math.trunc(
+            (new Date("2030-01-01T00:00:00Z").getTime() -
+                new Date("2025-01-01T00:00:00Z").getTime() +
+                3600000) /
+                3600000
+        );
+        expect(remainingHours).toBeLessThan(originalSpanHours);
+        expect(mockClient.query).toHaveBeenCalledWith(expect.stringContaining("'vanCA'"), [
+            remainingHours,
+            TEST_UUIDS.van,
+            "bb-ca",
+            TEST_UUIDS.cert,
+        ]);
+    });
+
+    it("floors van CA rotation duration when the VAN end time has passed", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-09-09T00:00:00Z"));
+        mockCaRotationQueries({
+            van: {
+                id: TEST_UUIDS.van,
+                starttime: new Date("2026-01-01T00:00:00Z"),
+                endtime: new Date("2026-01-02T00:00:00Z"),
+                deletedelay: { hours: 1 },
+                bbca: "bb-ca",
+            },
+        });
+
+        await expect(RotateCertificate(TEST_UUIDS.cert)).resolves.toEqual({ id: TEST_UUIDS.cert });
+        expect(mockClient.query).toHaveBeenCalledWith(expect.stringContaining("'vanCA'"), [
+            1,
+            TEST_UUIDS.van,
+            "bb-ca",
+            TEST_UUIDS.cert,
+        ]);
+    });
+
+    it("returns 409 when CA rotation is already in progress", async () => {
+        mockCaRotationQueries({ pending: true, van: { id: TEST_UUIDS.van, bbca: "bb-ca" } });
+
+        await expect(RotateCertificate(TEST_UUIDS.cert)).rejects.toMatchObject({
+            statusCode: 409,
+            message: "Certificate rotation already in progress",
+        });
+        expect(certificateRequestInserts()).toHaveLength(0);
+    });
+
+    it("rejects rotation of a CA that is not a backbone or VAN certificate", async () => {
+        mockCaRotationQueries();
+
+        await expect(RotateCertificate(TEST_UUIDS.cert)).rejects.toMatchObject({
+            statusCode: 400,
+            message: "Certificate rotation of this CA is not supported",
+        });
+    });
+});
+
+describe("secret and certificate watches", () => {
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        mockClient.query.mockReset();
+        notifyEvents.length = 0;
+        IntervalMilliseconds.mockImplementation(() => 3600000);
+        for (const key of Object.keys(notificationHandlers)) {
+            delete notificationHandlers[key];
+        }
+        await Start();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it("records a new interior-site certificate when the TLS secret is added", async () => {
+        LoadCertificate.mockResolvedValue({
+            status: {
+                notAfter: "2099-01-01T00:00:00Z",
+                renewalTime: "2098-01-01T00:00:00Z",
+            },
+        });
+        mockClient.query.mockImplementation(async (sql) => {
+            if (transactionSql(sql)) {
+                return {};
+            }
+            if (sql.includes("FROM CertificateRequests WHERE Id = $1")) {
+                return {
+                    rowCount: 1,
+                    rows: [
+                        {
+                            id: "req-1",
+                            interiorsite: "site-1",
+                            supercedes: null,
+                            issuer: "ca-1",
+                        },
+                    ],
+                };
+            }
+            if (sql.includes("SELECT name FROM InteriorSites")) {
+                return { rows: [{ name: "backbone-site-a" }] };
+            }
+            if (sql.includes("INSERT INTO TlsCertificates")) {
+                return {};
+            }
+            if (sql.includes("UPDATE InteriorSites SET Certificate")) {
+                return {};
+            }
+            if (sql.includes("DELETE FROM CertificateRequests")) {
+                return {};
+            }
+            return { rows: [], rowCount: 0 };
+        });
+
+        const onSecretWatch = WatchSecrets.mock.calls[0][0];
+        await onSecretWatch("ADDED", {
+            metadata: {
+                name: "vms-site-cert",
+                annotations: {
+                    [META_ANNOTATION_VMS_CONTROLLED]: "true",
+                    "skupper.io/vms-dblink": "req-1",
+                    "skupper.io/vms-issuerlink": "ca-1",
+                },
+            },
+            data: { "tls.crt": "cert" },
+        });
+
+        expect(mockClient.query).toHaveBeenCalledWith(
+            expect.stringContaining("INSERT INTO TlsCertificates"),
+            expect.arrayContaining(["req-1", false, "vms-site-cert"])
+        );
+        expect(mockClient.query).toHaveBeenCalledWith(
+            expect.stringContaining(
+                "UPDATE InteriorSites SET Certificate = $1, Lifecycle = 'ready'"
+            ),
+            ["req-1", "site-1"]
+        );
+        expect(SiteCertificateChanged).toHaveBeenCalledWith("req-1");
+    });
+
+    it("ignores secret add events that are not VMS-controlled", async () => {
+        const onSecretWatch = WatchSecrets.mock.calls[0][0];
+        await onSecretWatch("ADDED", {
+            metadata: { name: "other", annotations: {} },
+        });
+        expect(mockClient.query).not.toHaveBeenCalled();
+    });
+
+    it("persists certificate times from a certificate watch", async () => {
+        mockClient.query.mockImplementation(async (sql) => {
+            if (transactionSql(sql)) {
+                return {};
+            }
+            if (sql.includes("WHERE Supercedes = $1")) {
+                return { rowCount: 0, rows: [] };
+            }
+            if (sql.includes("UPDATE TlsCertificates SET RenewalTime")) {
+                return { rows: [{ id: "cert-1" }] };
+            }
+            return { rows: [], rowCount: 0 };
+        });
+
+        const onCertificateWatch = WatchCertificates.mock.calls[0][0];
+        await onCertificateWatch("MODIFIED", {
+            metadata: {
+                name: "vms-site-cert",
+                annotations: {
+                    [META_ANNOTATION_VMS_CONTROLLED]: "true",
+                    "skupper.io/vms-dblink": "cert-1",
+                },
+            },
+            status: {
+                notAfter: "2099-01-01T00:00:00Z",
+                renewalTime: "2098-01-01T00:00:00Z",
+            },
+        });
+
+        expect(mockClient.query).toHaveBeenCalledWith(
+            expect.stringContaining("UPDATE TlsCertificates SET RenewalTime"),
+            [expect.any(Date), expect.any(Date), "cert-1"]
+        );
+        expect(notifyEvents).toContainEqual({
+            method: "update",
+            table: "TlsCertificates",
+            id: "cert-1",
+        });
+    });
+
+    it("enqueues VAN CA and credential children after a backbone CA rotation", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+        LoadCertificate.mockResolvedValue({
+            status: {
+                notAfter: "2099-01-01T00:00:00Z",
+                renewalTime: "2098-01-01T00:00:00Z",
+            },
+        });
+        const newCaId = "req-bb-ca";
+        mockClient.query.mockImplementation(async (sql, params) => {
+            if (transactionSql(sql)) {
+                return {};
+            }
+            if (sql.includes("FROM CertificateRequests WHERE Id = $1")) {
+                return {
+                    rowCount: 1,
+                    rows: [
+                        {
+                            id: newCaId,
+                            backbone: "bb-1",
+                            supercedes: "old-bb-ca",
+                            issuer: "root-ca",
+                        },
+                    ],
+                };
+            }
+            if (sql.includes("SELECT name FROM Backbones")) {
+                return { rows: [{ name: "backbone-a" }] };
+            }
+            if (sql.includes("FOR UPDATE")) {
+                return { rows: [{ id: "old-bb-ca", rotationordinal: 0 }] };
+            }
+            if (sql.includes("INSERT INTO TlsCertificates")) {
+                return {};
+            }
+            if (sql.includes("SET Certificate = $1 WHERE Certificate = $2")) {
+                return { rows: [], rowCount: 0 };
+            }
+            if (sql.includes("DELETE FROM CertificateRequests")) {
+                return {};
+            }
+            if (sql.includes("SELECT Id FROM Backbones WHERE Certificate")) {
+                return { rowCount: 1, rows: [{ id: "bb-1" }] };
+            }
+            if (sql.includes("FROM InteriorSites s")) {
+                return { rows: [{ id: "site-1", certificate: "site-cert-old" }] };
+            }
+            if (sql.includes("FROM BackboneAccessPoints ap")) {
+                return {
+                    rows: [
+                        {
+                            id: "ap-peer",
+                            kind: "peer",
+                            hostname: "peer.example.com",
+                            certificate: "ap-peer-old",
+                        },
+                        {
+                            id: "ap-manage",
+                            kind: "manage",
+                            hostname: "manage.example.com",
+                            certificate: "ap-manage-old",
+                        },
+                    ],
+                };
+            }
+            if (sql.includes("FROM ApplicationNetworks an") && sql.includes("an.Certificate")) {
+                return {
+                    rows: [
+                        {
+                            id: "van-1",
+                            certificate: "van-ca-old",
+                            starttime: new Date("2026-01-01T00:00:00Z"),
+                            endtime: new Date("2026-01-02T00:00:00Z"),
+                            deletedelay: { hours: 1 },
+                        },
+                    ],
+                };
+            }
+            if (sql.includes("FROM NetworkCredentials cred")) {
+                return { rows: [{ id: "cred-1", certificate: "cred-old" }] };
+            }
+            if (
+                sql.includes("FROM CertificateRequests WHERE Supercedes") ||
+                sql.includes("FROM TlsCertificates WHERE Supercedes")
+            ) {
+                return { rowCount: 0, rows: [] };
+            }
+            if (sql.includes("INSERT INTO CertificateRequests")) {
+                return { rows: [{ id: `cr-${params[0]}-${params[3]}` }] };
+            }
+            return { rows: [], rowCount: 0 };
+        });
+
+        const onSecretWatch = WatchSecrets.mock.calls[0][0];
+        await onSecretWatch("ADDED", controlledTlsSecret("vms-bb-ca", newCaId, "root"));
+
+        const inserts = certificateRequestInserts();
+        expect(inserts.map(([, insertParams]) => insertParams[0])).toEqual([
+            "interiorRouter",
+            "accessPoint",
+            "vanCA",
+            "vanCredential",
+            "accessPoint",
+        ]);
+        expect(inserts[2][1]).toEqual([
+            "vanCA",
+            expect.any(Date),
+            25,
+            "van-1",
+            newCaId,
+            "van-ca-old",
+            null,
+        ]);
+        expect(inserts[3][1][0]).toBe("vanCredential");
+        expect(inserts[3][1][3]).toBe("cred-1");
+        expect(ApplyObject).toHaveBeenCalledWith(expect.objectContaining({ kind: "Issuer" }));
+    });
+
+    it("enqueues member site rotations after a van CA secret is added and skips pending children", async () => {
+        LoadCertificate.mockResolvedValue({
+            status: {
+                notAfter: "2099-01-01T00:00:00Z",
+                renewalTime: "2098-01-01T00:00:00Z",
+            },
+        });
+        const newCaId = "req-van-ca";
+        mockClient.query.mockImplementation(async (sql, params) => {
+            if (transactionSql(sql)) {
+                return {};
+            }
+            if (sql.includes("FROM CertificateRequests WHERE Id = $1")) {
+                return {
+                    rowCount: 1,
+                    rows: [
+                        {
+                            id: newCaId,
+                            applicationnetwork: "van-1",
+                            supercedes: "old-van-ca",
+                            issuer: "bb-ca",
+                        },
+                    ],
+                };
+            }
+            if (sql.includes("SELECT name FROM ApplicationNetworks")) {
+                return { rows: [{ name: "van-a" }] };
+            }
+            if (sql.includes("FOR UPDATE")) {
+                return { rows: [{ id: "old-van-ca", rotationordinal: 1 }] };
+            }
+            if (sql.includes("INSERT INTO TlsCertificates")) {
+                return {};
+            }
+            if (sql.includes("SET Certificate = $1 WHERE Certificate = $2")) {
+                return { rows: [], rowCount: 0 };
+            }
+            if (sql.includes("DELETE FROM CertificateRequests")) {
+                return {};
+            }
+            if (sql.includes("SELECT Id FROM ApplicationNetworks WHERE Certificate")) {
+                return { rowCount: 1, rows: [{ id: "van-1" }] };
+            }
+            if (sql.includes("FROM MemberSites m")) {
+                return {
+                    rows: [
+                        { id: "member-pending", certificate: "member-cert-pending" },
+                        { id: "member-ready", certificate: "member-cert-ready" },
+                    ],
+                };
+            }
+            if (sql.includes("FROM CertificateRequests WHERE Supercedes")) {
+                if (params[0] === "member-cert-pending") {
+                    return { rowCount: 1, rows: [{ id: "cr-pending" }] };
+                }
+                return { rowCount: 0, rows: [] };
+            }
+            if (sql.includes("FROM TlsCertificates WHERE Supercedes")) {
+                return { rowCount: 0, rows: [] };
+            }
+            if (sql.includes("INSERT INTO CertificateRequests")) {
+                return { rows: [{ id: "cr-van-site" }] };
+            }
+            return { rows: [], rowCount: 0 };
+        });
+
+        const onSecretWatch = WatchSecrets.mock.calls[0][0];
+        await onSecretWatch("ADDED", controlledTlsSecret("vms-van-ca", newCaId));
+
+        const inserts = certificateRequestInserts();
+        expect(inserts).toHaveLength(1);
+        expect(inserts[0][0]).toContain("Site");
+        expect(inserts[0][1]).toEqual([
+            "vanSite",
+            expect.any(Date),
+            1,
+            "member-ready",
+            newCaId,
+            "member-cert-ready",
+            null,
+        ]);
+        expect(ApplyObject).toHaveBeenCalledWith(expect.objectContaining({ kind: "Issuer" }));
+    });
+
+    it("notifies sibling leaves when a rotated cert is the last child of the old issuer", async () => {
+        LoadCertificate.mockResolvedValue({
+            status: {
+                notAfter: "2099-01-01T00:00:00Z",
+                renewalTime: "2098-01-01T00:00:00Z",
+            },
+        });
+        const newCertId = "req-leaf";
+        mockClient.query.mockImplementation(async (sql, params) => {
+            if (transactionSql(sql)) {
+                return {};
+            }
+            if (sql.includes("FROM CertificateRequests WHERE Id = $1")) {
+                return {
+                    rowCount: 1,
+                    rows: [
+                        {
+                            id: newCertId,
+                            interiorsite: "site-1",
+                            supercedes: "old-leaf",
+                            issuer: "new-ca",
+                        },
+                    ],
+                };
+            }
+            if (sql.includes("SELECT name FROM InteriorSites")) {
+                return { rows: [{ name: "backbone-site-a" }] };
+            }
+            if (sql.includes("FOR UPDATE")) {
+                return { rows: [{ id: "old-leaf", rotationordinal: 0 }] };
+            }
+            if (sql.includes("INSERT INTO TlsCertificates")) {
+                return {};
+            }
+            if (sql.includes("SET Certificate = $1 WHERE Certificate = $2")) {
+                return { rows: [], rowCount: 0 };
+            }
+            if (sql.includes("DELETE FROM CertificateRequests")) {
+                return {};
+            }
+            if (sql.includes("WHERE SignedBy = $1") && sql.includes("LIMIT 1")) {
+                return { rowCount: 0, rows: [] };
+            }
+            if (sql.includes("WHERE SignedBy = $1")) {
+                return {
+                    rows: [
+                        { id: "sibling-1", isca: false },
+                        { id: newCertId, isca: false },
+                    ],
+                };
+            }
+            if (sql.includes("FROM TlsCertificates WHERE Id = $1")) {
+                if (params[0] === newCertId) {
+                    return { rows: [{ id: newCertId, signedby: "new-ca" }] };
+                }
+                if (params[0] === "new-ca") {
+                    return { rows: [{ id: "new-ca", supercedes: "old-ca" }] };
+                }
+                return { rows: [] };
+            }
+            return { rows: [], rowCount: 0 };
+        });
+
+        const onSecretWatch = WatchSecrets.mock.calls[0][0];
+        await onSecretWatch("ADDED", controlledTlsSecret("vms-site-cert", newCertId, "new-ca"));
+
+        expect(SiteCertificateChanged).toHaveBeenCalledWith(newCertId);
+        expect(SiteCertificateChanged).toHaveBeenCalledWith("sibling-1");
+        expect(AccessCertificateChanged).toHaveBeenCalledWith("sibling-1");
+        expect(SyncColoTlsCertificate).toHaveBeenCalledWith("sibling-1");
+        expect(ApplyObject).not.toHaveBeenCalled();
     });
 });

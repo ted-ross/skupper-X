@@ -68,4 +68,12 @@ body {
     color: var(--cds-text-secondary);
 }
 
+tr.tls-cert-row--superseded {
+    opacity: 0.55;
+}
+
+.cds--data-table tr.tls-cert-row--superseded td {
+    color: var(--cds-text-disabled);
+}
+
 /* Made with Bob */

@@ -18,7 +18,12 @@
 */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { WatchNotify, _registerWatchForTest, _setWatchDispatchForTest } from "./watch-server.js";
+import {
+    WatchNotify,
+    _registerWatchForTest,
+    _setWatchDispatchForTest,
+    _parseWatchQueryForTest,
+} from "./watch-server.js";
 
 describe("WatchNotify", () => {
     beforeEach(() => {
@@ -52,5 +57,18 @@ describe("WatchNotify", () => {
         expect(dispatch).toHaveBeenCalledTimes(2);
         expect(dispatch).toHaveBeenCalledWith(idWatch, false);
         expect(dispatch).toHaveBeenCalledWith(allWatch, false);
+    });
+});
+
+describe("_parseWatchQueryForTest", () => {
+    it("returns an empty object when the URL has no query string", () => {
+        expect(_parseWatchQueryForTest("/api/v1alpha1/certs")).toEqual({});
+    });
+
+    it("parses query parameters from the URL", () => {
+        expect(_parseWatchQueryForTest("/api/v1alpha1/certs?signedby=ca-1&watch=1")).toEqual({
+            signedby: "ca-1",
+            watch: "1",
+        });
     });
 });

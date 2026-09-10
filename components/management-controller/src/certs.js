@@ -19,14 +19,21 @@
 
 "use strict";
 
+import { randomUUID } from "node:crypto";
 import {
     ApplyObject,
     LoadCertificate,
+    LoadSecret,
+    ReplaceCertificate,
+    ReplaceSecret,
+    TriggerCertificateRenewal,
     WatchSecrets,
     WatchCertificates,
     GetIssuers,
+    kubeStatusCode,
 } from "@vms/modules/kube";
 import { Log } from "@vms/modules/log";
+import { IsValidUuid } from "@vms/modules/util";
 import { ClientFromPool, IntervalMilliseconds } from "./db.js";
 import {
     BackboneExpiration,
@@ -37,10 +44,32 @@ import {
     CertOrganization,
 } from "./config.js";
 import { SiteCertificateChanged, AccessCertificateChanged } from "./sync-management.js";
+import { SyncColoTlsCertificate } from "./colo-sync.js";
 import { CompleteMember } from "./claim-server.js";
 import { AccessPointCertReady, SiteLifecycleChanged_TX } from "./site-deployment-state.js";
 import { META_ANNOTATION_VMS_CONTROLLED } from "@vms/modules/common";
 import { NotifyTransaction, RegisterNotification } from "./notify.js";
+import {
+    expirationFromTlsSecret,
+    timestampsEqual,
+    lockCurrentCertificate,
+    lockCurrentCertificateByObjectName,
+    isCertificateSuperseded,
+    retargetParentCertificateFks,
+    hasLiveChildren,
+    listCurrentLeafChildren,
+    loadCertificateRow,
+} from "./tls-rotation.js";
+
+const PG_UNIQUE_VIOLATION = "23505";
+const KUBE_CONFLICT_RETRIES = 5;
+const secretWorkTail = new Map();
+
+function httpError(statusCode, message) {
+    const error = new Error(message);
+    error.statusCode = statusCode;
+    return error;
+}
 
 //
 // When new management controllers are created, add a certificate request.
@@ -186,7 +215,7 @@ async function onAccessPointsChange(action, id) {
                     row.starttime.getTime() +
                     IntervalMilliseconds(row.deletedelay);
             } else {
-                duration_ms = IntervalMilliseconds(DefaultCaExpiration());
+                duration_ms = IntervalMilliseconds(DefaultCertExpiration());
             }
             const cert = await client.query(
                 "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, AccessPoint, Issuer, Hostname) " +
@@ -573,6 +602,486 @@ async function processCertificateRequests(nonrecurring) {
     }
 }
 
+function ownerFromCertificateRequest(cert_request) {
+    if (cert_request.managementcontroller) {
+        return {
+            ref_table: "ManagementControllers",
+            ref_id: cert_request.managementcontroller,
+            ref_label: "Management Controller",
+            is_ca: false,
+            alertSiteCertChanged: false,
+            alertAccessCertChanged: false,
+            alertMemberCompletion: false,
+        };
+    }
+    if (cert_request.backbone) {
+        return {
+            ref_table: "Backbones",
+            ref_id: cert_request.backbone,
+            ref_label: "Backbone",
+            is_ca: true,
+            alertSiteCertChanged: false,
+            alertAccessCertChanged: false,
+            alertMemberCompletion: false,
+        };
+    }
+    if (cert_request.interiorsite) {
+        return {
+            ref_table: "InteriorSites",
+            ref_id: cert_request.interiorsite,
+            ref_label: "Backbone Site",
+            is_ca: false,
+            alertSiteCertChanged: true,
+            alertAccessCertChanged: false,
+            alertMemberCompletion: false,
+        };
+    }
+    if (cert_request.accesspoint) {
+        return {
+            ref_table: "BackboneAccessPoints",
+            ref_id: cert_request.accesspoint,
+            ref_label: "Access Point",
+            is_ca: false,
+            alertSiteCertChanged: false,
+            alertAccessCertChanged: true,
+            alertMemberCompletion: false,
+        };
+    }
+    if (cert_request.applicationnetwork) {
+        return {
+            ref_table: "ApplicationNetworks",
+            ref_id: cert_request.applicationnetwork,
+            ref_label: "VAN",
+            is_ca: true,
+            alertSiteCertChanged: false,
+            alertAccessCertChanged: false,
+            alertMemberCompletion: false,
+        };
+    }
+    if (cert_request.networkcredential) {
+        return {
+            ref_table: "NetworkCredentials",
+            ref_id: cert_request.networkcredential,
+            ref_label: "VAN Attach",
+            is_ca: false,
+            alertSiteCertChanged: false,
+            alertAccessCertChanged: false,
+            alertMemberCompletion: false,
+        };
+    }
+    if (cert_request.invitation) {
+        return {
+            ref_table: "MemberInvitations",
+            ref_id: cert_request.invitation,
+            ref_label: "Member Invitation",
+            is_ca: false,
+            alertSiteCertChanged: false,
+            alertAccessCertChanged: false,
+            alertMemberCompletion: false,
+        };
+    }
+    if (cert_request.site) {
+        return {
+            ref_table: "MemberSites",
+            ref_id: cert_request.site,
+            ref_label: "Member Site",
+            is_ca: false,
+            alertSiteCertChanged: false,
+            alertAccessCertChanged: false,
+            alertMemberCompletion: true,
+        };
+    }
+    throw new Error("Unknown Target");
+}
+
+async function expirationAndRenewalFromSecret(secret) {
+    const cert_object = await LoadCertificate(secret.metadata.name);
+    const expiration =
+        expirationFromTlsSecret(secret) ||
+        (cert_object?.status?.notAfter ? new Date(cert_object.status.notAfter) : undefined);
+    const renewal = cert_object?.status?.renewalTime
+        ? new Date(cert_object.status.renewalTime)
+        : undefined;
+    return { expiration, renewal };
+}
+
+function applyCertificateDblink(cert, newId) {
+    const alreadyUpdated =
+        cert.metadata?.annotations?.["skupper.io/vms-dblink"] === newId &&
+        cert.spec?.secretTemplate?.annotations?.["skupper.io/vms-dblink"] === newId;
+    if (alreadyUpdated) {
+        return false;
+    }
+    cert.metadata ??= {};
+    cert.metadata.annotations ??= {};
+    cert.spec ??= {};
+    cert.spec.secretTemplate ??= {};
+    cert.spec.secretTemplate.annotations ??= {};
+    cert.metadata.annotations["skupper.io/vms-dblink"] = newId;
+    cert.spec.secretTemplate.annotations["skupper.io/vms-dblink"] = newId;
+    return true;
+}
+
+function applySecretDblink(kubeSecret, newId) {
+    if (kubeSecret.metadata?.annotations?.["skupper.io/vms-dblink"] === newId) {
+        return false;
+    }
+    kubeSecret.metadata ??= {};
+    kubeSecret.metadata.annotations ??= {};
+    kubeSecret.metadata.annotations["skupper.io/vms-dblink"] = newId;
+    return true;
+}
+
+async function replaceWithConflictRetry(load, shouldWrite, write) {
+    let lastErr;
+    for (let attempt = 0; attempt < KUBE_CONFLICT_RETRIES; attempt++) {
+        const obj = await load();
+        if (!obj) {
+            return;
+        }
+        if (!shouldWrite(obj)) {
+            return;
+        }
+        try {
+            await write(obj);
+            return;
+        } catch (err) {
+            lastErr = err;
+            if (kubeStatusCode(err) != 409) {
+                throw err;
+            }
+        }
+    }
+    throw lastErr;
+}
+
+async function retargetTlsDbLink(objectName, newId) {
+    await replaceWithConflictRetry(
+        () => LoadCertificate(objectName),
+        (cert) => applyCertificateDblink(cert, newId),
+        (cert) => ReplaceCertificate(cert)
+    );
+    await replaceWithConflictRetry(
+        () => LoadSecret(objectName),
+        (kubeSecret) => applySecretDblink(kubeSecret, newId),
+        (kubeSecret) => ReplaceSecret(objectName, kubeSecret)
+    );
+}
+
+function enqueueSecretWork(objectName, work) {
+    const previous = secretWorkTail.get(objectName) || Promise.resolve();
+    const next = previous.catch(() => {}).then(work);
+    secretWorkTail.set(objectName, next);
+    next.finally(() => {
+        if (secretWorkTail.get(objectName) === next) {
+            secretWorkTail.delete(objectName);
+        }
+    });
+    return next;
+}
+
+async function maybeTrimIssuerSiblings(certId) {
+    const client = await ClientFromPool("system");
+    try {
+        const cert = await loadCertificateRow(client, certId);
+        if (!cert?.signedby) {
+            return;
+        }
+        const issuer = await loadCertificateRow(client, cert.signedby);
+        const oldCaId = issuer?.supercedes;
+        if (!oldCaId) {
+            return;
+        }
+        if (await hasLiveChildren(client, oldCaId)) {
+            return;
+        }
+        const siblings = await listCurrentLeafChildren(client, issuer.id);
+        for (const sibling of siblings) {
+            if (sibling.id === certId) {
+                continue;
+            }
+            await SiteCertificateChanged(sibling.id);
+            await AccessCertificateChanged(sibling.id);
+            await SyncColoTlsCertificate(sibling.id);
+        }
+    } finally {
+        client.release();
+    }
+}
+
+async function notifyTlsConsumers(certId) {
+    await SiteCertificateChanged(certId);
+    await AccessCertificateChanged(certId);
+    await SyncColoTlsCertificate(certId);
+    await maybeTrimIssuerSiblings(certId);
+}
+
+function durationHoursFromInterval(interval) {
+    return Math.trunc(IntervalMilliseconds(interval) / 3600000);
+}
+
+const VAN_CA_MIN_DURATION_HOURS = 1;
+
+function vanCaDurationHours(van) {
+    if (van.endtime) {
+        const durationMs =
+            new Date(van.endtime).getTime() - Date.now() + IntervalMilliseconds(van.deletedelay);
+        return Math.max(VAN_CA_MIN_DURATION_HOURS, Math.trunc(durationMs / 3600000));
+    }
+    return durationHoursFromInterval(DefaultCaExpiration());
+}
+
+async function insertRotationCertificateRequest(
+    client,
+    notify,
+    created,
+    { requestType, ownerColumn, ownerId, issuerId, supercedes, durationHours, hostname }
+) {
+    const pending = await client.query("SELECT Id FROM CertificateRequests WHERE Supercedes = $1", [
+        supercedes,
+    ]);
+    if (pending.rowCount > 0) {
+        return created;
+    }
+    const already = await client.query("SELECT Id FROM TlsCertificates WHERE Supercedes = $1", [
+        supercedes,
+    ]);
+    if (already.rowCount > 0) {
+        return created;
+    }
+    const result = await client.query(
+        `INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, ${ownerColumn}, Issuer, Supercedes, Hostname) ` +
+            "VALUES(gen_random_uuid(), $1, $2, now(), $3, $4, $5, $6, $7) RETURNING Id",
+        [requestType, created, durationHours, ownerId, issuerId, supercedes, hostname || null]
+    );
+    notify.add("CertificateRequests", result.rows[0].id);
+    return new Date(created.getTime() + 1);
+}
+
+async function insertCaRotationRequest(oldCertId) {
+    const client = await ClientFromPool("system");
+    const notify = new NotifyTransaction();
+    try {
+        await client.query("BEGIN");
+        const cert = await lockCurrentCertificate(client, oldCertId);
+        if (!cert) {
+            throw httpError(404, "Certificate not found");
+        }
+        if (!cert.isca) {
+            throw httpError(400, "Certificate is not a CA");
+        }
+        if (await isCertificateSuperseded(client, oldCertId)) {
+            throw httpError(409, "Certificate has been superseded");
+        }
+        const pending = await client.query(
+            "SELECT Id FROM CertificateRequests WHERE Supercedes = $1",
+            [oldCertId]
+        );
+        if (pending.rowCount > 0) {
+            throw httpError(409, "Certificate rotation already in progress");
+        }
+        const bb = await client.query("SELECT Id FROM Backbones WHERE Certificate = $1", [
+            oldCertId,
+        ]);
+        let result;
+        if (bb.rowCount == 1) {
+            const durationHours = durationHoursFromInterval(BackboneExpiration());
+            result = await client.query(
+                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, Backbone, Issuer, Supercedes) " +
+                    "VALUES(gen_random_uuid(), 'backboneCA', now(), now(), $1, $2, $3, $4) RETURNING Id",
+                [durationHours, bb.rows[0].id, cert.signedby, oldCertId]
+            );
+        } else {
+            const van = await client.query(
+                "SELECT an.Id, an.StartTime, an.EndTime, an.DeleteDelay, b.Certificate AS bbca " +
+                    "FROM ApplicationNetworks an " +
+                    "JOIN Backbones b ON b.Id = an.Backbone " +
+                    "WHERE an.Certificate = $1",
+                [oldCertId]
+            );
+            if (van.rowCount != 1) {
+                throw httpError(400, "Certificate rotation of this CA is not supported");
+            }
+            const row = van.rows[0];
+            result = await client.query(
+                "INSERT INTO CertificateRequests(Id, RequestType, CreatedTime, RequestTime, DurationHours, ApplicationNetwork, Issuer, Supercedes) " +
+                    "VALUES(gen_random_uuid(), 'vanCA', now(), now(), $1, $2, $3, $4) RETURNING Id",
+                [vanCaDurationHours(row), row.id, row.bbca, oldCertId]
+            );
+        }
+        notify.add("CertificateRequests", result.rows[0].id);
+        await client.query("COMMIT");
+        await notify.commit();
+        return result.rows[0].id;
+    } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
+async function enqueueBackboneCaChildRequests(newCaId, oldCaId) {
+    const client = await ClientFromPool("system");
+    const notify = new NotifyTransaction();
+    try {
+        await client.query("BEGIN");
+        const backbone = await client.query("SELECT Id FROM Backbones WHERE Certificate = $1", [
+            newCaId,
+        ]);
+        if (backbone.rowCount != 1) {
+            await client.query("COMMIT");
+            return;
+        }
+        const backboneId = backbone.rows[0].id;
+        const leafHours = durationHoursFromInterval(DefaultCertExpiration());
+        const sites = await client.query(
+            "SELECT s.Id, s.Certificate FROM InteriorSites s " +
+                "JOIN TlsCertificates c ON c.Id = s.Certificate " +
+                "WHERE s.Backbone = $1 AND c.SignedBy = $2",
+            [backboneId, oldCaId]
+        );
+        const aps = await client.query(
+            "SELECT ap.Id, ap.Kind, ap.Hostname, ap.Certificate FROM BackboneAccessPoints ap " +
+                "JOIN InteriorSites s ON s.Id = ap.InteriorSite " +
+                "JOIN TlsCertificates c ON c.Id = ap.Certificate " +
+                "WHERE s.Backbone = $1 AND c.SignedBy = $2",
+            [backboneId, oldCaId]
+        );
+        const vans = await client.query(
+            "SELECT an.Id, an.Certificate, an.StartTime, an.EndTime, an.DeleteDelay FROM ApplicationNetworks an " +
+                "JOIN TlsCertificates c ON c.Id = an.Certificate " +
+                "WHERE an.Backbone = $1 AND c.SignedBy = $2",
+            [backboneId, oldCaId]
+        );
+        const creds = await client.query(
+            "SELECT cred.Id, cred.Certificate FROM NetworkCredentials cred " +
+                "JOIN ApplicationNetworks an ON an.Id = cred.MemberOf " +
+                "JOIN TlsCertificates c ON c.Id = cred.Certificate " +
+                "WHERE an.Backbone = $1 AND c.SignedBy = $2",
+            [backboneId, oldCaId]
+        );
+        const nonManage = [];
+        const manage = [];
+        for (const ap of aps.rows) {
+            if (ap.kind == "manage") {
+                manage.push(ap);
+            } else {
+                nonManage.push(ap);
+            }
+        }
+
+        let created = new Date();
+        const insertChild = async (spec) => {
+            created = await insertRotationCertificateRequest(client, notify, created, {
+                ...spec,
+                issuerId: newCaId,
+            });
+        };
+
+        for (const site of sites.rows) {
+            await insertChild({
+                requestType: "interiorRouter",
+                ownerColumn: "InteriorSite",
+                ownerId: site.id,
+                supercedes: site.certificate,
+                durationHours: leafHours,
+            });
+        }
+        for (const ap of nonManage) {
+            await insertChild({
+                requestType: "accessPoint",
+                ownerColumn: "AccessPoint",
+                ownerId: ap.id,
+                supercedes: ap.certificate,
+                durationHours: leafHours,
+                hostname: ap.hostname,
+            });
+        }
+        for (const van of vans.rows) {
+            await insertChild({
+                requestType: "vanCA",
+                ownerColumn: "ApplicationNetwork",
+                ownerId: van.id,
+                supercedes: van.certificate,
+                durationHours: vanCaDurationHours(van),
+            });
+        }
+        for (const cred of creds.rows) {
+            await insertChild({
+                requestType: "vanCredential",
+                ownerColumn: "NetworkCredential",
+                ownerId: cred.id,
+                supercedes: cred.certificate,
+                durationHours: leafHours,
+            });
+        }
+        for (const ap of manage) {
+            await insertChild({
+                requestType: "accessPoint",
+                ownerColumn: "AccessPoint",
+                ownerId: ap.id,
+                supercedes: ap.certificate,
+                durationHours: leafHours,
+                hostname: ap.hostname,
+            });
+        }
+
+        await client.query("COMMIT");
+        await notify.commit();
+    } catch (err) {
+        Log(`Rolling back enqueue-backbone-ca-children transaction: ${err.stack}`);
+        await client.query("ROLLBACK");
+    } finally {
+        client.release();
+    }
+}
+
+async function enqueueVanCaChildRequests(newCaId, oldCaId) {
+    const client = await ClientFromPool("system");
+    const notify = new NotifyTransaction();
+    try {
+        await client.query("BEGIN");
+        const van = await client.query(
+            "SELECT Id FROM ApplicationNetworks WHERE Certificate = $1",
+            [newCaId]
+        );
+        if (van.rowCount != 1) {
+            await client.query("COMMIT");
+            return;
+        }
+        const vanId = van.rows[0].id;
+        const leafHours = durationHoursFromInterval(DefaultCertExpiration());
+        // Invitation claims stay on the old vanCA; claim rotation is out of scope.
+        const members = await client.query(
+            "SELECT m.Id, m.Certificate FROM MemberSites m " +
+                "JOIN TlsCertificates c ON c.Id = m.Certificate " +
+                "WHERE m.MemberOf = $1 AND c.SignedBy = $2",
+            [vanId, oldCaId]
+        );
+
+        let created = new Date();
+        for (const member of members.rows) {
+            created = await insertRotationCertificateRequest(client, notify, created, {
+                requestType: "vanSite",
+                ownerColumn: "Site",
+                ownerId: member.id,
+                issuerId: newCaId,
+                supercedes: member.certificate,
+                durationHours: leafHours,
+            });
+        }
+
+        await client.query("COMMIT");
+        await notify.commit();
+    } catch (err) {
+        Log(`Rolling back enqueue-van-ca-children transaction: ${err.stack}`);
+        await client.query("ROLLBACK");
+    } finally {
+        client.release();
+    }
+}
+
 //
 // A secret that is controlled by this controller and has a database link has been added.  Update the database
 // to register the completion of the creation of a certificate or a CA.
@@ -585,107 +1094,114 @@ async function secretAdded(dblink, secret) {
         const result = await client.query("SELECT * FROM CertificateRequests WHERE Id = $1", [
             dblink,
         ]);
-        let ref_table;
-        let ref_id;
-        let ref_label;
-        let is_ca = false;
-        let alertSiteCertChanged = false;
-        let alertAccessCertChanged = false;
-        let alertMemberCompletion = false;
 
-        if (result.rowCount == 1) {
-            const cert_request = result.rows[0];
+        if (result.rowCount != 1) {
+            await client.query("ROLLBACK");
+            return false;
+        }
 
-            if (cert_request.managementcontroller) {
-                ref_table = "ManagementControllers";
-                ref_id = cert_request.managementcontroller;
-                ref_label = "Management Controller";
-            } else if (cert_request.backbone) {
-                ref_table = "Backbones";
-                ref_id = cert_request.backbone;
-                is_ca = true;
-                ref_label = "Backbone";
-            } else if (cert_request.interiorsite) {
-                ref_table = "InteriorSites";
-                ref_id = cert_request.interiorsite;
-                ref_label = "Backbone Site";
-                alertSiteCertChanged = true;
-            } else if (cert_request.accesspoint) {
-                ref_table = "BackboneAccessPoints";
-                ref_id = cert_request.accesspoint;
-                ref_label = "Access Point";
-                alertAccessCertChanged = true;
-            } else if (cert_request.applicationnetwork) {
-                ref_table = "ApplicationNetworks";
-                ref_id = cert_request.applicationnetwork;
-                is_ca = true;
-                ref_label = "VAN";
-            } else if (cert_request.networkcredential) {
-                ref_table = "NetworkCredentials";
-                ref_id = cert_request.networkcredential;
-                is_ca = false;
-                ref_label = "VAN Attach";
-            } else if (cert_request.invitation) {
-                ref_table = "MemberInvitations";
-                ref_id = cert_request.invitation;
-                ref_label = "Member Invitation";
-            } else if (cert_request.site) {
-                ref_table = "MemberSites";
-                ref_id = cert_request.site;
-                ref_label = "Member Site";
-                alertMemberCompletion = true;
-            } else {
-                throw new Error("Unknown Target");
+        const cert_request = result.rows[0];
+        const owner = ownerFromCertificateRequest(cert_request);
+        const ref_table = owner.ref_table;
+        const ref_id = owner.ref_id;
+        const is_ca = owner.is_ca;
+        const alertSiteCertChanged = owner.alertSiteCertChanged;
+        const alertAccessCertChanged = owner.alertAccessCertChanged;
+        const alertMemberCompletion = owner.alertMemberCompletion;
+        const rotation = !!cert_request.supercedes;
+        const oldCaId = cert_request.supercedes;
+
+        const { expiration, renewal } = await expirationAndRenewalFromSecret(secret);
+        const annotationIssuer = secret.metadata.annotations["skupper.io/vms-issuerlink"];
+        const signed_by = rotation
+            ? cert_request.issuer
+            : annotationIssuer == "root"
+              ? null
+              : annotationIssuer;
+        const get_name = await client.query(`SELECT name FROM ${ref_table} WHERE Id = $1`, [
+            ref_id,
+        ]);
+        const label = `${owner.ref_label}: ${get_name.rows[0].name}`;
+
+        let rotationOrdinal = 0;
+        if (rotation) {
+            const predecessor = await lockCurrentCertificate(client, cert_request.supercedes);
+            if (!predecessor) {
+                throw new Error(`Superseded certificate ${cert_request.supercedes} not found`);
             }
-            const cert_object = await LoadCertificate(secret.metadata.name);
-            const expiration = cert_object.status.notAfter
-                ? new Date(cert_object.status.notAfter)
-                : undefined;
-            const renewal = cert_object.status.renewalTime
-                ? new Date(cert_object.status.renewalTime)
-                : undefined;
-            const signed_by = secret.metadata.annotations["skupper.io/vms-issuerlink"];
-            const get_name = await client.query(`SELECT name FROM ${ref_table} WHERE Id = $1`, [
-                ref_id,
-            ]);
-            const label = `${ref_label}: ${get_name.rows[0].name}`;
-            if (signed_by == "root") {
-                await client.query(
-                    "INSERT INTO TlsCertificates (Id, IsCA, ObjectName, Expiration, RenewalTime, Label) VALUES ($1, $2, $3, $4, $5, $6)",
-                    [dblink, is_ca, secret.metadata.name, expiration, renewal, label]
-                );
-                notify.add("TlsCertificates", dblink);
-            } else {
-                await client.query(
-                    "INSERT INTO TlsCertificates (Id, IsCA, ObjectName, Expiration, RenewalTime, Label, SignedBy) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-                    [dblink, is_ca, secret.metadata.name, expiration, renewal, label, signed_by]
-                );
-                notify.add("TlsCertificates", dblink);
-            }
+            rotationOrdinal = (predecessor.rotationordinal ?? 0) + 1;
+        }
+
+        await client.query(
+            "INSERT INTO TlsCertificates (Id, IsCA, ObjectName, Expiration, RenewalTime, Label, SignedBy, RotationOrdinal, Supercedes) " +
+                "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            [
+                dblink,
+                is_ca,
+                secret.metadata.name,
+                expiration,
+                renewal,
+                label,
+                signed_by || null,
+                rotationOrdinal,
+                cert_request.supercedes,
+            ]
+        );
+        notify.add("TlsCertificates", dblink);
+
+        if (rotation) {
+            await retargetParentCertificateFks(client, notify, cert_request.supercedes, dblink);
+        } else {
             await client.query(
                 `UPDATE ${ref_table} SET Certificate = $1, Lifecycle = 'ready' WHERE Id = $2`,
                 [dblink, ref_id]
             );
             notify.update(ref_table, ref_id);
-            await client.query("DELETE FROM CertificateRequests WHERE Id = $1", [dblink]);
-            notify.delete("CertificateRequests", dblink);
-            if (is_ca) {
-                const issuer_obj = issuerObject(
-                    secret.metadata.name,
-                    secret.metadata.annotations["skupper.io/vms-dblink"]
-                );
-                await ApplyObject(issuer_obj);
-            }
-            Log(`Certificate${is_ca ? " Authority" : ""} created: ${secret.metadata.name}`);
-            if (alertSiteCertChanged) {
-                await SiteLifecycleChanged_TX(client, notify, ref_id, "ready");
-            }
-            await client.query("COMMIT");
-            await notify.commit();
+        }
 
-            //
-            // Alert the sync module that changes have been made that require reconciliation with remote sites
-            //
+        await client.query("DELETE FROM CertificateRequests WHERE Id = $1", [dblink]);
+        notify.delete("CertificateRequests", dblink);
+        if (is_ca) {
+            const issuer_obj = issuerObject(
+                secret.metadata.name,
+                secret.metadata.annotations["skupper.io/vms-dblink"]
+            );
+            await ApplyObject(issuer_obj);
+        }
+        Log(
+            `Certificate${is_ca ? " Authority" : ""}${rotation ? " rotated" : " created"}: ${secret.metadata.name}`
+        );
+        if (alertSiteCertChanged && !rotation) {
+            await SiteLifecycleChanged_TX(client, notify, ref_id, "ready");
+        }
+        await client.query("COMMIT");
+        await notify.commit();
+
+        // cert-manager writes the Secret before status.renewalTime exists; fill it from a follow-up GET.
+        if (!renewal) {
+            try {
+                const cert_object = await LoadCertificate(secret.metadata.name);
+                await persistCertificateTimes(cert_object, dblink);
+            } catch (err) {
+                Log(
+                    `Failed to persist certificate times for ${secret.metadata.name}: ${err.stack}`
+                );
+            }
+        }
+
+        if (rotation) {
+            if (is_ca && oldCaId) {
+                if (ref_table == "Backbones") {
+                    await enqueueBackboneCaChildRequests(dblink, oldCaId);
+                } else if (ref_table == "ApplicationNetworks") {
+                    await enqueueVanCaChildRequests(dblink, oldCaId);
+                }
+                await maybeTrimIssuerSiblings(dblink);
+            }
+            if (!is_ca) {
+                await notifyTlsConsumers(dblink);
+            }
+        } else {
             if (alertSiteCertChanged) {
                 await SiteCertificateChanged(dblink);
             } else if (alertAccessCertChanged) {
@@ -705,65 +1221,200 @@ async function secretAdded(dblink, secret) {
             if (ref_table == "BackboneAccessPoints") {
                 await AccessPointCertReady(ref_id);
             }
-        } else {
-            //
-            // There's been no meaningful action taken.  Roll back the transaction.
-            //
-            await client.query("ROLLBACK");
         }
+        return true;
     } catch (err) {
-        Log(`Rolling back secret-added transaction: ${err.stack}`);
+        if (err.code === PG_UNIQUE_VIOLATION) {
+            Log(`Certificate ${dblink} already has a successor; ignoring duplicate secret add`);
+        } else {
+            Log(`Rolling back secret-added transaction: ${err.stack}`);
+        }
+        //
+        // There's been no meaningful action taken.  Roll back the transaction.
+        //
         await client.query("ROLLBACK");
+        return false;
     } finally {
         client.release();
     }
+}
+
+async function secretRenewed(secret) {
+    const objectName = secret.metadata.name;
+    const { expiration, renewal } = await expirationAndRenewalFromSecret(secret);
+    let currentId;
+    let caRotationId;
+    const client = await ClientFromPool("system");
+    const notify = new NotifyTransaction();
+    try {
+        await client.query("BEGIN");
+        const latest = await lockCurrentCertificateByObjectName(client, objectName);
+        if (!latest) {
+            await client.query("ROLLBACK");
+            return;
+        }
+        if (await isCertificateSuperseded(client, latest.id)) {
+            await client.query("ROLLBACK");
+            return;
+        }
+        if (timestampsEqual(latest.expiration, expiration)) {
+            if (!timestampsEqual(latest.renewaltime, renewal) && renewal) {
+                await client.query("UPDATE TlsCertificates SET RenewalTime = $1 WHERE Id = $2", [
+                    renewal,
+                    latest.id,
+                ]);
+                notify.update("TlsCertificates", latest.id);
+                await client.query("COMMIT");
+                await notify.commit();
+            } else {
+                await client.query("ROLLBACK");
+            }
+            return;
+        }
+        if (latest.isca) {
+            caRotationId = latest.id;
+            await client.query("COMMIT");
+        } else {
+            currentId = randomUUID();
+            const signedBy =
+                secret.metadata.annotations?.["skupper.io/vms-issuerlink"] == "root"
+                    ? null
+                    : secret.metadata.annotations?.["skupper.io/vms-issuerlink"] || latest.signedby;
+            await client.query(
+                "INSERT INTO TlsCertificates (Id, IsCA, ObjectName, SignedBy, Expiration, RenewalTime, RotationOrdinal, Supercedes, Label) " +
+                    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+                [
+                    currentId,
+                    latest.isca,
+                    objectName,
+                    signedBy,
+                    expiration,
+                    renewal,
+                    (latest.rotationordinal ?? 0) + 1,
+                    latest.id,
+                    latest.label,
+                ]
+            );
+            notify.add("TlsCertificates", currentId);
+            await retargetParentCertificateFks(client, notify, latest.id, currentId);
+            await client.query("COMMIT");
+            await notify.commit();
+        }
+    } catch (err) {
+        if (err.code === PG_UNIQUE_VIOLATION) {
+            Log(`Leaf rotation skipped for ${objectName}: successor already exists`);
+        } else {
+            Log(`Rolling back secret-renewed transaction: ${err.stack}`);
+        }
+        await client.query("ROLLBACK");
+        currentId = undefined;
+        caRotationId = undefined;
+    } finally {
+        client.release();
+    }
+
+    if (caRotationId) {
+        try {
+            await insertCaRotationRequest(caRotationId);
+        } catch (err) {
+            if (err.statusCode === 409) {
+                Log(`CA rotation skipped for ${caRotationId}: ${err.message}`);
+            } else {
+                Log(`CA rotation failed for ${caRotationId}: ${err.stack || err.message}`);
+            }
+        }
+        return;
+    }
+
+    if (!currentId) {
+        return;
+    }
+
+    try {
+        await retargetTlsDbLink(objectName, currentId);
+    } catch (err) {
+        Log(`WARN: Failed to retarget vms-dblink to ${currentId}: ${err.message}`);
+    }
+    await notifyTlsConsumers(currentId);
 }
 
 //
 // Handle watch events on Secrets
 //
 const onSecretWatch = function (action, secret) {
-    switch (action) {
-        case "ADDED": {
-            const anno = secret.metadata.annotations;
-            if (anno?.[META_ANNOTATION_VMS_CONTROLLED] == "true") {
-                const dblink = anno["skupper.io/vms-dblink"];
-                if (dblink) {
-                    secretAdded(dblink, secret);
-                }
+    const anno = secret.metadata.annotations;
+    if (anno?.[META_ANNOTATION_VMS_CONTROLLED] != "true") {
+        return;
+    }
+    const dblink = anno["skupper.io/vms-dblink"];
+    if (!dblink) {
+        return;
+    }
+    const objectName = secret.metadata.name;
+    if (action == "ADDED") {
+        return enqueueSecretWork(objectName, () => secretAdded(dblink, secret));
+    }
+    if (action == "MODIFIED" && secret.data) {
+        return enqueueSecretWork(objectName, async () => {
+            const created = await secretAdded(dblink, secret);
+            if (!created) {
+                await secretRenewed(secret);
             }
-        }
+        });
     }
 };
+
+async function persistCertificateTimes(cert, currentIdHint) {
+    const renewalTime = cert?.status?.renewalTime;
+    if (!renewalTime) {
+        return;
+    }
+    const renewal = new Date(renewalTime);
+    const expiration = cert.status?.notAfter ? new Date(cert.status.notAfter) : null;
+    const notify = new NotifyTransaction();
+    const client = await ClientFromPool("system");
+    try {
+        await client.query("BEGIN");
+        let currentId = currentIdHint || cert.metadata?.annotations?.["skupper.io/vms-dblink"];
+        if (currentId && (await isCertificateSuperseded(client, currentId))) {
+            const tip = await lockCurrentCertificateByObjectName(client, cert.metadata?.name);
+            currentId = tip?.id;
+        }
+        if (!currentId) {
+            const tip = await lockCurrentCertificateByObjectName(client, cert.metadata?.name);
+            currentId = tip?.id;
+        }
+        if (!currentId) {
+            await client.query("ROLLBACK");
+            return;
+        }
+        const dbcert = await client.query(
+            "UPDATE TlsCertificates SET RenewalTime = $1::timestamptz, Expiration = COALESCE(Expiration, $2::timestamptz) " +
+                "WHERE Id = $3 AND (RenewalTime IS DISTINCT FROM $1::timestamptz OR (Expiration IS NULL AND $2::timestamptz IS NOT NULL)) RETURNING Id",
+            [renewal, expiration, currentId]
+        );
+        for (const dbrow of dbcert.rows) {
+            notify.update("TlsCertificates", dbrow.id);
+        }
+        await client.query("COMMIT");
+        await notify.commit();
+    } catch (error) {
+        await client.query("ROLLBACK");
+        Log(`Exception in persistCertificateTimes: ${error.stack}`);
+    } finally {
+        client.release();
+    }
+}
 
 //
 // Handle watch events on Certificates
 //
 const onCertificateWatch = async function (action, cert) {
     if (
-        action == "MODIFIED" &&
-        cert.metadata.annotations?.[META_ANNOTATION_VMS_CONTROLLED] == "true" &&
-        cert.status?.notAfter &&
-        cert.status.renewalTime
+        (action == "ADDED" || action == "MODIFIED") &&
+        cert.metadata.annotations?.[META_ANNOTATION_VMS_CONTROLLED] == "true"
     ) {
-        const notify = new NotifyTransaction();
-        const client = await ClientFromPool("system");
-        const expiration = new Date(cert.status.notAfter);
-        const renewal = new Date(cert.status.renewalTime);
-        try {
-            const dbcert = await client.query(
-                "UPDATE TlsCertificates SET expiration = $1, renewalTime = $2 WHERE ObjectName = $3 RETURNING Id",
-                [expiration, renewal, cert.metadata.name]
-            );
-            for (const dbrow of dbcert.rows) {
-                notify.update("TlsCertificates", dbrow.id);
-            }
-            await notify.commit();
-        } catch (error) {
-            Log(`Exception in onCertificateWatch: ${error.stack}`);
-        } finally {
-            client.release();
-        }
+        await persistCertificateTimes(cert);
     }
 };
 
@@ -881,6 +1532,47 @@ const WatchCertManager = async function () {
         }
     }
 };
+
+export async function RotateCertificate(cid) {
+    if (!IsValidUuid(cid)) {
+        throw httpError(400, `Malformed certificate ID: ${cid}`);
+    }
+
+    const client = await ClientFromPool("system");
+    try {
+        const result = await client.query(
+            "SELECT Id, ObjectName, IsCA FROM TlsCertificates WHERE Id = $1",
+            [cid]
+        );
+        if (result.rowCount == 0) {
+            throw httpError(404, "Certificate not found");
+        }
+        const cert = result.rows[0];
+        if (await isCertificateSuperseded(client, cid)) {
+            throw httpError(409, "Certificate has been superseded");
+        }
+        if (!cert.isca) {
+            if (!cert.objectname) {
+                throw httpError(400, "Certificate has no Kubernetes object");
+            }
+            Log(`Triggering cert-manager renewal for ${cert.objectname} (${cid})`);
+            try {
+                await TriggerCertificateRenewal(cert.objectname);
+            } catch (err) {
+                if (kubeStatusCode(err) == 404) {
+                    throw httpError(404, `Certificate object ${cert.objectname} not found`);
+                }
+                throw err;
+            }
+            return { id: cid };
+        }
+    } finally {
+        client.release();
+    }
+
+    await insertCaRotationRequest(cid);
+    return { id: cid };
+}
 
 export async function Start() {
     Log("[Certificate module starting]");

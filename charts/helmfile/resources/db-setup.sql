@@ -138,7 +138,8 @@ CREATE TABLE TlsCertificates (
     SignedBy UUID REFERENCES TlsCertificates,  -- NULL => signed by the Root Issuer
     Expiration timestamptz,
     RenewalTime timestamptz,
-    Generation integer DEFAULT 0,
+    RotationOrdinal integer NOT NULL DEFAULT 0, -- successor ordinal = predecessor.RotationOrdinal + 1
+    Supercedes UUID UNIQUE REFERENCES TlsCertificates, -- the TlsCertificate this row replaced; NULL for first issue
     Label text
 );
 
@@ -167,7 +168,7 @@ CREATE TABLE Backbones (
     Certificate UUID REFERENCES TlsCertificates ON DELETE CASCADE,
     CoLocatedNamespace text UNIQUE DEFAULT NULL,
     Owner UUID REFERENCES Users,
-    OwnerGroup text 
+    OwnerGroup text
 );
 
 --
@@ -371,6 +372,12 @@ CREATE TABLE CertificateRequests (
     DurationHours integer,
 
     --
+    -- If set, this request replaces an existing TlsCertificates row (rotation)
+    -- rather than first-issue. secretAdded uses this to preserve owner Lifecycle.
+    --
+    Supercedes UUID REFERENCES TlsCertificates,
+
+    --
     -- Link to the requesting
     --
     ManagementController UUID REFERENCES ManagementControllers (Id) ON DELETE CASCADE,
@@ -387,7 +394,7 @@ CREATE TABLE CertificateRequests (
 -- Pre-populate the database with some test data.
 --
 INSERT INTO Configuration (Id, RootIssuer, DefaultCaExpiration, DefaultCertExpiration, BackboneCaExpiration, SiteControllerImage, CertOrganization)
-    VALUES (0, 'vms-root', '30 days', '1 week', '1 year', 'quay.io/skupper/vms-site-controller:latest', 'enterprise.com');
+    VALUES (0, 'vms-root', '1 year', '90 days', '5 years', 'quay.io/skupper/vms-site-controller:latest', 'enterprise.com');
 
 INSERT INTO TargetPlatforms (ShortName, LongName) VALUES
     ('sk2',      'Kubernetes/OpenShift'),
@@ -409,8 +416,8 @@ CREATE POLICY user_access_backbones_policy
 ON Backbones
 FOR ALL
 USING (
-    Owner = NULLIF(current_setting('session.user_id', true), '')::uuid 
-    OR 
+    Owner = NULLIF(current_setting('session.user_id', true), '')::uuid
+    OR
     is_admin()
 );
 
@@ -427,8 +434,8 @@ CREATE POLICY user_access_application_networks_policy
 ON ApplicationNetworks
 FOR ALL
 USING (
-    Owner = NULLIF(current_setting('session.user_id', true), '')::uuid 
-    OR 
+    Owner = NULLIF(current_setting('session.user_id', true), '')::uuid
+    OR
     is_admin()
 );
 
@@ -445,8 +452,8 @@ CREATE POLICY user_access_backbone_access_points_policy
 ON BackboneAccessPoints
 FOR ALL
 USING (
-    Owner = NULLIF(current_setting('session.user_id', true), '')::uuid 
-    OR 
+    Owner = NULLIF(current_setting('session.user_id', true), '')::uuid
+    OR
     is_admin()
 );
 
@@ -463,8 +470,8 @@ CREATE POLICY user_access_interior_sites_policy
 ON InteriorSites
 FOR ALL
 USING (
-    Owner = NULLIF(current_setting('session.user_id', true), '')::uuid 
-    OR 
+    Owner = NULLIF(current_setting('session.user_id', true), '')::uuid
+    OR
     is_admin()
 );
 
@@ -481,8 +488,8 @@ CREATE POLICY user_access_inter_router_links_policy
 ON InterRouterLinks
 FOR ALL
 USING (
-    Owner = NULLIF(current_setting('session.user_id', true), '')::uuid 
-    OR 
+    Owner = NULLIF(current_setting('session.user_id', true), '')::uuid
+    OR
     is_admin()
 );
 

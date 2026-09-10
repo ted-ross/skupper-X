@@ -22,6 +22,8 @@
 import {
     META_ANNOTATION_VMS_CONTROLLED,
     META_ANNOTATION_TLS_INJECT,
+    META_ANNOTATION_TLS_ORDINAL,
+    META_ANNOTATION_TLS_LAST_VALID,
     META_ANNOTATION_STATE_TYPE,
     META_ANNOTATION_STATE_ID,
     META_ANNOTATION_STATE_DIR,
@@ -49,6 +51,21 @@ export function HashOfData(data) {
         text += key + data[key];
     }
     return createHash("sha1").update(text).digest("hex");
+}
+
+export function tlsSyncData(secretData, tlsMeta) {
+    if (tlsMeta?.ordinal === undefined || tlsMeta.ordinal === null) {
+        return secretData;
+    }
+    return {
+        ...secretData,
+        ordinal: String(tlsMeta.ordinal),
+        lastValid: String(tlsMeta.lastValid),
+    };
+}
+
+export function HashOfTlsPayload(secretData, tlsMeta) {
+    return HashOfData(tlsSyncData(secretData, tlsMeta));
 }
 
 export function HashOfSecret(secret) {
@@ -296,7 +313,7 @@ export function InterNetworkIngressCR(name, routingKey, networkLink = "", networ
     return ingress;
 }
 
-export function Secret(certificate, profile_name, inject, stateKey) {
+export function Secret(certificate, profile_name, inject, stateKey, tlsMeta) {
     const secret = {
         apiVersion: "v1",
         kind: "Secret",
@@ -313,10 +330,17 @@ export function Secret(certificate, profile_name, inject, stateKey) {
     if (inject) {
         secret.metadata.annotations[META_ANNOTATION_TLS_INJECT] = inject;
     }
+    if (tlsMeta?.ordinal !== undefined && tlsMeta.ordinal !== null) {
+        secret.metadata.annotations[META_ANNOTATION_TLS_ORDINAL] = String(tlsMeta.ordinal);
+        secret.metadata.annotations[META_ANNOTATION_TLS_LAST_VALID] = String(tlsMeta.lastValid);
+    }
     if (stateKey) {
         secret.metadata.annotations[META_ANNOTATION_STATE_DIR] = "remote";
         secret.metadata.annotations[META_ANNOTATION_STATE_KEY] = stateKey;
-        secret.metadata.annotations[META_ANNOTATION_STATE_HASH] = HashOfSecret(secret);
+        secret.metadata.annotations[META_ANNOTATION_STATE_HASH] = HashOfTlsPayload(
+            secret.data,
+            tlsMeta
+        );
     }
 
     return secret;

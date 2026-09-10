@@ -45,6 +45,8 @@ import {
     META_ANNOTATION_STATE_TYPE,
     META_ANNOTATION_STATE_ID,
     META_ANNOTATION_TLS_INJECT,
+    META_ANNOTATION_TLS_ORDINAL,
+    META_ANNOTATION_TLS_LAST_VALID,
     API_CONTROLLER_ADDRESS,
     STATE_TYPE_LISTENER,
 } from "@vms/modules/common";
@@ -59,6 +61,7 @@ import {
     DeleteConfigmap,
     DeleteDeployment,
     LoadSecret,
+    ReplaceSecret,
     LoadConfigmap,
     UpdateLink,
     UpdateNetworkAccess,
@@ -242,6 +245,9 @@ const onPeerLost = async function (_peerId) {
 
 const retrieveLatest = async function (apiVersion, objKind, objName) {
     Log(`Retrieving latest object - kind: ${apiVersion}.${objKind}, name: ${objName}`);
+    if (objKind == "Secret") {
+        return await LoadSecret(objName);
+    }
     if (apiVersion == "skupper.io/v2alpha1") {
         try {
             switch (objKind) {
@@ -270,6 +276,9 @@ const updateObject = async function (obj) {
     const objKind = obj.kind;
     const objName = obj.metadata.name;
     Log(`Updating object - kind: ${apiVersion}.${objKind}, name: ${objName}`);
+    if (objKind == "Secret") {
+        return await ReplaceSecret(objName, obj);
+    }
     if (apiVersion == "skupper.io/v2alpha1") {
         switch (objKind) {
             case "Link":
@@ -360,6 +369,22 @@ async function getBackboneClientSecret() {
     }
 }
 
+function takeTlsRotationFromSyncData(data, annotations) {
+    if (!data || typeof data !== "object") {
+        return data;
+    }
+    const certData = { ...data };
+    if (Object.hasOwn(certData, "ordinal")) {
+        annotations[META_ANNOTATION_TLS_ORDINAL] = String(certData.ordinal);
+        delete certData.ordinal;
+    }
+    if (Object.hasOwn(certData, "lastValid")) {
+        annotations[META_ANNOTATION_TLS_LAST_VALID] = String(certData.lastValid);
+        delete certData.lastValid;
+    }
+    return certData;
+}
+
 const onStateChange = async function (peerId, stateKey, hash, data) {
     const [objName, apiVersion, objKind, objType, objDir, stateType, stateId, inject] =
         kubeObjectForState(stateKey, data);
@@ -396,6 +421,9 @@ const onStateChange = async function (peerId, stateKey, hash, data) {
                     return;
                 }
                 create = false;
+                if (!obj.metadata.annotations) {
+                    obj.metadata.annotations = {};
+                }
                 obj.metadata.annotations[META_ANNOTATION_STATE_KEY] = stateKey;
                 obj.metadata.annotations[META_ANNOTATION_STATE_DIR] = objDir;
                 obj.metadata.annotations[META_ANNOTATION_STATE_HASH] = hash;
@@ -417,7 +445,7 @@ const onStateChange = async function (peerId, stateKey, hash, data) {
             }
 
             if (!isSkupperResource) {
-                obj.data = data;
+                obj.data = takeTlsRotationFromSyncData(data, obj.metadata.annotations);
             } else {
                 await doStateChangeSpec(obj, data);
             }

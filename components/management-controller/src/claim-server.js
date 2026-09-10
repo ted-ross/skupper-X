@@ -28,7 +28,6 @@ import {
     META_ANNOTATION_STATE_KEY,
     META_ANNOTATION_STATE_HASH,
     META_ANNOTATION_STATE_DIR,
-    META_ANNOTATION_TLS_INJECT,
     INJECT_TYPE_SITE,
     META_ANNOTATION_STATE_TYPE,
     STATE_TYPE_LINK,
@@ -40,8 +39,9 @@ import { ClientFromPool } from "./db.js";
 import { LoadSecret } from "@vms/modules/kube";
 import { DispatchMessage, AssertClaimResponseSuccess, ReponseFailure } from "@vms/modules/protocol";
 import { RegisterHandler } from "./backbone-links.js";
-import { HashOfData } from "./resource-templates.js";
+import { HashOfData, Secret } from "./resource-templates.js";
 import { NotifyTransaction } from "./notify.js";
+import { getTlsRotationMeta, overlayDualTrustCa } from "./tls-rotation.js";
 
 const backbones = {}; // backboneId => {conn: AMQP-Connection, sender: anon-sender, receiver: claim-receiver}
 const memberCompletions = {}; // memberId   => {handler: completion-function, result: undefined || {}, error: undefined || ERROR }
@@ -75,20 +75,15 @@ const memberCompletion = async function (memberId) {
         // Get the member site's siteClient certificate
         //
         const secret = await LoadSecret(memberSite.objectname);
-        siteClient = {
-            apiVersion: "v1",
-            kind: "Secret",
-            data: secret.data,
-            metadata: {
-                name: `vms-site-${memberId}`,
-                annotations: {
-                    [META_ANNOTATION_STATE_KEY]: `tls-site-${memberId}`,
-                    [META_ANNOTATION_STATE_HASH]: HashOfData(secret.data),
-                    [META_ANNOTATION_STATE_DIR]: "remote",
-                    [META_ANNOTATION_TLS_INJECT]: INJECT_TYPE_SITE,
-                },
-            },
-        };
+        const data = await overlayDualTrustCa(client, memberSite.certificate, secret.data);
+        const tlsMeta = await getTlsRotationMeta(client, memberSite.certificate);
+        siteClient = Secret(
+            { ...secret, data },
+            `vms-site-${memberId}`,
+            INJECT_TYPE_SITE,
+            `tls-site-${memberId}`,
+            tlsMeta
+        );
 
         //
         // Gather the edge-link information for the outgoingLinks
@@ -341,4 +336,5 @@ export function _registerMemberCompletionForTest(memberId, { callback } = {}) {
         error: undefined,
         callback,
     };
+    return memberCompletions[memberId];
 }

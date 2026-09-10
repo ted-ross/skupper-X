@@ -134,6 +134,14 @@ const mutex = new Mutex();
 
 let watchDispatch = sendUpdate;
 
+function parseWatchQuery(url) {
+    const qIndex = url.indexOf("?");
+    if (qIndex < 0) {
+        return {};
+    }
+    return Object.fromEntries(new URLSearchParams(url.slice(qIndex + 1)));
+}
+
 async function sendUpdate(watch, isInitial) {
     const release = await mutex.acquire();
     const url = watch.source.address;
@@ -144,7 +152,8 @@ async function sendUpdate(watch, isInitial) {
 
         req.url = url;
         req.method = "GET";
-        req.query = {};
+        // router.handle() does not run Express query middleware.
+        req.query = parseWatchQuery(url);
         req._skip_log = !isInitial;
 
         router.handle(req, res, (err) => {
@@ -239,6 +248,11 @@ export async function WatchNotify(tableName, id, _holdoff) {
             watchDispatch(watch, false);
         }
     }
+}
+
+/** @internal Exported for unit tests */
+export function _parseWatchQueryForTest(url) {
+    return parseWatchQuery(url);
 }
 
 /** @internal Exported for unit tests */

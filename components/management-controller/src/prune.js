@@ -31,48 +31,65 @@ import { Log } from "@vms/modules/log";
 import { META_ANNOTATION_VMS_CONTROLLED } from "@vms/modules/common";
 import { ClientFromPool } from "./db.js";
 import { NotifyTransaction } from "./notify.js";
+import {
+    deleteExpiredSupersededCertificates,
+    TLS_CERTIFICATE_PARENT_TABLES,
+} from "./tls-rotation.js";
+import { AccessCertificateChanged, SiteCertificateChanged } from "./sync-management.js";
+import { SyncColoTlsCertificate } from "./colo-sync.js";
 
 const reconcileCertificates = async function () {
     const client = await ClientFromPool("system");
     try {
         const result = await client.query("SELECT ObjectName FROM TlsCertificates");
-        const db_cert_names = [];
-        result.rows.forEach((row) => {
-            db_cert_names.push(row.objectname);
-        });
+        const db_cert_names = new Set(result.rows.map((row) => row.objectname).filter(Boolean));
 
         const issuer_list = await GetIssuers();
-        issuer_list.forEach((issuer) => {
+        for (const issuer of issuer_list || []) {
             if (
-                !db_cert_names.includes(issuer.metadata.name) &&
-                issuer.metadata.annotations?.[META_ANNOTATION_VMS_CONTROLLED] == "true"
+                issuer.metadata.annotations?.[META_ANNOTATION_VMS_CONTROLLED] == "true" &&
+                !db_cert_names.has(issuer.metadata.name)
             ) {
-                DeleteIssuer(issuer.metadata.name);
-                Log(`  Deleted issuer: ${issuer.metadata.name}`);
+                try {
+                    await DeleteIssuer(issuer.metadata.name);
+                    Log(`  Deleted issuer: ${issuer.metadata.name}`);
+                } catch (error) {
+                    Log(`WARN: Failed to delete issuer ${issuer.metadata.name}: ${error.message}`);
+                }
             }
-        });
+        }
 
         const cert_list = await GetCertificates();
-        cert_list.forEach((cert) => {
+        for (const cert of cert_list || []) {
             if (
-                !db_cert_names.includes(cert.metadata.name) &&
-                cert.metadata.annotations?.[META_ANNOTATION_VMS_CONTROLLED] == "true"
+                cert.metadata.annotations?.[META_ANNOTATION_VMS_CONTROLLED] == "true" &&
+                !db_cert_names.has(cert.metadata.name)
             ) {
-                DeleteCertificate(cert.metadata.name);
-                Log(`  Deleted certificate: ${cert.metadata.name}`);
+                try {
+                    await DeleteCertificate(cert.metadata.name);
+                    Log(`  Deleted certificate: ${cert.metadata.name}`);
+                } catch (error) {
+                    Log(
+                        `WARN: Failed to delete certificate ${cert.metadata.name}: ${error.message}`
+                    );
+                }
             }
-        });
+        }
 
         const secret_list = await GetSecrets();
-        secret_list.forEach((secret) => {
+        for (const secret of secret_list || []) {
             if (
-                !db_cert_names.includes(secret.metadata.name) &&
-                secret.metadata.annotations?.[META_ANNOTATION_VMS_CONTROLLED] == "true"
+                secret.metadata.annotations?.[META_ANNOTATION_VMS_CONTROLLED] == "true" &&
+                !db_cert_names.has(secret.metadata.name)
             ) {
-                DeleteSecret(secret.metadata.name);
-                Log(`  Deleted secret: ${secret.metadata.name}`);
+                try {
+                    await DeleteSecret(secret.metadata.name);
+                    Log(`  Deleted secret: ${secret.metadata.name}`);
+                } catch (error) {
+                    Log(`WARN: Failed to delete secret ${secret.metadata.name}: ${error.message}`);
+                }
             }
-        });
+        }
     } catch (error) {
         Log(`Exception in reconcileCertificates: ${error.stack}`);
     } finally {
@@ -85,8 +102,14 @@ export async function DeleteOrphanCertificates() {
     const notify = new NotifyTransaction();
     try {
         await client.query("BEGIN");
+        const expiredObjectNames = await deleteExpiredSupersededCertificates(client, notify);
         const deleteMap = {};
-        const tlsResult = await client.query("SELECT Id, SignedBy FROM TlsCertificates");
+        const tlsResult = await client.query(
+            "SELECT Id, SignedBy, Supercedes FROM TlsCertificates"
+        );
+        const referencedAsPredecessor = new Set(
+            tlsResult.rows.map((row) => row.supercedes).filter(Boolean)
+        );
         for (const tlsRow of tlsResult.rows) {
             if (tlsRow.signedby) {
                 if (!deleteMap[tlsRow.signedby]) {
@@ -107,16 +130,7 @@ export async function DeleteOrphanCertificates() {
             }
         }
 
-        for (const table of [
-            "ManagementControllers",
-            "Backbones",
-            "BackboneAccessPoints",
-            "InteriorSites",
-            "ApplicationNetworks",
-            "NetworkCredentials",
-            "MemberInvitations",
-            "MemberSites",
-        ]) {
+        for (const table of TLS_CERTIFICATE_PARENT_TABLES) {
             const result = await client.query(`SELECT Id, Certificate FROM ${table}`);
             for (const row of result.rows) {
                 if (row.certificate) {
@@ -126,6 +140,12 @@ export async function DeleteOrphanCertificates() {
                         Log(`Record ${table}[${row.id}] references a non-exist TlsCertificate`);
                     }
                 }
+            }
+        }
+
+        for (const certId of referencedAsPredecessor) {
+            if (deleteMap[certId]) {
+                deleteMap[certId].pleaseDelete = false;
             }
         }
 
@@ -148,6 +168,7 @@ export async function DeleteOrphanCertificates() {
 
         await client.query("COMMIT");
         await notify.commit();
+        return expiredObjectNames;
     } catch (error) {
         await client.query("ROLLBACK");
         Log(`Exception in DeleteOrphanCertificates: ${error.message}`);
@@ -157,8 +178,36 @@ export async function DeleteOrphanCertificates() {
     }
 }
 
+async function advertiseTlsLastValid(objectNames) {
+    const names = [...new Set((objectNames || []).filter(Boolean))];
+    if (names.length == 0) {
+        return;
+    }
+    const client = await ClientFromPool("system");
+    try {
+        for (const objectName of names) {
+            const result = await client.query(
+                "SELECT c.Id FROM TlsCertificates c " +
+                    "WHERE c.ObjectName = $1 " +
+                    "AND NOT EXISTS (SELECT 1 FROM TlsCertificates s WHERE s.Supercedes = c.Id) " +
+                    "ORDER BY c.RotationOrdinal DESC LIMIT 1",
+                [objectName]
+            );
+            const certId = result.rows[0]?.id;
+            if (certId) {
+                await SiteCertificateChanged(certId);
+                await AccessCertificateChanged(certId);
+                await SyncColoTlsCertificate(certId);
+            }
+        }
+    } finally {
+        client.release();
+    }
+}
+
 export async function Start() {
     Log("[Prune - Reconciling Kubernetes objects to the database]");
-    await DeleteOrphanCertificates();
+    const expiredObjectNames = await DeleteOrphanCertificates();
     await reconcileCertificates();
+    await advertiseTlsLastValid(expiredObjectNames);
 }
