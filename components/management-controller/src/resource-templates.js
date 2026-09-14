@@ -40,6 +40,7 @@ const APPLICATION = "vms";
 const ROUTER_LABEL = "vms-router";
 const CM_NAME = "skupper-internal";
 const DEPLOYMENT_NAME = "vms-site";
+const COMPONENT_NAME = "site-controller";
 
 export function HashOfData(data) {
     let text = "";
@@ -397,7 +398,7 @@ export function Deployment(bsid, backboneMode, target, imageOverride) {
             labels: {
                 "app.kubernetes.io/name": DEPLOYMENT_NAME,
                 "app.kubernetes.io/part-of": "vms",
-                "skupper.io/component": "router",
+                "skupper.io/component": COMPONENT_NAME,
                 application: APPLICATION,
             },
             name: DEPLOYMENT_NAME,
@@ -408,7 +409,7 @@ export function Deployment(bsid, backboneMode, target, imageOverride) {
             revisionHistoryLimit: 10,
             selector: {
                 matchLabels: {
-                    "skupper.io/component": "router",
+                    "skupper.io/component": COMPONENT_NAME,
                 },
             },
             strategy: {
@@ -424,7 +425,7 @@ export function Deployment(bsid, backboneMode, target, imageOverride) {
                         "app.kubernetes.io/name": DEPLOYMENT_NAME,
                         "app.kubernetes.io/part-of": "vms",
                         application: ROUTER_LABEL,
-                        "skupper.io/component": "router",
+                        "skupper.io/component": COMPONENT_NAME,
                     },
                 },
                 spec: {
